@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../bin/clipper": "engine/clipper",
+      "../../gui/out/": "gui/",
+      "../../assets/fonts/": "assets/fonts/"
+    }
+  }
+}

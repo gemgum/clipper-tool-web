@@ -1,0 +1,73 @@
+# ============================================================
+# Clipper — .gitignore
+# Yang di-ignore: hasil build, unduhan besar, output runtime, rahasia.
+# Semuanya bisa dihasilkan ulang via setup.sh / build.sh.
+# ============================================================
+
+# --- Binary & library hasil build/unduh (folder bin/) ---
+/bin/
+
+# --- Model Whisper (besar, diunduh via setup.sh) ---
+/models/
+!/models/.gitkeep
+
+# --- Source & build whisper.cpp (diunduh via setup.sh) ---
+/third_party/
+
+# --- Font subtitle (diunduh via setup.sh) ---
+/assets/fonts/*.ttf
+/assets/fonts/*.otf
+
+# --- Video input (folder untuk sumber video, jangan di-commit) ---
+/video/
+
+# --- Output & file kerja runtime ---
+/data/
+*.mp4
+*.wav
+*.srt
+*.ass
+# tapi jangan ignore dokumentasi
+!notes/**
+
+# --- Sampah WSL/Windows (mark-of-the-web) ---
+*:Zone.Identifier
+
+# --- Go ---
+/engine/clipper
+/engine/**/*.test
+/engine/**/*.out
+/go.work
+/go.work.sum
+
+
+# --- Node / Next.js (GUI) ---
+/gui/node_modules/
+/gui/.next/
+/gui/out/
+/gui/*.tsbuildinfo
+/gui/next-env.d.ts
+
+# --- Rahasia / lingkungan ---
+.env
+.env.*.local
+*.pem
+
+# --- Editor / OS ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Bangunan Tauri (gui/out sudah diabaikan di atas)
+/desktop/src-tauri/target/
+/desktop/src-tauri/gen/
+/desktop/node_modules/
+
+# Folder siap-kirim (dibangun ./build-windows.sh)
+/dist/
+
+# Worktree agen Claude Code (sementara, bukan bagian proyek)
+/.claude/worktrees/

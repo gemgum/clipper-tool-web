@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clipper</title>
+<style>
+  /* Halaman ini hanya terlihat sekejap: begitu engine melaporkan alamatnya,
+     jendela pindah ke antarmuka yang sesungguhnya. Warnanya dibuat sama dengan
+     GUI supaya perpindahannya tidak berkedip putih. */
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #0f1115;
+    color: #9aa4b2;
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  .mark { font-size: 34px; }
+  .name { color: #e6e9ef; font-size: 20px; font-weight: 600; }
+  .bar { width: 190px; height: 3px; background: #1e222b; border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; width: 40%; height: 100%; background: #4f8cff; animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  .hint { font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="mark">✂️</div>
+  <div class="name">Clipper</div>
+  <div class="bar"><i></i></div>
+  <div class="hint">Starting the engine…</div>
+</body>
+</html>

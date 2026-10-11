@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "windows": {
+      "nsis": {
+        "installerHooks": "installer-hooks.nsh"
+      }
+    },
+    "resources": {
+      "../../bin/clipper.exe": "engine/clipper.exe",
+      "../../gui/out/": "gui/",
+      "../../assets/fonts/": "assets/fonts/"
+    }
+  }
+}

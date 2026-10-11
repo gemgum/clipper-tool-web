@@ -1,0 +1,21 @@
+# Clipper versi web (branch webview) — lihat notes/42-versi-web.md.
+# Salin ke /etc/systemd/system/clipper.service, sesuaikan User, folder, dan -host.
+[Unit]
+Description=Clipper (web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=clipper
+WorkingDirectory=/opt/clipper
+# CLIPPER_PASSWORD & kunci API dibaca dari /opt/clipper/.env.
+ExecStart=/opt/clipper/bin/clipper serve -web -host clip.example.com -addr 127.0.0.1:8787
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/clipper/data /opt/clipper/models /opt/clipper/.env
+
+[Install]
+WantedBy=multi-user.target

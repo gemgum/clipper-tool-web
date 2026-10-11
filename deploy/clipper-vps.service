@@ -1,0 +1,29 @@
+# Clipper versi web (branch webview) — notes/42-versi-web.md
+[Unit]
+Description=Clipper (web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=clipper
+Group=clipper
+WorkingDirectory=/var/www/clipper
+Environment=HOME=/var/www/clipper/data
+Environment=CLIPPER_DATA_DIR=/var/www/clipper/data
+Environment=CLIPPER_MODELS_DIR=/var/www/clipper/models
+Environment=CLIPPER_TOOLS_DIR=/var/www/clipper/bin
+Environment=CLIPPER_FONTS_DIR=/var/www/clipper/assets/fonts
+Environment=CLIPPER_GUI_DIR=/var/www/clipper/gui/out
+Environment=CLIPPER_ENV_FILE=/var/www/clipper/.env
+Environment=CLIPPER_CHROME=/var/www/clipper/tools/chrome-linux64/chrome
+ExecStart=/var/www/clipper/bin/clipper serve -web -host klip.sarthlutions.id -addr 127.0.0.1:8787
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/www/clipper/data /var/www/clipper/.env
+
+[Install]
+WantedBy=multi-user.target

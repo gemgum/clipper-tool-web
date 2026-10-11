@@ -1,0 +1,13 @@
+# Clipper versi web — lihat notes/42-versi-web.md.
+# Caddy mengurus HTTPS (Let's Encrypt) sendiri; ganti nama host-nya, sama
+# persis dengan -host di clipper.service.
+clip.example.com {
+	# Video sumber 1–4 jam bisa berukuran beberapa GB.
+	request_body {
+		max_size 20GB
+	}
+	reverse_proxy 127.0.0.1:8787 {
+		# SSE (progres job) harus langsung diteruskan, bukan ditampung.
+		flush_interval -1
+	}
+}
