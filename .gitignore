@@ -61,13 +61,6 @@ Thumbs.db
 *.swp
 *~
 
-# Bangunan Tauri (gui/out sudah diabaikan di atas)
-/desktop/src-tauri/target/
-/desktop/src-tauri/gen/
-/desktop/node_modules/
-
-# Folder siap-kirim (dibangun ./build-windows.sh)
-/dist/
 
 # Worktree agen Claude Code (sementara, bukan bagian proyek)
 /.claude/worktrees/

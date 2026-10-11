@@ -6,10 +6,10 @@ bersubtitle otomatis + skor "berpotensi viral". Konten target: **bahasa Indonesi
 ## Arsitektur (3 lapis)
 
 ```
-desktop/ (Tauri)  --membuka satu alamat-->  engine/ (Go)  --exec-->  whisper.cpp, ffmpeg
-                                              ^     |
-                            gui/ (Next.js) ---+     +-- menyajikan gui/out (statis)
-                            HTTP + SSE
+browser --HTTPS--> Caddy/nginx --> engine/ (Go)  --exec-->  whisper.cpp, ffmpeg
+                                     ^     |
+                   gui/ (Next.js) ---+     +-- menyajikan gui/out (statis)
+                   HTTP + SSE
 ```
 
 - **engine/** (Go) — otak: HTTP API, orkestrasi pipeline, scoring, pemasangan
@@ -24,8 +24,7 @@ desktop/ (Tauri)  --membuka satu alamat-->  engine/ (Go)  --exec-->  whisper.cpp
   `/requirements` status & pemasangan komponen. Ada pemilih bahasa antarmuka
   EN/ID di bilah navigasi (default EN, disimpan di localStorage). Dibangun jadi
   berkas statis (`gui/out`) yang disajikan engine.
-- **desktop/** (Tauri) — jendela aplikasi. Setipis mungkin: menjalankan engine,
-  membaca alamat yang dicetaknya, membuka alamat itu. Lihat `notes/27`.
+- **deploy/** — unit systemd + Caddyfile/nginx untuk VPS (lihat `notes/42`).
 - **worker/** (C++) — sudah dibuang (lihat `notes/20`); RMS energi audio kini di
   paket Go `audio`.
 - **notes/** — diskusi & keputusan desain (baca 01–07 untuk konteks).
@@ -64,7 +63,7 @@ desktop/ (Tauri)  --membuka satu alamat-->  engine/ (Go)  --exec-->  whisper.cpp
                                  # banner mencetak satu alamat "open:" — tinggal dibuka
 ./bin/clipper serve -token on    # + kunci sesi (otomatis menyala saat terpasang)
 cd gui && npm run dev            # GUI mode pengembangan di 3000 (hot reload)
-cd desktop && npm run dev        # jendela aplikasi (Tauri) — butuh Rust
+./bin/clipper serve -web -host <nama>   # versi web: login sandi, berkas diunggah (notes/42)
 ```
 
 Tab kartu berita butuh Chrome/Chromium (Edge bawaan Windows juga bisa). Engine
@@ -151,11 +150,12 @@ Akibatnya untuk kode baru: **jangan pernah menyusun path dari root proyek.**
 Pakai `Paths.DataDir` / `ModelsDir` / `ToolsDir` / `EnvFile`. Timpaan env
 (`CLIPPER_DATA_DIR`, `CLIPPER_MODELS_DIR`, `CLIPPER_TOOLS_DIR`,
 `CLIPPER_FONTS_DIR`, `CLIPPER_ENV_FILE`) menang atas keduanya. Lihat
-`notes/23-aplikasi-desktop.md`.
+`notes/42-versi-web.md` untuk susunan di VPS.
 
-## Desktop: tiga hal yang sudah berlaku
+## Mode lokal (`serve` tanpa `-web`)
 
-Rinciannya di `notes/23`–`26`; yang wajib diingat saat menulis kode baru:
+Dipakai untuk mengembangkan di mesin sendiri. Rinciannya di `notes/24`–`26`;
+yang wajib diingat saat menulis kode baru:
 
 - **Berkas lokal tidak diunggah.** GUI punya pemilih berkas sendiri lewat
   `/api/browse`, dan berkas yang di-drop dicari di tempatnya lewat `/api/locate`.
@@ -171,9 +171,7 @@ Rinciannya di `notes/23`–`26`; yang wajib diingat saat menulis kode baru:
   dari nol setiap pengguna pindah jendela.
 - **GUI disajikan engine.** `next build` menghasilkan `gui/out` (ekspor statis),
   dan engine menyajikannya di akar alamatnya. `npm run dev` tetap ada untuk
-  mengembangkan, tapi aplikasi jadi tidak memakainya. Jendela Tauri di
-  `desktop/` cuma membuka satu alamat yang dicetak `clipper serve -shell`
-  (notes/27).
+  mengembangkan, tapi server tidak memakainya.
 - **Kunci sesi.** Saat terpasang, engine memakai port acak + kunci yang wajib
   ada di setiap permintaan, ditulis ke `<DataDir>/engine.json`. Kuncinya tinggal
   di cookie `HttpOnly` yang dipasang engine saat halaman pertama dibuka; `/api/`
@@ -269,32 +267,16 @@ Ollama / 25 mnt Claude); momen yang terbelah batas disambung lewat tanda
 `"continues"`. Transkrip di-cache di `data/cache/transcripts` (kunci = sidik
 jari isi video + model + bahasa).
 
-## Sasaran: DESKTOP. Titik.
+## Sasaran: WEB
 
-Ditegaskan ulang 6 Agustus 2026 setelah sempat saya longgarkan. **Web bukan
-sasaran, bukan sasaran cadangan, dan bukan "nanti mungkin".**
+Repo ini versi web saja (dipisah dari `gemgum/clipper-tool` branch `webview`,
+Oktober 2026): `clipper serve -web` untuk tim kecil dengan satu kata sandi
+bersama di VPS — lihat `notes/42-versi-web.md`. Aplikasi desktop (Tauri) sudah
+dibuang dari repo ini; jangan dikembalikan.
 
-> **Pengecualian: branch `webview` SAJA** (diputuskan pemilik 8 Oktober 2026).
-> Di branch ini ada `clipper serve -web` untuk tim kecil dengan satu kata sandi
-> bersama di VPS — lihat `notes/42-versi-web.md`. Jangan digabung ke `main`
-> tanpa keputusan pemilik; di `main` aturan di bawah tetap berlaku utuh.
-
-Yang boleh: **membuka GUI lewat browser sebagai ALAT UKUR** — itu yang
-memungkinkan `scripts/measure-ui.mjs` memotret dan mengukur tinggi kolom lewat
-Chrome headless. Itu perkakas pengembangan, bukan bentuk produk.
-
-Yang TIDAK boleh, dan jangan ditawarkan lagi:
-
-- deploy ke server, hosting, atau alamat publik;
-- multi-pengguna, akun antar-pengguna, autentikasi antar-pengguna;
-- responsif untuk ponsel/tablet;
-- keputusan tampilan yang mengorbankan jendela desktop demi tab browser.
-
-Ukuran acuan tetap **900×600** (batas terkecil `tauri.conf.json`) dan
-**1240×860** (bawaan) — bukan lebar layar penuh, bukan lebar ponsel.
-
-Kunci sesi di `notes/26`/`30` dirancang untuk **satu mesin, satu pengguna**.
-Jangan dilebarkan tanpa membaca ulang kedua catatan itu.
+Kunci sesi di `notes/26`/`30` dirancang untuk **satu mesin, satu pengguna**;
+mode web menurunkannya dari kata sandi (`api/web.go`). Jangan dilebarkan tanpa
+membaca ulang ketiga catatan itu.
 
 ## Tampilan: dua aturan yang TIDAK bisa ditawar
 

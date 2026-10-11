@@ -171,29 +171,21 @@ func TestARemotePageIsRefused(t *testing.T) {
 	}
 }
 
-// Skema non-http diterima HANYA yang benar-benar dipakai shell desktop.
-//
-// Dulu di sini "selain http/https, terima saja" — yang berarti
-// chrome-extension:// dan skema karangan mana pun ikut lolos. Kuncinya tetap
-// menahannya, jadi itu bukan lubang; ia hanya longgar tanpa satu pun alasan.
-func TestOnlyTheShellSchemesAreAccepted(t *testing.T) {
+// Skema non-http tidak pernah diterima: tidak ada lagi shell desktop.
+func TestNonHTTPSchemesAreRejected(t *testing.T) {
 	for _, origin := range []string{
 		"chrome-extension://abcdef", "evil-scheme://apa-saja", "moz-extension://x",
+		"tauri://localhost", "app://index.html", "file://",
 	} {
 		if localOrigin(origin) {
-			t.Errorf("origin %q diterima padahal bukan skema shell desktop", origin)
-		}
-	}
-	for _, origin := range []string{"tauri://localhost", "app://index.html", "file://"} {
-		if !localOrigin(origin) {
-			t.Errorf("origin %q ditolak padahal dipakai shell desktop", origin)
+			t.Errorf("origin %q diterima padahal bukan halaman Clipper", origin)
 		}
 	}
 }
 
 func TestLocalPagesAreAllowed(t *testing.T) {
 	for _, origin := range []string{
-		"http://localhost:3000", "http://127.0.0.1:3000", "tauri://localhost", "null", "",
+		"http://localhost:3000", "http://127.0.0.1:3000", "null", "",
 	} {
 		s := &Server{}
 		r := httptest.NewRequest("GET", "/api/browse", nil)

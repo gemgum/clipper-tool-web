@@ -50,8 +50,8 @@ lalu login sekali:
 ```bash
 sudo apt install -y gh
 gh auth login          # pilih GitHub.com → HTTPS → login lewat browser
-gh repo clone gemgum/clipper-tool
-cd clipper-tool
+gh repo clone gemgum/clipper-tool-web
+cd clipper-tool-web
 ```
 
 Alternatif tanpa akun GitHub: salin saja folder proyek dari PC lama (lewat
@@ -109,14 +109,14 @@ Butuh **dua terminal**.
 Terminal 1 — mesinnya:
 
 ```bash
-cd ~/clipper-tool
+cd ~/clipper-tool-web
 ./bin/clipper serve
 ```
 
 Terminal 2 — tampilannya:
 
 ```bash
-cd ~/clipper-tool/gui
+cd ~/clipper-tool-web/gui
 npm install        # cukup sekali saja, ±2 menit
 npm run dev
 ```

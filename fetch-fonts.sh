@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # Unduh font subtitle ke assets/fonts.
 #
-# Berdiri sendiri, dipanggil dua tempat: setup.sh (mesin pengembang) dan alur
-# GitHub Actions (mesin pembangun pemasang). Font-nya sendiri tidak ikut
-# di-commit — lihat .gitignore — jadi tanpa langkah ini folder itu kosong, dan
-# pengemasan Tauri berhenti dengan "resource path assets\fonts doesn't exist".
+# Berdiri sendiri, dipanggil setup.sh dan langsung saat memasang di server.
+# Font-nya sendiri tidak ikut di-commit — lihat .gitignore — jadi tanpa langkah
+# ini folder itu kosong.
 #
 # Alamatnya HANYA ada di berkas ini. Ketika daftar font berubah, satu tempat
-# yang disunting; dulu daftar ini ada di setup.sh dan tidak terlihat oleh alur
-# CI sama sekali.
+# yang disunting.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 DEST="${1:-$ROOT/assets/fonts}"
@@ -63,9 +61,8 @@ dl "$gf/bebasneue/BebasNeue-Regular.ttf" "$DEST/BebasNeue.ttf"
 
 # Teks lisensinya IKUT, dan ini kewajiban bukan kesopanan: ketiga font berlisensi
 # SIL Open Font License, dan OFL mensyaratkan salinan lisensinya menyertai font
-# ketika fontnya disebarkan ulang. Pemasang Windows membundel assets/fonts apa
-# adanya (build-windows.sh), jadi tanpa berkas ini font orang lain terkirim ke
-# pengguna tanpa lisensinya.
+# ketika fontnya disebarkan ulang, dan assets/fonts ikut disalin ke server apa
+# adanya.
 #
 # Satu berkas per keluarga font, bukan satu gabungan: hak ciptanya berbeda
 # pemilik, dan OFL menyertakan baris hak cipta itu di dalam teksnya.

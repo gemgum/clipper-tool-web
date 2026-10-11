@@ -197,23 +197,14 @@ func localOrigin(origin string, extra ...string) bool {
 		if slices.Contains(extra, strings.ToLower(host)) {
 			return true
 		}
-		// Jendela Tauri di Windows memakai asal http://tauri.localhost, jadi
-		// seluruh keluarga *.localhost ikut diterima — nama itu memang dijamin
-		// menunjuk ke mesin sendiri.
+		// Seluruh keluarga *.localhost dijamin menunjuk ke mesin sendiri.
 		return host == "127.0.0.1" || host == "localhost" || host == "::1" ||
 			strings.HasSuffix(host, ".localhost")
 	}
-	// Skema milik shell desktop, disebut satu per satu.
-	//
-	// Dulu di sini "selain http/https, terima saja". Niatnya tiga skema di
-	// bawah, tapi yang tertulis adalah SEMUA — termasuk chrome-extension:// dan
-	// skema karangan mana pun. Kuncinya tetap menahan permintaannya, jadi ini
-	// bukan lubang; ia hanya longgar tanpa satu pun alasan.
-	return shellSchemes[u.Scheme]
+	// Skema lain (chrome-extension://, tauri://, karangan mana pun) bukan
+	// halaman Clipper.
+	return false
 }
-
-// shellSchemes = asal non-http yang dipakai shell desktop.
-var shellSchemes = map[string]bool{"tauri": true, "app": true, "file": true}
 
 // withCORS memberi izin baca hanya kepada halaman lokal.
 func withCORS(next http.Handler, hosts ...string) http.Handler {

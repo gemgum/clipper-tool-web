@@ -670,7 +670,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 }
 
 // Version diisi main saat program mulai; nomor rilisnya sendiri datang dari
-// tag lewat -ldflags (lihat .github/workflows/desktop.yml). Ditaruh di sini
+// tag lewat -ldflags (lihat build.sh). Ditaruh di sini
 // supaya GUI bisa menyebutkannya di panel setelan — pertanyaan "versi berapa
 // yang saya jalankan" tidak boleh dijawab dengan membuka terminal.
 var Version = "dev"

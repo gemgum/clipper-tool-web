@@ -92,12 +92,7 @@ func guiMissingPage(w http.ResponseWriter, _ *http.Request) {
 </body>`)
 }
 
-// ShellURLPrefix menandai baris alamat yang dibaca jendela aplikasi dari
-// stdout engine. Kontrak antara `clipper serve -shell` dan desktop/.
-const ShellURLPrefix = "clipper-url: "
-
-// AppURL menyusun alamat yang dibuka jendela aplikasi: GUI di akar, kunci sesi
-// di query. Satu alamat, dan itulah seluruh yang perlu diketahui shell desktop.
+// AppURL menyusun alamat GUI: di akar, kunci sesi di query.
 func AppURL(base, token string) string {
 	if token == "" {
 		return base + "/"

@@ -39,8 +39,7 @@ import (
 //	kunci mati     checkout sumber. Di sini `npm run dev` di localhost:3000
 //	(pengembangan) menghubungi engine di 127.0.0.1:8787, dan bagi browser itu
 //	               "cross-site" sebab localhost dan 127.0.0.1 adalah host
-//	               BERBEDA. Jendela Tauri dengan asal http://tauri.localhost
-//	               jatuh di keranjang yang sama. Jadi di sini yang ditolak hanya
+//	               BERBEDA. Jadi di sini yang ditolak hanya
 //	               yang TIDAK membawa Origin; sisanya diserahkan ke CORS, yang
 //	               memang membedakan halaman lokal dari halaman internet.
 //
@@ -69,8 +68,7 @@ func localHost(host string, extra []string) bool {
 	if slices.Contains(extra, h) {
 		return true
 	}
-	// *.localhost ikut: jendela Tauri di Windows memakai nama itu, dan seluruh
-	// keluarganya memang dijamin menunjuk ke mesin sendiri.
+	// *.localhost ikut: seluruh keluarganya dijamin menunjuk ke mesin sendiri.
 	return h == "127.0.0.1" || h == "localhost" || h == "::1" ||
 		strings.HasSuffix(h, ".localhost")
 }
