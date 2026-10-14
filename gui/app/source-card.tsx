@@ -39,41 +39,45 @@ export default function SourceCard({
   const name = path.split(/[\\/]/).pop() || path;
   const res = info?.height ? `${Math.min(info.width, info.height)}p` : "";
 
+  // Sudah ada video: satu baris ringkas tanpa kepala kartu.
+  if (path) return (
+    <section className="step-card src-card">
+      <div className="src-row">
+        <div className="src-thumb">
+          {info ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img alt="" src={eng(`/api/frame?path=${encodeURIComponent(path)}&t=${Math.min(5, info.duration / 2).toFixed(1)}&reframe=fit&background=black&zoom=0`)} />
+          ) : <Film className="ico" aria-hidden="true" />}
+        </div>
+        <div className="src-text">
+          <h2 className="src-k">{t("step1Title")}</h2>
+          <p className="src-name" title={name}>{name}</p>
+          <p className="src-meta">{info ? [humanDuration(info.duration, t), res].filter(Boolean).join(" · ") : t("srcReading")}</p>
+        </div>
+        <button type="button" className="ghost" onClick={onPick}><Upload className="ico" aria-hidden="true" /> {t("changeVideo")}</button>
+      </div>
+    </section>
+  );
+
   return (
-    <StepCard icon={FolderOpen} title={t("step1Title")} hint={t("step1Hint")}>
-      {!path ? (
-        <div className={"drop-zone" + (over ? " over" : "")}
-          onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files?.[0]; if (f) onFile(f); }}>
-          <Upload className="drop-ico" aria-hidden="true" />
-          <div>
-            <p className="drop-title">{t("srcEmptyTitle")}</p>
-            <p className="drop-hint">{t("srcEmptyHint")}</p>
-          </div>
-          <button type="button" className="primary" onClick={onPick} disabled={uploading}>{t("chooseVideo")}</button>
-          {uploading && (
-            <div className="drop-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(uploadPct * 100)}>
-              <div style={{ width: `${uploadPct * 100}%` }} />
-              <span>{t("uploadingPct", { pct: Math.round(uploadPct * 100) })}</span>
-            </div>
-          )}
+    <StepCard icon={FolderOpen} title={t("step1Title")}>
+      <div className={"drop-zone" + (over ? " over" : "")}
+        onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files?.[0]; if (f) onFile(f); }}>
+        <Upload className="drop-ico" aria-hidden="true" />
+        <div>
+          <p className="drop-title">{t("srcEmptyTitle")}</p>
+          <p className="drop-hint">{t("srcEmptyHint")}</p>
         </div>
-      ) : (
-        <div className="src-row">
-          <div className="src-thumb">
-            {info ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img alt="" src={eng(`/api/frame?path=${encodeURIComponent(path)}&t=${Math.min(5, info.duration / 2).toFixed(1)}&reframe=fit&background=black&zoom=0`)} />
-            ) : <Film className="ico" aria-hidden="true" />}
+        <button type="button" className="primary" onClick={onPick} disabled={uploading}>{t("chooseVideo")}</button>
+        {uploading && (
+          <div className="drop-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(uploadPct * 100)}>
+            <div style={{ width: `${uploadPct * 100}%` }} />
+            <span>{t("uploadingPct", { pct: Math.round(uploadPct * 100) })}</span>
           </div>
-          <div className="src-text">
-            <p className="src-name" title={name}>{name}</p>
-            <p className="src-meta">{info ? [humanDuration(info.duration, t), res].filter(Boolean).join(" · ") : t("srcReading")}</p>
-          </div>
-          <button type="button" className="ghost" onClick={onPick}>{t("changeVideo")}</button>
-        </div>
-      )}
+        )}
+      </div>
     </StepCard>
   );
 }

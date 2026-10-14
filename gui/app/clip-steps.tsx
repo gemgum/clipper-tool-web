@@ -30,19 +30,20 @@ export function StepCard({
 
 /** Kartu pilihan: nama + satu kalimat penjelas. Terpilih = garis aksen + cincin. */
 export function ChoiceCards<T extends string>({
-  value, onChange, options, label,
+  value, onChange, options, label, small,
 }: {
   value: T; onChange: (v: T) => void; label: string;
-  options: { value: T; name: string; desc: string; icon?: LucideIcon }[];
+  // small = ikon + nama sebaris, penjelasnya jadi tooltip.
+  options: { value: T; name: string; desc: string; icon?: LucideIcon }[]; small?: boolean;
 }) {
   return (
-    <div className="choice-grid" role="group" aria-label={label}>
+    <div className={"choice-grid" + (small ? " sm" : "")} role="group" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" className={"choice" + (o.value === value ? " on" : "")}
-          aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
+          aria-pressed={o.value === value} title={small ? o.desc : undefined} onClick={() => onChange(o.value)}>
           {o.icon && <span className="choice-ico" aria-hidden="true"><o.icon className="ico" /></span>}
           <span className="choice-name">{o.name}</span>
-          <span className="choice-desc">{o.desc}</span>
+          {!small && <span className="choice-desc">{o.desc}</span>}
         </button>
       ))}
     </div>
@@ -54,13 +55,14 @@ export function Segmented<T extends string | number>({
   value, onChange, options, label,
 }: {
   value: T; onChange: (v: T) => void; label: string;
-  options: { value: T; name: string }[];
+  options: { value: T; name: string; icon?: LucideIcon }[];
 }) {
   return (
     <div className="segmented" role="group" aria-label={label}>
       {options.map((o) => (
         <button key={String(o.value)} type="button" className={o.value === value ? "on" : ""}
-          aria-pressed={o.value === value} onClick={() => onChange(o.value)}>{o.name}</button>
+          aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
+          {o.icon && <o.icon className="ico" aria-hidden="true" />}{o.name}</button>
       ))}
     </div>
   );

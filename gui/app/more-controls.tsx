@@ -1,19 +1,13 @@
 "use client";
 
-// Kartu "More controls" (rancangan Video clips, 14 Oktober 2026): deretan ikon;
-// satu ketukan membuka SATU panel di bawahnya, ketukan kedua menutupnya.
+// Kartu setelan klip (rancangan "Redesain Video Clips", 14 Oktober 2026): empat
+// tab sama lebar; panel tab terpilih selalu terbuka di bawahnya, dibagi bagian.
 //
 // Sejak laci "Advanced settings" dibuang, SEMUA setelan lanjutan tinggal di
-// sini — tidak ada tempat kedua. Ikon "Text" dan "Position" ditambahkan untuk
-// isi laci yang tidak punya padanan di rancangan. Dua ikon rancangan disesuaikan
-// dengan yang benar-benar ada di engine:
-//   "Auto zoom"  zoom yang mengikuti ucapan tidak ada — ikonnya memegang
-//                pembingkaian sungguhan (Fit, Zoom, Background);
-//   AI engine    hanya ditampilkan: mesin dipilih sekali di Settings (notes/39).
+// sini — tidak ada tempat kedua. AI engine hanya ditampilkan: mesin dipilih
+// sekali di Settings (notes/39).
 
-import {
-  AudioLines, Cpu, Crosshair, Download, Droplet, Film, Monitor, Move, PenLine, Type, TypeOutline, ZoomIn,
-} from "lucide-react";
+import { Ban, Camera, CaseSensitive, Cpu, Download, Highlighter, Mic, Monitor, Move, Music, Smartphone, SquarePlay, Type } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
@@ -22,11 +16,9 @@ import { eng } from "./engine";
 import Select from "./select";
 import Stepper from "./stepper";
 import Warn from "./warn";
-import { Segmented, Swatches, Toggle } from "./clip-steps";
+import { Segmented, Toggle } from "./clip-steps";
 import { useEngines } from "./engine-picker";
 import { sameModel, useOllama } from "./ollama";
-import { GRIDS } from "./guides";
-import { PLATFORMS } from "./preview-panel";
 import type { Font, FontCheck } from "./preview-panel";
 import WatermarkPanel from "./watermark-panel";
 import type { Watermark } from "./watermark-model";
@@ -43,21 +35,35 @@ const ZOOM_BOUNDS: Record<string, { min: number; natural: number }> = {
 };
 export const zoomBounds = (mode: string) => ZOOM_BOUNDS[mode] ?? ZOOM_BOUNDS.center;
 
-type Key = "transcription" | "ai" | "resolution" | "fps" | "font" | "text" | "outline" | "position" | "zoom" | "watermark";
-const ITEMS: { key: Key; icon: LucideIcon; label: MessageKey; desc: MessageKey }[] = [
-  { key: "transcription", icon: AudioLines, label: "mcTranscription", desc: "mcTranscriptionDesc" },
-  { key: "ai", icon: Cpu, label: "mcAI", desc: "mcAIDesc" },
-  { key: "resolution", icon: Monitor, label: "resolution", desc: "mcResolutionDesc" },
-  { key: "fps", icon: Film, label: "fps", desc: "mcFpsDesc" },
-  { key: "font", icon: Type, label: "font", desc: "mcFontDesc" },
-  { key: "text", icon: TypeOutline, label: "mcText", desc: "mcTextDesc" },
-  { key: "outline", icon: PenLine, label: "outline", desc: "mcOutlineDesc" },
-  { key: "position", icon: Move, label: "position", desc: "mcPositionDesc" },
-  { key: "zoom", icon: ZoomIn, label: "mcFraming", desc: "mcZoomDesc" },
-  { key: "watermark", icon: Droplet, label: "groupWatermark", desc: "mcWatermarkDesc" },
+type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "type"
+  | "platform" | "zoom" | "watermark";
+// Judul tiap bagian di dalam panel tab. Posisi, kisi, dan panduan tinggal di kartu Preview.
+const PARTS: Record<Key, MessageKey> = {
+  transcription: "mcSecTranscript", ai: "mcAI",
+  clips: "mcSecClips", quality: "mcSecVideo",
+  style: "mcSecStyle", type: "mcSecType",
+  platform: "mcSecPlatform", zoom: "mcFraming", watermark: "groupWatermark",
+};
+// Semua setelan halaman: empat tab, satu panel selalu terbuka.
+export type Group = "ai" | "output" | "text" | "layout";
+const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; parts: Key[] }[] = [
+  { key: "ai", icon: Cpu, label: "mcGroupAI", parts: ["transcription", "ai"] },
+  { key: "output", icon: Monitor, label: "mcGroupOutput", parts: ["clips", "quality"] },
+  { key: "text", icon: Type, label: "mcGroupText", parts: ["style", "type"] },
+  { key: "layout", icon: Move, label: "mcGroupLayout", parts: ["platform", "zoom", "watermark"] },
 ];
 // Tebal garis tepi sebagai tiga pilihan; angka lain = Custom (angka persisnya di panel Text).
 const OUTLINES = [{ v: 3, k: "mcThin" }, { v: 5, k: "mcMedium" }, { v: 8, k: "mcThick" }] as const;
+// Palet warna teks & sorotan (engine menerima #RRGGBB untuk keduanya).
+const PALETTE = [
+  { hex: "#FFFFFF", k: "colorWhite" }, { hex: "#FFD400", k: "colorYellow" }, { hex: "#F2874B", k: "colorOrange" },
+  { hex: "#E5484D", k: "colorRed" }, { hex: "#FF7AB6", k: "colorPink" }, { hex: "#9B7BFF", k: "colorPurple" },
+  { hex: "#4F8BFF", k: "colorBlue" }, { hex: "#3AD1D9", k: "colorCyan" }, { hex: "#38C976", k: "colorGreen" },
+  { hex: "#111111", k: "colorBlack" },
+] as const;
+// Nilai lama "white"/"yellow" (preset tersimpan) dibaca sebagai hex palet.
+const colHex = (c: string) => (c === "white" ? "#ffffff" : c === "yellow" ? "#ffd400" : c.toLowerCase());
+const SIZES = [{ v: 72, k: "sizeS" }, { v: 94, k: "sizeM" }, { v: 120, k: "sizeL" }] as const;
 
 export default function MoreControls(p: {
   disabled?: boolean;
@@ -84,22 +90,24 @@ export default function MoreControls(p: {
   subBox: boolean; setSubBox: (v: boolean) => void;
   subMode: string; setSubMode: (v: string) => void;
   // posisi
-  subX: number; subY: number; centerAnchorY: number; onCentre: () => void;
   platform: string; setPlatform: (v: string) => void;
-  inUnsafe: boolean; hasZone: boolean; onPlaceSafe: () => void;
-  grid: number; setGrid: (v: number) => void;
-  alwaysGuides: boolean; setAlwaysGuides: (v: boolean) => void;
   // bingkai
   reframe: string; setReframe: (v: string) => void;
   background: string; setBackground: (v: string) => void;
   zoom: number; setZoom: (v: number) => void;
   // watermark
   watermark: Watermark; setWatermark: (patch: Partial<Watermark>) => void; onPickImage: () => void;
+  // gaya, ukuran, sorotan, dan jumlah/panjang klip
+  subHighlight: string; setSubHighlight: (v: string) => void; pickSize: (v: number) => void;
+  maxClips: number; setMaxClips: (v: number) => void;
+  durationPreset: string; setDurationPreset: (v: string) => void;
+  saveMode: string; setSaveMode: (v: string) => void;
 }) {
   const { t } = useI18n();
   const { engines } = useEngines();
-  const [open, setOpen] = useState<Key | null>(null);
-  const item = ITEMS.find((i) => i.key === open);
+  const [open, setOpen] = useState<Group>("ai");
+  const [colMode, setColMode] = useState<"text" | "hl">("text");
+  const item = GROUPS.find((g) => g.key === open)!;
   const bounds = zoomBounds(p.reframe);
   const engineName = p.engine === "heuristic" ? t("offlineHeuristic") : (engines.find((e) => e.id === p.engine)?.name || p.engine);
 
@@ -169,164 +177,183 @@ export default function MoreControls(p: {
         </button></Warn>
     ) : pulling ? <span className="meta">{pullLabel}</span> : null;
 
-  const sub = (label: MessageKey, control: React.ReactNode, note?: React.ReactNode) => (
-    <div className="mc-field">
-      <span className="mc-sub">{t(label)}</span>
-      {control}
-      {note && <span className="mc-note">{note}</span>}
+  // Satu baris: label di kiri, kendali di kanan (rancangan "tidy settings").
+  const row = (label: MessageKey, control: React.ReactNode, note?: React.ReactNode) => (
+    <div className="mc-r">
+      <span className="mc-r-l">{t(label)}</span>
+      <div className="mc-r-c">{control}{note && <span className="mc-note">{note}</span>}</div>
     </div>
   );
+  const sw = (toggle: React.ReactNode, note?: React.ReactNode) => (
+    <div className="mc-r mc-r-sw">{toggle}{note && <span className="mc-note">{note}</span>}</div>
+  );
+  const isHl = colMode === "hl";
+  const colValue = isHl ? p.subHighlight : p.subColor;
 
-  const body = () => {
-    switch (open) {
+  const body = (part: Key) => {
+    switch (part) {
       case "transcription":
         return <>
-          {sub("model", p.transcriber === "whisper" ? (
+          {p.transcriber === "whisper" && row("model", (
             <Select value={p.model} onChange={p.setModel} ariaLabel={t("mcTranscription")} options={p.models.map((m) => ({
               value: m.name, label: `Whisper ${m.name}`, note: m.downloaded ? m.size : t("modelNotDownloaded"),
             }))} />
-          ) : <span className="mc-note">{t("mcTranscriptionElsewhere")}</span>)}
-          <div className="mc-field">
-            <Toggle checked={p.transcriptFix} onChange={p.setTranscriptFix} label={t("transcriptFix")} desc={t("transcriptFixTip")} />
-            {p.transcriptFix && engine === "heuristic" && <span className="mc-note">{t("transcriptFixNeedsLLM")}</span>}
-          </div>
+          ))}
+          {sw(<Toggle checked={p.transcriptFix} onChange={p.setTranscriptFix} label={t("transcriptFix")} desc={t("transcriptFixTip")} />,
+            p.transcriptFix && engine === "heuristic" && t("transcriptFixNeedsLLM"))}
           {/* Istilah hanya dipakai tahap koreksi; tanpa koreksi isian ini tak berpengaruh. */}
-          {p.transcriptFix && sub("terms",
+          {p.transcriptFix && row("terms",
             <input id="terms" value={p.terms} placeholder={t("termsPlaceholder")} onChange={(e) => p.setTerms(e.target.value)} />)}
         </>;
       case "ai":
         return <>
-          <p className="mc-note">
-            <b>{engineName}</b>{engine !== "heuristic" && llmModel && <> · <code>{llmModel}</code></>}
-            {" "}<a href="/requirements">{t("aiChangeInSettings")} →</a>
-          </p>
-          {ollamaWarn}
+          {row("mcEngineRow", <>
+            <span className="mc-val">{engineName}{engine !== "heuristic" && llmModel && <> · {llmModel}</>}</span>
+            <a className="mc-link" href="/requirements">{t("aiChangeInSettings")} →</a>
+          </>)}
+          {ollamaWarn && <div className="mc-r mc-r-sw">{ollamaWarn}</div>}
         </>;
-      case "resolution":
+      case "clips":
         return <>
-          {sub("resolution", <Segmented label={t("resolution")} value={p.resolution} onChange={p.setResolution} options={[
-            { value: "720p", name: "720×1280" }, { value: "1080p", name: "1080×1920" }, { value: "1440p", name: "1440×2560" },
+          {row("clipCountLabel", <Stepper value={p.maxClips} onChange={p.setMaxClips} min={1} max={40} />)}
+          {row("clipLength", <Segmented label={t("clipLength")}
+            value={["auto", "30", "60"].includes(p.durationPreset) ? p.durationPreset : "auto"}
+            onChange={p.setDurationPreset} options={[
+              { value: "auto", name: t("lenAutoName") }, { value: "30", name: "15–30 s" }, { value: "60", name: "30–60 s" },
+            ]} />)}
+          {sw(<Toggle checked={p.saveMode !== "burn"} onChange={(v) => p.setSaveMode(v ? "both" : "burn")} label={t("keepClean")} />)}
+        </>;
+      case "quality":
+        return <>
+          {row("resolution", <Segmented label={t("resolution")} value={p.resolution} onChange={p.setResolution} options={[
+            { value: "720p", name: "720p" }, { value: "1080p", name: "1080p" }, { value: "1440p", name: "1440p" },
           ]} />)}
-          {sub("quality", <Segmented label={t("quality")} value={p.quality} onChange={p.setQuality} options={[
+          {row("quality", <Segmented label={t("quality")} value={p.quality} onChange={p.setQuality} options={[
             { value: "draft", name: t("qualityDraft") }, { value: "hd", name: t("qualityHd") }, { value: "max", name: t("qualityMax") },
           ]} />)}
+          {row("fps", <Segmented label={t("fps")} value={p.fps} onChange={p.setFps} options={[
+            { value: 0, name: t("fpsSource") }, { value: 24, name: "24" }, { value: 30, name: "30" }, { value: 60, name: "60" },
+          ]} />)}
           {/* Mode web: hasil selalu di folder server, jadi pilihan folder tidak bermakna. */}
-          {p.web === false && sub("outputDir",
+          {p.web === false && row("outputDir",
             <div className="path-row">
               <input id="out-dir" value={p.outputDir} onChange={(e) => p.setOutputDir(e.target.value)} placeholder={t("outputDirPlaceholder")} />
               <button type="button" className="ghost" onClick={p.onPickOut}>{t("pickerGo")}…</button>
             </div>)}
         </>;
-      case "fps":
-        return <Segmented label={t("fps")} value={p.fps} onChange={p.setFps} options={[
-          { value: 0, name: t("fpsSource") }, { value: 24, name: "24" }, { value: 30, name: "30" }, { value: 60, name: "60" },
-        ]} />;
-      case "font":
+      case "style":
         return <>
-          <Select value={p.fontManual ? "__manual__" : p.subFont} ariaLabel={t("font")}
-            onChange={(v) => { if (v === "__manual__") { p.setFontManual(true); return; } p.setFontManual(false); p.setSubFont(v); }}
-            options={[...p.fonts.map((f) => ({ value: f.name, label: f.name })), { value: "__manual__", label: t("fontOther") }]} />
-          {/* Font di luar daftar dicek engine dulu; job menolaknya sampai lolos. */}
-          {p.fontManual && <>
-            <input className="mc-gap" value={p.subFont} spellCheck={false} aria-label={t("font")}
-              placeholder={t("fontPlaceholder")} onChange={(e) => p.setSubFont(e.target.value)} />
-            <span className="mc-note">
-              {p.fontChecking ? t("fontChecking") : !p.fontCheck ? t("fontHint")
-                : p.fontCheck.valid ? t("fontFound", { family: p.fontCheck.family, source: p.fontCheck.source })
-                : p.fontCheck.error}
-            </span>
-          </>}
-        </>;
-      case "text":
-        return <>
-          {sub("color", <Swatches label={t("color")} value={p.subColor} onChange={p.setSubColor} options={[
-            { value: "white", name: t("colorWhite"), swatch: "#ffffff" }, { value: "yellow", name: t("colorYellow"), swatch: "#ffdd00" },
+          {row("mcSecStyle", <Segmented label={t("step2Title")} value={p.subMode === "word" ? "normal" : p.subMode} onChange={p.setSubMode} options={[
+            { value: "normal", name: t("styleNormalName"), icon: CaseSensitive },
+            { value: "highlight", name: t("styleHighlightName"), icon: Highlighter },
+            { value: "karaoke", name: t("styleKaraokeName"), icon: Mic },
           ]} />)}
-          {sub("size", <Stepper value={p.subSize} onChange={p.setSubSize} min={40} max={140} step={2} />, t("mcSizeNote"))}
-          {sub("subSpeed", <Segmented label={t("subSpeed")} value={p.subSpeed} onChange={p.setSubSpeed} options={[
+          {row("subSpeed", <Segmented label={t("subSpeed")} value={p.subSpeed} onChange={p.setSubSpeed} options={[
             { value: "slow", name: t("speedSlow") }, { value: "normal", name: t("speedNormal") }, { value: "dense", name: t("speedDense") },
-          ]} />, t("subSpeedTip"))}
-          <div className="mc-field">
-            <Toggle checked={p.subBox} onChange={p.setSubBox} label={t("mcBox")} desc={t("mcBoxDesc")} />
-          </div>
-          <div className="mc-field">
-            {/* Gaya keempat; tiga lainnya di kartu Subtitle style. */}
-            <Toggle checked={p.subMode === "word"} onChange={(v) => p.setSubMode(v ? "word" : "highlight")}
-              label={t("subWord")} desc={t("mcWordDesc")} />
-          </div>
+          ]} />)}
+          {/* Gaya keempat; tiga lainnya di baris Style. */}
+          {sw(<Toggle checked={p.subMode === "word"} onChange={(v) => p.setSubMode(v ? "word" : "highlight")} label={t("subWord")} />)}
         </>;
-      case "outline":
-        return <Segmented label={t("outline")} value={p.subOutline} onChange={p.setSubOutline} options={[
-          ...OUTLINES.map((o) => ({ value: o.v, name: t(o.k) })),
-          ...(OUTLINES.some((o) => o.v === p.subOutline) ? [] : [{ value: p.subOutline, name: t("mcCustom", { n: p.subOutline }) }]),
-        ]} />;
-      case "position":
-        return <>
-          {sub("position",
-            <div className="mc-row">
-              <span className="mc-xy">{p.subX} · {p.subY}</span>
-              <button type="button" className="ghost" onClick={p.onCentre}><Crosshair className="ico" aria-hidden="true" /> {t("mcCentre")}</button>
-              <button type="button" className="ghost" disabled={!p.hasZone} onClick={p.onPlaceSafe}>{t("mcSafe")}</button>
-            </div>,
-            p.inUnsafe ? <span className="bad">{t("unsafeWarning")}</span> : t("mcPositionNote"))}
-          {sub("platformGuide", <Segmented label={t("platformGuide")} value={p.platform} onChange={p.setPlatform} options={[
-            ...Object.keys(PLATFORMS).map((k) => ({ value: k, name: k === "generic" ? t("platformGeneric") : PLATFORMS[k].label.replace(/^(Instagram|YouTube) /, "") })),
-            { value: "off", name: t("platformNone") },
-          ]} />, t("platformGuideTip"))}
-          {sub("grid", <Segmented label={t("grid")} value={p.grid} onChange={p.setGrid}
-            options={GRIDS.map((g) => ({ value: g, name: g === 0 ? t("gridOff") : String(g) }))} />)}
-          <div className="mc-field">
-            <Toggle checked={p.alwaysGuides} onChange={p.setAlwaysGuides} label={t("guidesAlways")} />
+      case "type":
+        return <div className="mc-split">
+          <div className="mc-split-l">
+            {row("font", <>
+              <Select value={p.fontManual ? "__manual__" : p.subFont} ariaLabel={t("font")}
+                onChange={(v) => { if (v === "__manual__") { p.setFontManual(true); return; } p.setFontManual(false); p.setSubFont(v); }}
+                options={[...p.fonts.map((f) => ({ value: f.name, label: f.name })), { value: "__manual__", label: t("fontOther") }]} />
+              {/* Font di luar daftar dicek engine dulu; job menolaknya sampai lolos. */}
+              {p.fontManual && <>
+                <input value={p.subFont} spellCheck={false} aria-label={t("font")}
+                  placeholder={t("fontPlaceholder")} onChange={(e) => p.setSubFont(e.target.value)} />
+                <span className="mc-note">
+                  {p.fontChecking ? t("fontChecking") : !p.fontCheck ? t("fontHint")
+                    : p.fontCheck.valid ? t("fontFound", { family: p.fontCheck.family, source: p.fontCheck.source })
+                    : p.fontCheck.error}
+                </span>
+              </>}
+            </>)}
+            {row("textSize", <Segmented label={t("textSize")} value={p.subSize} onChange={p.pickSize} options={[
+              ...SIZES.map((o) => ({ value: o.v, name: t(o.k) })),
+              ...(SIZES.some((o) => o.v === p.subSize) ? [] : [{ value: p.subSize, name: t("mcCustom", { n: p.subSize }) }]),
+            ]} />)}
+            {row("outline", <Segmented label={t("outline")} value={p.subOutline} onChange={p.setSubOutline} options={[
+              ...OUTLINES.map((o) => ({ value: o.v, name: t(o.k) })),
+              ...(OUTLINES.some((o) => o.v === p.subOutline) ? [] : [{ value: p.subOutline, name: t("mcCustom", { n: p.subOutline }) }]),
+            ]} />)}
+            {sw(<Toggle checked={p.subBox} onChange={p.setSubBox} label={t("mcBox")} />)}
           </div>
-        </>;
+          {/* Satu palet untuk dua sasaran: warna teks atau warna sorotan. */}
+          <div className="mc-split-r">
+            <span className="mc-r-l">{t("color")}</span>
+            <div className="segmented" role="group" aria-label={t("color")}>
+              {(["text", "hl"] as const).map((m) => (
+                <button key={m} type="button" className={colMode === m ? "on" : ""} aria-pressed={colMode === m} onClick={() => setColMode(m)}>
+                  <span className="mc-cdot" style={{ background: colHex(m === "hl" ? p.subHighlight : p.subColor) }} />
+                  {t(m === "hl" ? "mcColHl" : "mcColText")}
+                </button>
+              ))}
+            </div>
+            <div className="mc-cdots" role="group" aria-label={t(isHl ? "highlightColour" : "color")}>
+              {PALETTE.map((c) => {
+                const on = colHex(colValue) === c.hex.toLowerCase();
+                return <button key={c.hex} type="button" className={"mc-cswatch" + (on ? " on" : "")} aria-pressed={on}
+                  aria-label={t(c.k)} title={t(c.k)} onClick={() => (isHl ? p.setSubHighlight : p.setSubColor)(c.hex)}>
+                  <span style={{ background: c.hex }} />
+                </button>;
+              })}
+            </div>
+          </div>
+        </div>;
+      case "platform":
+        return row("postTo", <Segmented label={t("mcSecPlatform")} value={p.platform} onChange={p.setPlatform} options={[
+          { value: "tiktok", name: "TikTok", icon: Music },
+          { value: "reels", name: "Reels", icon: Camera },
+          { value: "shorts", name: "Shorts", icon: SquarePlay },
+          { value: "generic", name: t("platformGeneric"), icon: Smartphone },
+          { value: "off", name: t("platformNone"), icon: Ban },
+        ]} />);
       case "zoom":
         return <>
-          {sub("fitMode", <Segmented label={t("fitMode")} value={p.reframe} onChange={p.setReframe} options={[
+          {row("fitMode", <Segmented label={t("fitMode")} value={p.reframe} onChange={p.setReframe} options={[
             { value: "center", name: t("fitCenter") }, { value: "fit", name: t("fitWhole") },
-          ]} />, t("fitModeTip"))}
-          {sub("zoom", <Stepper value={p.zoom} onChange={p.setZoom} min={bounds.min} max={ZOOM_MAX} step={ZOOM_STEP} suffix="%" />,
-            p.reframe === "fit" ? t("mcZoomFit") : t("mcZoomCenter"))}
-          {/* Latar hanya terlihat bila gambar tidak memenuhi bingkai (zoom < 100). */}
-          {sub("background", p.zoom < 100 ? <Segmented label={t("background")} value={p.background} onChange={p.setBackground} options={[
+          ]} />)}
+          {row("zoom", <Stepper value={p.zoom} onChange={p.setZoom} min={bounds.min} max={ZOOM_MAX} step={ZOOM_STEP} suffix="%" />)}
+          {/* Latar hanya ada artinya bila gambar tidak memenuhi bingkai (zoom < 100). */}
+          {p.zoom < 100 && row("background", <Segmented label={t("background")} value={p.background} onChange={p.setBackground} options={[
             { value: "blur", name: t("backgroundBlur") }, { value: "black", name: t("backgroundBlack") },
-          ]} /> : null, p.zoom < 100 ? t("backgroundTip") : t("mcBackgroundHidden"))}
+          ]} />)}
         </>;
       case "watermark":
-        return <WatermarkPanel bare watermark={p.watermark} setWatermark={p.setWatermark}
-          onPickImage={p.onPickImage} open setOpen={() => {}} />;
+        return <div className="mc-r mc-r-pad">
+          <WatermarkPanel bare watermark={p.watermark} setWatermark={p.setWatermark}
+            onPickImage={p.onPickImage} open setOpen={() => {}} />
+        </div>;
     }
     return null;
   };
 
   return (
     <section className={"step-card mc" + (p.disabled ? " off" : "")} aria-disabled={p.disabled || undefined}>
-      <div className="mc-head">
-        <h2>{t("mcTitle")}</h2>
-        <span className="mc-hint">{t("mcHint")}</span>
-      </div>
       <fieldset className="step-body" disabled={p.disabled}>
-        <div className="mc-icons" role="group" aria-label={t("mcTitle")}>
-          {ITEMS.map(({ key, icon: Icon, label }) => (
-            <button key={key} type="button" className={"mc-btn" + (open === key ? " on" : "")}
-              aria-expanded={open === key} aria-controls="mc-panel"
-              onClick={() => setOpen(open === key ? null : key)}>
-              <span className={`mc-ico mc-${key}`} aria-hidden="true"><Icon className="ico" /></span>
-              <span className="mc-label">{t(label)}</span>
-              {/* Peringatan Ollama terlihat walau panel AI tertutup. */}
+        <div className="mc-tabs" role="tablist" aria-label={t("mcTitle")}>
+          {GROUPS.map(({ key, icon: Icon, label }) => (
+            <button key={key} type="button" role="tab" className={"mc-tab" + (open === key ? " on" : "")}
+              aria-selected={open === key} aria-controls="mc-panel" onClick={() => setOpen(key)}>
+              <span className="mc-tab-ic" aria-hidden="true"><Icon className="ico" /></span>
+              <span className="mc-tab-lb">{t(label)}</span>
+              {/* Peringatan Ollama terlihat walau tab AI tidak dipilih. */}
               {key === "ai" && ollamaWarn && open !== "ai" && <span className="mc-alert" aria-label={t("mcAIAlert")} />}
             </button>
           ))}
         </div>
-        {item && (
-          <div className="mc-panel" id="mc-panel">
-            <span className={`mc-ico mc-${item.key}`} aria-hidden="true"><item.icon className="ico" /></span>
-            <div className="mc-panel-body">
-              <p className="mc-panel-title">{t(item.label)}</p>
-              <p className="mc-panel-desc">{t(item.desc)}</p>
-              <div className="mc-control">{body()}</div>
-            </div>
-          </div>
-        )}
+        <div className="mc-panel" id="mc-panel" role="tabpanel">
+          {item.parts.map((part) => (
+            <section key={part} className="mc-group">
+              <h3 className="mc-group-t">{t(PARTS[part])}</h3>
+              <div className="mc-rows">{body(part)}</div>
+            </section>
+          ))}
+        </div>
       </fieldset>
     </section>
   );

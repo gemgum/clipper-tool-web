@@ -21,7 +21,7 @@
 // ada di font mana pun.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Captions, CaseSensitive, Highlighter, Layers, Mic, Music, Play, Send, SquarePlay } from "lucide-react";
+import { Crosshair, Eye, Grid3x3, Move, Play, Smartphone } from "lucide-react";
 import PageHeader from "./page-header";
 import { useAI, useAISettings } from "./ai";
 import { useI18n } from "./i18n";
@@ -31,9 +31,7 @@ import Picker from "./picker";
 import { useKeep, useRestore } from "./persist";
 
 import SourceCard from "./source-card";
-import { StepCard, ChoiceCards, Segmented, Swatches, Toggle } from "./clip-steps";
 import MoreControls, { zoomBounds } from "./more-controls";
-import Stepper from "./stepper";
 import PreviewPanel, { CENTER_X, CENTER_Y, PLATFORMS, PLAY_H, PLAY_W, linesFor } from "./preview-panel";
 import type { Font, FontCheck } from "./preview-panel";
 import { DEFAULT_WATERMARK, watermarkToAPI } from "./watermark-model";
@@ -711,65 +709,14 @@ export default function Home() {
               subColor={subColor} setSubColor={setSubColor} subSize={subSize} setSubSize={setSubSize}
               subOutline={subOutline} setSubOutline={setSubOutline} subSpeed={subSpeed} setSubSpeed={setSubSpeed}
               subBox={subBox} setSubBox={setSubBox} subMode={subMode} setSubMode={setSubMode}
-              subX={subX} subY={subY} centerAnchorY={centerAnchorY} onCentre={() => { setSubX(CENTER_X); setSubY(centerAnchorY); }}
-              platform={platform} setPlatform={setPlatform} inUnsafe={inUnsafe} hasZone={!!zone} onPlaceSafe={placeSafe}
-              grid={grid} setGrid={setGrid} alwaysGuides={alwaysGuides} setAlwaysGuides={setAlwaysGuides}
+              platform={platform} setPlatform={setPlatform}
               reframe={reframe} setReframe={changeReframe} background={background} setBackground={setBackground}
               zoom={zoom} setZoom={setZoom}
-              watermark={watermark} setWatermark={setWatermark} onPickImage={() => setPicker("banner")} />
-
-            <StepCard icon={Captions} title={t("step2Title")} hint={t("step2Hint")} disabled={!path}>
-              <ChoiceCards label={t("step2Title")} value={subMode === "word" ? "normal" : subMode} onChange={setSubMode} options={[
-                { value: "normal", name: t("styleNormalName"), desc: t("styleNormalDesc"), icon: CaseSensitive },
-                { value: "highlight", name: t("styleHighlightName"), desc: t("styleHighlightDesc"), icon: Highlighter },
-                { value: "karaoke", name: t("styleKaraokeName"), desc: t("styleKaraokeDesc"), icon: Mic },
-              ]} />
-              <div className="step-row">
-                <div className="step-field">
-                  <p className="step-label">{t("textSize")}</p>
-                  <Segmented label={t("textSize")} value={subSize} onChange={pickSize} options={[
-                    { value: 72, name: t("sizeSmall") }, { value: 94, name: t("sizeMedium") }, { value: 120, name: t("sizeLarge") },
-                  ]} />
-                </div>
-                <div className="step-field">
-                  <p className="step-label">{t("highlightColour")}</p>
-                  <Swatches label={t("highlightColour")} value={subHighlight} onChange={setSubHighlight} options={[
-                    { value: "#FFD400", name: t("colorYellow") }, { value: "#FFFFFF", name: t("colorWhite") },
-                    { value: "#55E08A", name: t("colorGreen") }, { value: "#FF8A3D", name: t("colorOrange") },
-                  ]} />
-                </div>
-              </div>
-            </StepCard>
-
-            <StepCard icon={Send} title={t("step3Title")} hint={t("step3Hint")} disabled={!path}>
-              <ChoiceCards label={t("step3Title")} value={platform} onChange={setPlatform} options={[
-                { value: "tiktok", name: "TikTok", desc: t("platTiktokDesc"), icon: Music },
-                { value: "reels", name: "Reels", desc: t("platReelsDesc"), icon: Camera },
-                { value: "shorts", name: "Shorts", desc: t("platShortsDesc"), icon: SquarePlay },
-              ]} />
-            </StepCard>
-
-            <StepCard icon={Layers} title={t("step4Title")} hint={t("step4Hint")} disabled={!path}>
-              <div className="step-row">
-                <div className="step-field">
-                  <p className="step-label">{t("clipCountLabel")}</p>
-                  <Stepper value={maxClips} onChange={setMaxClips} min={1} max={40} />
-                </div>
-                <div className="step-field">
-                  <label className="step-label" htmlFor="clip-len">{t("clipLength")}</label>
-                  <select id="clip-len" value={["auto", "30", "60"].includes(durationPreset) ? durationPreset : "auto"}
-                    onChange={(e) => setDurationPreset(e.target.value)}>
-                    <option value="auto">{t("lenAuto")}</option>
-                    <option value="30">{t("lenShort")}</option>
-                    <option value="60">{t("lenMedium")}</option>
-                  </select>
-                </div>
-              </div>
-              <div className="step-toggle">
-                <Toggle checked={saveMode !== "burn"} onChange={(v) => setSaveMode(v ? "both" : "burn")}
-                  label={t("keepClean")} desc={t("keepCleanDesc")} />
-              </div>
-            </StepCard>
+              watermark={watermark} setWatermark={setWatermark} onPickImage={() => setPicker("banner")}
+              subHighlight={subHighlight} setSubHighlight={setSubHighlight} pickSize={pickSize}
+              maxClips={maxClips} setMaxClips={setMaxClips}
+              durationPreset={durationPreset} setDurationPreset={setDurationPreset}
+              saveMode={saveMode} setSaveMode={setSaveMode} />
 
           </div>
 
@@ -781,10 +728,20 @@ export default function Home() {
                 <span className="chip">9:16</span>
               </div>
               {preview}
-              <div className="pv-toggle">
-                <Toggle checked={showZones} onChange={setShowZones} label={t("showCovered")} />
-              </div>
-              <p className="note">{t("autoPlaced", { platform: platformName })}</p>
+              {/* Alat posisi & bantu-lihat langsung di bawah pratinjau, tempat subtitlenya diseret. */}
+              <fieldset className="pv-tools" disabled={!path}>
+                <button type="button" className="pv-tool" onClick={() => { setSubX(CENTER_X); setSubY(centerAnchorY); }}>
+                  <Crosshair className="ico" aria-hidden="true" /> {t("mcCentre")}</button>
+                <button type="button" className="pv-tool" title={t("mcSafe")} disabled={!zone} onClick={placeSafe}>
+                  <Smartphone className="ico" aria-hidden="true" /> {t("toolClear")}</button>
+                <button type="button" className={"pv-tool" + (grid ? " on" : "")} aria-pressed={!!grid} onClick={() => setGrid(grid ? 0 : 20)}>
+                  <Grid3x3 className="ico" aria-hidden="true" /> {t("toolGrid")}</button>
+                <button type="button" className={"pv-tool" + (alwaysGuides ? " on" : "")} aria-pressed={alwaysGuides} onClick={() => setAlwaysGuides(!alwaysGuides)}>
+                  <Move className="ico" aria-hidden="true" /> {t("toolGuides")}</button>
+                <button type="button" className={"pv-tool" + (showZones ? " on" : "")} aria-pressed={showZones} onClick={() => setShowZones(!showZones)}>
+                  <Eye className="ico" aria-hidden="true" /> {t("toolAreas")}</button>
+              </fieldset>
+              <p className={"pv-help" + (inUnsafe ? " bad" : "")}>{inUnsafe ? t("unsafeWarning") : t("dragHint")}</p>
             </section>
           </aside>
         </div>
