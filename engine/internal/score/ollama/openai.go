@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -215,12 +216,33 @@ func (c *Client) postChat(ctx context.Context, system, user string, schema any, 
 	// ini walau kuncinya tidak diperiksa. Isinya dari LLM_API_KEY bila diisi.
 	httpReq.Header.Set("authorization", "Bearer "+c.key())
 
-	resp, err := c.HTTP.Do(httpReq)
-	if err != nil {
-		return "", dialError(c.URL, c.Model, err)
+	var resp *http.Response
+	var parsed openAIResp
+	var raw []byte
+	for try := 1; ; try++ {
+		resp, err = c.HTTP.Do(httpReq)
+		if err != nil {
+			return "", dialError(c.URL, c.Model, err)
+		}
+		parsed, raw, err = readReply(resp)
+		resp.Body.Close()
+		// Stream yang DIPUTUS server/gateway setelah status 200 (bukan 429/5xx,
+		// jadi httpx tidak melihatnya) dicoba lagi: satu putus di potongan ke-3
+		// dari 77 dulu menggagalkan seluruh koreksi transkrip. Kasus nyatanya
+		// model bernalar di gateway yang memutus permintaan panjang — balasannya
+		// berhenti di tengah "reasoning_content", 0 huruf jawaban.
+		if !errors.Is(err, errStreamCut) || try == streamAttempts || ctx.Err() != nil {
+			break
+		}
+		select {
+		case <-time.After(time.Duration(try) * streamRetryWait):
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		httpReq, _ = http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		httpReq.Header.Set("content-type", "application/json")
+		httpReq.Header.Set("authorization", "Bearer "+c.key())
 	}
-	defer resp.Body.Close()
-	parsed, raw, err := readReply(resp)
 	if err != nil {
 		// Alamat LENGKAP, bukan cuma base-nya: alamat yang salah isi (mis.
 		// endpoint gaya Anthropic milik DeepSeek) membalas 404 berbadan kosong,
@@ -410,6 +432,14 @@ func formatParams(b float64) string {
 	return strings.TrimSuffix(fmt.Sprintf("%.1f", b), ".0") + "B"
 }
 
+// errStreamCut = stream terputus sebelum model selesai; postChat mencobanya lagi.
+var errStreamCut = errors.New("connection cut")
+
+// Percobaan untuk stream yang terputus; jedanya berlipat (2 s, 4 s).
+const streamAttempts = 3
+
+var streamRetryWait = 2 * time.Second // variabel supaya test tidak menunggu
+
 // readReply membaca balasan chat, entah stream (text/event-stream) entah JSON
 // utuh, ke bentuk yang sama. raw dikembalikan untuk pesan galat.
 //
@@ -464,13 +494,13 @@ func readReply(resp *http.Response) (openAIResp, []byte, error) {
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return parsed, last, fmt.Errorf("the reply stream broke off: %w", err)
+		return parsed, last, fmt.Errorf("%w: the reply stream broke off: %w", errStreamCut, err)
 	}
 	if !done && finish == "" {
 		// Sambungan ditutup di tengah jalan TANPA galat baca (proxy/gateway
 		// memutus). Dulu potongannya dikembalikan sebagai jawaban sah, dan
 		// pemanggil baru gagal kemudian dengan "unexpected end of JSON input".
-		return parsed, last, fmt.Errorf("the reply stream ended before the model finished (%d characters received)", content.Len())
+		return parsed, last, fmt.Errorf("%w: the reply stream ended before the model finished (%d characters received)", errStreamCut, content.Len())
 	}
 	parsed.Choices = []openAIChoice{{FinishReason: finish}}
 	parsed.Choices[0].Message.Content = content.String()

@@ -279,6 +279,9 @@ func TestBudgetGrowsUntilTheModelAnswers(t *testing.T) {
 // membuat gateway di belakang Cloudflare tidak memutus model lambat dengan 524.
 // Galat yang datang DI TENGAH stream tetap sampai ke pemanggil.
 func TestStreamedReplyIsAssembled(t *testing.T) {
+	old := streamRetryWait
+	streamRetryWait = 0
+	t.Cleanup(func() { streamRetryWait = old })
 	var gotBody map[string]any
 	reply := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -342,5 +345,31 @@ func TestPickRetriesUnreadableReply(t *testing.T) {
 	picks, err := c.PickMoments(context.Background(), nil, 0, 1, "id")
 	if err != nil || len(picks) != 1 || picks[0].Title != "Judul" || calls != 2 {
 		t.Fatalf("picks=%v err=%v calls=%d", picks, err, calls)
+	}
+}
+
+// Stream yang diputus gateway di tengah penalaran (0 huruf jawaban) dicoba
+// lagi; percobaan berikutnya yang selesai dipakai. Kasus nyata: potongan ke-3
+// dari 77 koreksi transkrip ke model bernalar di gateway yang memutus.
+func TestCutStreamIsRetried(t *testing.T) {
+	old := streamRetryWait
+	streamRetryWait = 0
+	t.Cleanup(func() { streamRetryWait = old })
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "text/event-stream")
+		if calls < 3 {
+			w.Write([]byte(`data: {"choices":[{"delta":{"reasoning_content":" \""},"finish_reason":""}]}` + "\n\n"))
+			return
+		}
+		w.Write([]byte(`data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}` + "\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "glm")
+	c.Kind = KindOpenAI
+	out, err := c.Complete(context.Background(), "sys", "user", nil, 512)
+	if err != nil || out != "ok" || calls != 3 {
+		t.Fatalf("out=%q err=%v calls=%d", out, err, calls)
 	}
 }
