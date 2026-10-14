@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/probe", s.probe)
 	mux.HandleFunc("GET /api/frame", s.frame)
 	mux.HandleFunc("POST /api/upload", s.upload)
+	mux.HandleFunc("POST /api/upload/remove", s.removeUpload)
 	mux.HandleFunc("POST /api/fetch", s.fetchVideo)
 	mux.HandleFunc("POST /api/fetch/check", s.checkVideo)
 	// Dua ini yang membuat unggahan tidak perlu: berkasnya sudah ada di mesin

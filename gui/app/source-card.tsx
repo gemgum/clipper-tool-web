@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Film, FolderOpen, Link2, TriangleAlert, Upload } from "lucide-react";
+import { Film, FolderOpen, Link2, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
 import { StepCard, humanDuration } from "./clip-steps";
@@ -14,10 +14,11 @@ type Info = { duration: number; width: number; height: number };
 // TIDAK ditampilkan: bahasanya baru diketahui setelah transkripsi, dan angka
 // yang belum ada tidak dikarang.
 export default function SourceCard({
-  path, onPick, onFile, onUrl, fetchPhase, fetchTitle, fetchWarn, uploading, uploadPct,
+  path, onPick, onRemove, onFile, onUrl, fetchPhase, fetchTitle, fetchWarn, uploading, uploadPct,
 }: {
   path: string;
   onPick: () => void;
+  onRemove: () => void;
   onFile: (f: File) => void;
   onUrl: (url: string) => void;
   fetchPhase: "" | "checking" | "downloading";
@@ -60,7 +61,12 @@ export default function SourceCard({
           <p className="src-name" title={name}>{name}</p>
           <p className="src-meta">{info ? [humanDuration(info.duration, t), res].filter(Boolean).join(" · ") : t("srcReading")}</p>
         </div>
-        <button type="button" className="ghost" onClick={onPick}><Upload className="ico" aria-hidden="true" /> {t("changeVideo")}</button>
+        <div className="src-actions">
+          <button type="button" className="ghost" onClick={onPick}><Upload className="ico" aria-hidden="true" /> {t("changeVideo")}</button>
+          <button type="button" className="ghost icon-only" onClick={onRemove} aria-label={t("removeVideo")} title={t("removeVideo")}>
+            <Trash2 className="ico" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </section>
   );

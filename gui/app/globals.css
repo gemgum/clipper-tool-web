@@ -2656,6 +2656,9 @@ button.mc-cswatch.on { border-color: var(--accent); }
 .src-card .src-name { margin-top: 3px; font-size: 13.5px; }
 .src-card .src-meta { margin-top: 2px; font-size: 12px; }
 .src-card .ghost { display: inline-flex; align-items: center; gap: 6px; }
+.src-actions { display: flex; gap: 8px; }
+.src-card .ghost.icon-only { padding: 0; width: 40px; justify-content: center; }
+.src-card .ghost.icon-only:hover { color: var(--bad-text); border-color: var(--bad-text); }
 .src-thumb {
   width: 96px; height: 64px; border-radius: var(--r-sm); background: var(--sunken); flex: none; overflow: hidden;
   display: flex; align-items: center; justify-content: center; color: var(--faint);

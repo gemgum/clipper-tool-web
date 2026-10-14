@@ -136,3 +136,24 @@ func (s *Server) sweepFetched(now time.Time) {
 		}
 	}
 }
+
+// removeUpload: tombol Remove di kartu Source. Di mode web video unggahan/unduhan
+// itu dihapus dari server — kecuali sudah dipakai job (job yang memilikinya
+// menghapusnya sendiri). Di luar folder unggahan, dan di mode desktop, tidak
+// ada yang disentuh: dropUploads menolaknya.
+func (s *Server) removeUpload(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	removed := false
+	if p := insideWebRoot(req.Path); p != "" && !s.inputInUse(p) {
+		dropUploads(p)
+		_, err := os.Stat(p)
+		removed = os.IsNotExist(err)
+	}
+	writeJSON(w, 200, map[string]bool{"removed": removed})
+}

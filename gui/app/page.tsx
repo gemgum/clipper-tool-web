@@ -405,6 +405,16 @@ export default function Home() {
     } finally { setFetchPhase(""); }
   }, [addLog, t]);
 
+  // removeSource: kosongkan sumber. Engine menghapus berkasnya di mode web bila
+  // itu unggahan yang belum dipakai job; gagal pun sumber tetap dikosongkan.
+  const removeSource = useCallback(() => {
+    const p = path;
+    setPath("");
+    fetch(eng(`/api/upload/remove`), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: p }),
+    }).catch(() => {});
+  }, [path]);
+
   // useFile menerima berkas dari seret & lepas atau dari pemilih browser.
   //
   // Browser tidak memberi tahu di mana berkas itu berada — hanya nama dan
@@ -731,7 +741,7 @@ export default function Home() {
       {screen === "setup" && (
         <div className="setup-grid">
           <div className="setup-main">
-            <SourceCard path={path} onPick={() => setPicker("video")} onFile={useFile} onUrl={fetchUrl} fetchPhase={fetchPhase} fetchTitle={fetchTitle} fetchWarn={fetchWarn}
+            <SourceCard path={path} onPick={() => setPicker("video")} onRemove={removeSource} onFile={useFile} onUrl={fetchUrl} fetchPhase={fetchPhase} fetchTitle={fetchTitle} fetchWarn={fetchWarn}
               uploading={uploading} uploadPct={uploadPct} />
 
             <MoreControls disabled={!path} addLog={addLog} web={web}

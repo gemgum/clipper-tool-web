@@ -4,6 +4,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,5 +82,35 @@ func TestDeleteJobDropsSource(t *testing.T) {
 	del(b.ID)
 	if _, err := os.Stat(src); !os.IsNotExist(err) {
 		t.Fatal("source kept after its last job was deleted")
+	}
+}
+
+// Remove di kartu Source: unggahan bebas dihapus; yang dipakai job dan berkas di
+// luar folder unggahan tidak disentuh.
+func TestRemoveUpload(t *testing.T) {
+	root := t.TempDir()
+	l := config.Layout{DataDir: filepath.Join(root, "data")}
+	s := &Server{paths: config.Paths{DataDir: l.DataDir}, mgr: job.NewManager(l, config.Paths{}, 1)}
+	webRoot = s.uploadDir()
+	t.Cleanup(func() { webRoot = "" })
+	mk := func(p string) string {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("x"), 0o644)
+		return p
+	}
+	free := mk(filepath.Join(s.uploadDir(), "1", "a.mp4"))
+	used := mk(filepath.Join(s.uploadDir(), "2", "b.mp4"))
+	outside := mk(filepath.Join(root, "mine.mp4"))
+	s.mgr.Create(used, config.DefaultOptions())
+	for p, gone := range map[string]bool{free: true, used: false, outside: false} {
+		rec := httptest.NewRecorder()
+		s.removeUpload(rec, httptest.NewRequest("POST", "/api/upload/remove",
+			strings.NewReader(`{"path":"`+p+`"}`)))
+		if _, err := os.Stat(p); os.IsNotExist(err) != gone {
+			t.Errorf("%s gone=%v, want %v (%s)", p, os.IsNotExist(err), gone, rec.Body)
+		}
+	}
+	if _, err := os.Stat(filepath.Dir(free)); !os.IsNotExist(err) {
+		t.Error("empty upload folder left behind")
 	}
 }
