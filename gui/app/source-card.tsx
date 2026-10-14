@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Film, FolderOpen, Upload } from "lucide-react";
+import { Film, FolderOpen, Link2, TriangleAlert, Upload } from "lucide-react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
 import { StepCard, humanDuration } from "./clip-steps";
@@ -14,17 +14,23 @@ type Info = { duration: number; width: number; height: number };
 // TIDAK ditampilkan: bahasanya baru diketahui setelah transkripsi, dan angka
 // yang belum ada tidak dikarang.
 export default function SourceCard({
-  path, onPick, onFile, uploading, uploadPct,
+  path, onPick, onFile, onUrl, fetchPhase, fetchTitle, fetchWarn, uploading, uploadPct,
 }: {
   path: string;
   onPick: () => void;
   onFile: (f: File) => void;
+  onUrl: (url: string) => void;
+  fetchPhase: "" | "checking" | "downloading";
+  fetchTitle: string;
+  fetchWarn: string;
   uploading: boolean;
   uploadPct: number;
 }) {
   const { t } = useI18n();
   const [info, setInfo] = useState<Info | null>(null);
   const [over, setOver] = useState(false);
+  const [url, setUrl] = useState("");
+  const fetching = fetchPhase !== "";
 
   useEffect(() => {
     setInfo(null);
@@ -70,7 +76,22 @@ export default function SourceCard({
           <p className="drop-title">{t("srcEmptyTitle")}</p>
           <p className="drop-hint">{t("srcEmptyHint")}</p>
         </div>
-        <button type="button" className="primary" onClick={onPick} disabled={uploading}>{t("chooseVideo")}</button>
+        <button type="button" className="primary" onClick={onPick} disabled={uploading || fetching}>{t("chooseVideo")}</button>
+        <form className="src-url" onSubmit={(e) => { e.preventDefault(); if (url.trim()) onUrl(url.trim()); }}>
+          <Link2 className="ico" aria-hidden="true" />
+          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} disabled={fetching || uploading}
+            placeholder="https://youtu.be/…" aria-label={t("srcUrlLabel")} />
+          <button type="submit" className="ghost" disabled={fetching || uploading || !url.trim()}>
+            {fetchPhase === "checking" ? t("srcChecking") : fetchPhase === "downloading" ? t("srcFetching") : t("srcUrlGo")}
+          </button>
+        </form>
+        {fetchPhase === "downloading" && fetchTitle && <p className="src-url-note">{t("srcFetchingTitle", { title: fetchTitle })}</p>}
+        {fetchWarn && !fetching && (
+          <p className="src-url-warn" role="alert">
+            <TriangleAlert className="ico" aria-hidden="true" />
+            <span><b>{t("srcCannotFetch")}</b> {fetchWarn}</span>
+          </p>
+        )}
         {uploading && (
           <div className="drop-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(uploadPct * 100)}>
             <div style={{ width: `${uploadPct * 100}%` }} />

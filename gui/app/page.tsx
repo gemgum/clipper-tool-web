@@ -369,6 +369,42 @@ export default function Home() {
     xhr.send(form);
   }, [addLog, t]);
 
+  // fetchUrl: CEK dulu apakah videonya bisa diambil (tanpa mengunduh). Tidak
+  // bisa → peringatan di kartu Source. Bisa → langsung unduh ke folder unggahan
+  // (yt-dlp, lalu Cobalt bila gagal); balasannya {path} seperti unggahan biasa.
+  const [fetchPhase, setFetchPhase] = useState<"" | "checking" | "downloading">("");
+  const [fetchTitle, setFetchTitle] = useState("");
+  const [fetchWarn, setFetchWarn] = useState("");
+  const fetchUrl = useCallback(async (url: string) => {
+    const post = async (api: string) => {
+      const res = await fetch(eng(api), {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    };
+    setFetchWarn(""); setFetchTitle(""); setFetchPhase("checking");
+    addLog(t("logFetchCheck", { url }));
+    try {
+      const info = await post(`/api/fetch/check`);
+      setFetchTitle(info.title || "");
+      addLog(t("logFetchOk", { title: info.title, engine: info.engine }));
+    } catch (e: any) {
+      setFetchPhase(""); setFetchWarn(e.message);
+      addLog(t("logFetchFailed", { error: e.message }));
+      return;
+    }
+    setFetchPhase("downloading");
+    try {
+      const data = await post(`/api/fetch`);
+      setPath(data.path); addLog(t("logFetchDone", { name: data.name }));
+    } catch (e: any) {
+      setFetchWarn(e.message);
+      addLog(t("logFetchFailed", { error: e.message }));
+    } finally { setFetchPhase(""); }
+  }, [addLog, t]);
+
   // useFile menerima berkas dari seret & lepas atau dari pemilih browser.
   //
   // Browser tidak memberi tahu di mana berkas itu berada — hanya nama dan
@@ -695,7 +731,7 @@ export default function Home() {
       {screen === "setup" && (
         <div className="setup-grid">
           <div className="setup-main">
-            <SourceCard path={path} onPick={() => setPicker("video")} onFile={useFile}
+            <SourceCard path={path} onPick={() => setPicker("video")} onFile={useFile} onUrl={fetchUrl} fetchPhase={fetchPhase} fetchTitle={fetchTitle} fetchWarn={fetchWarn}
               uploading={uploading} uploadPct={uploadPct} />
 
             <MoreControls disabled={!path} addLog={addLog} web={web}

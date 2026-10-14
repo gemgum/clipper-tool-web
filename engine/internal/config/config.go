@@ -107,6 +107,7 @@ type Paths struct {
 	Whisper   string
 	Model     string
 	Chrome    string // browser untuk merender kartu berita (boleh kosong)
+	YtDlp     string // pengunduh YouTube; nama polos "yt-dlp" bila belum terpasang
 	DataDir   string
 	ModelsDir string
 	ToolsDir  string
@@ -179,25 +180,25 @@ type Options struct {
 	WhisperModel string `json:"whisper_model"`
 	// Transcriber = mesin transkripsi: "whisper" (lokal, bawaan) atau
 	// "aistudio" (Google AI Studio, kunci AI_STUDIO_KEY; notes/43).
-	Transcriber    string   `json:"transcriber"`
+	Transcriber string `json:"transcriber"`
 	// Koordinat mesin transkripsi "api", DIISI SERVER — alasannya sama dengan
 	// LLMKeyEnv di bawah: nama variabel kunci tidak boleh dipilih klien.
 	// TranscribeEngine = id mesinnya; ikut tersimpan supaya job yang diulang
 	// bisa mengisi ulang koordinat di bawah (job.Manager.Prepare).
-	TranscribeEngine string `json:"transcribe_engine,omitempty"`
-	TranscribeName   string `json:"-"`
-	TranscribeBase   string `json:"-"`
-	TranscribePath   string `json:"-"`
-	TranscribeKeyEnv string `json:"-"`
-	TranscribeModel  string `json:"transcribe_model"`
-	Resolution     string   `json:"resolution"` // 720p | 1080p | 1440p
-	Quality        string   `json:"quality"`    // draft | hd | max
-	FPS            int      `json:"fps"`        // 0 = ikut sumber
-	Reframe        Reframe  `json:"reframe"`
-	Background     string   `json:"background"` // blur | black
-	Zoom           int      `json:"zoom"`       // 0..100, kelipatan 5
-	Subtitle       Subtitle `json:"subtitle"`
-	SubtitleOutput string   `json:"subtitle_output"` // burn | clean | both
+	TranscribeEngine string   `json:"transcribe_engine,omitempty"`
+	TranscribeName   string   `json:"-"`
+	TranscribeBase   string   `json:"-"`
+	TranscribePath   string   `json:"-"`
+	TranscribeKeyEnv string   `json:"-"`
+	TranscribeModel  string   `json:"transcribe_model"`
+	Resolution       string   `json:"resolution"` // 720p | 1080p | 1440p
+	Quality          string   `json:"quality"`    // draft | hd | max
+	FPS              int      `json:"fps"`        // 0 = ikut sumber
+	Reframe          Reframe  `json:"reframe"`
+	Background       string   `json:"background"` // blur | black
+	Zoom             int      `json:"zoom"`       // 0..100, kelipatan 5
+	Subtitle         Subtitle `json:"subtitle"`
+	SubtitleOutput   string   `json:"subtitle_output"` // burn | clean | both
 	// Watermark hanya ikut ke berkas yang subtitle-nya dibakar — lihat Watermark.
 	Watermark      Watermark `json:"watermark"`
 	MaxClips       int       `json:"max_clips"`
@@ -515,7 +516,9 @@ func ResolvePaths(l Layout, o Options) Paths {
 		Model:   model,
 		// Browser dicari oleh paket capture (termasuk chrome.exe lewat WSL).
 		// Boleh kosong: hanya fitur kartu berita yang membutuhkannya.
-		Chrome:    capture.Find(),
+		Chrome: capture.Find(),
+		YtDlp: env("CLIPPER_YTDLP_BIN",
+			firstExisting(filepath.Join(l.ToolsDir, exeName("yt-dlp")), exeName("yt-dlp"))),
 		DataDir:   l.DataDir,
 		ModelsDir: l.ModelsDir,
 		ToolsDir:  l.ToolsDir,

@@ -49,7 +49,10 @@ type recipe struct {
 	// berarti komponen wajib tidak bisa dipasang, dan pengguna tidak punya
 	// jalan lain di dalam aplikasi.
 	sources []source
-	// kind: "zip" atau "tar.gz". Keduanya ada di pustaka standar Go — itu
+	// kind: "zip", "tar.gz", atau "bin" (unduhannya sudah biner jadi; disalin
+	// apa adanya ke ToolsDir dengan nama want[0]).
+	//
+	// "zip"/"tar.gz": Keduanya ada di pustaka standar Go — itu
 	// sebabnya rilis .tar.xz (mis. ffmpeg statis untuk Linux) tidak dipakai:
 	// menambah dependensi eksternal hanya untuk membongkarnya melanggar aturan
 	// "standard library saja" proyek ini.
@@ -60,6 +63,9 @@ type recipe struct {
 }
 
 func (r *recipe) ext() string {
+	if r.kind == "bin" {
+		return ""
+	}
 	if r.kind == "zip" {
 		return ".zip"
 	}
@@ -105,6 +111,31 @@ const ffmpegVersion = "9.0"
 // tiap hari: yang berganti isinya tidak bisa dipaku sidik jarinya.
 const btbnBuild = "autobuild-2026-08-04-21-26"
 const btbnFile = "ffmpeg-n8.1.2-34-g9b6c8969e0-win64-gpl-8.1.zip"
+
+// Versi yt-dlp yang dipaku. YouTube berubah tiap beberapa minggu, jadi angka ini
+// PERLU dinaikkan berkala — sidik jarinya ada di SHA2-256SUMS rilis yang sama.
+const ytdlpVersion = "2026.08.19"
+
+// ytdlpRecipe: biner mandiri resmi (PyInstaller) — tanpa Python di mesin pengguna.
+func ytdlpRecipe() *recipe {
+	base := "https://github.com/yt-dlp/yt-dlp/releases/download/" + ytdlpVersion + "/"
+	var file, sum string
+	switch runtime.GOOS + "/" + runtime.GOARCH {
+	case "linux/amd64":
+		file, sum = "yt-dlp_linux", "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"
+	case "linux/arm64":
+		file, sum = "yt-dlp_linux_aarch64", "b16e4dab368a816cd05d477d698a605a6ae87ccee1c8ffd38fa21d7254141fcc"
+	case "windows/amd64":
+		file, sum = "yt-dlp.exe", "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a"
+	case "windows/arm64":
+		file, sum = "yt-dlp_arm64.exe", "05b438997bafc3affdfda9d041353c9d73e04dc842207254b655b0887c4445b0"
+	case "darwin/amd64", "darwin/arm64":
+		file, sum = "yt-dlp_macos", "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202"
+	default:
+		return nil
+	}
+	return &recipe{kind: "bin", want: []string{exeName("yt-dlp")}, sources: []source{{base + file, sum}}}
+}
 
 func whisperRecipe() *recipe {
 	base := "https://github.com/ggml-org/whisper.cpp/releases/download/" + whisperVersion + "/"
@@ -428,6 +459,14 @@ func human(b int64) string {
 
 // extract membongkar arsip ke dir dan mengembalikan jumlah berkas yang diambil.
 func (r *recipe) extract(archivePath, dir string) (int, error) {
+	if r.kind == "bin" {
+		f, err := os.Open(archivePath)
+		if err != nil {
+			return 0, err
+		}
+		defer f.Close()
+		return 1, writeFile(filepath.Join(dir, r.want[0]), f, 0o755)
+	}
 	if r.kind == "zip" {
 		return r.extractZip(archivePath, dir)
 	}

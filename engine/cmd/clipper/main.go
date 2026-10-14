@@ -23,6 +23,7 @@ import (
 	"github.com/gemgum/clipper/engine/internal/pipeline"
 	"github.com/gemgum/clipper/engine/internal/watermark"
 	"github.com/gemgum/clipper/engine/internal/writer"
+	"github.com/gemgum/clipper/engine/internal/ytdl"
 )
 
 // version diisi saat rilis lewat -ldflags "-X main.version=…" dari nomor tag,
@@ -47,6 +48,8 @@ func main() {
 		cmdCaption(layout, os.Args[2:])
 	case "watermark":
 		cmdWatermark(layout, os.Args[2:])
+	case "fetch":
+		cmdFetch(layout, os.Args[2:])
 	case "serve":
 		cmdServe(layout, os.Args[2:])
 	case "version", "-v", "--version":
@@ -67,6 +70,9 @@ Usage:
                                 more videos, one .txt next to each video's name
   clipper watermark <video>... [flags]  Burn your watermark + headline into videos
                                 that are already 9:16, one *_watermarked.mp4 each
+  clipper fetch <youtube-url> [-out dir]  Download one YouTube video; yt-dlp
+                                first, then the self-hosted Cobalt in
+                                CLIPPER_COBALT_URL if yt-dlp fails
   clipper serve [flags]          Run the HTTP API for the GUI
   clipper version
 
@@ -899,4 +905,25 @@ func loopback(addr string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+func cmdFetch(layout config.Layout, args []string) {
+	links, flagArgs := splitPositional(args, map[string]bool{"-out": true})
+	fs := flag.NewFlagSet("fetch", flag.ExitOnError)
+	outDir := fs.String("out", ".", "")
+	_ = fs.Parse(flagArgs)
+	if len(links) != 1 {
+		fmt.Fprintln(os.Stderr, "error: one YouTube link is required. Example: clipper fetch https://youtu.be/jNQXAC9IVRw")
+		os.Exit(1)
+	}
+	paths := config.ResolvePaths(layout, config.DefaultOptions())
+	o := ytdl.Options{Dir: *outDir, YtDlp: paths.YtDlp, FFmpeg: paths.FFmpeg,
+		Log: func(s string) { fmt.Fprintln(os.Stderr, s) }}
+	o.FromEnv()
+	p, err := ytdl.Download(context.Background(), links[0], o)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	fmt.Println(p)
 }

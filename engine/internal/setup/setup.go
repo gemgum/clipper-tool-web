@@ -175,6 +175,7 @@ func Status(l config.Layout) []Component {
 		toolStatus(l, "ffmpeg", "ffmpeg", "Cuts and renders video. Required."),
 		toolStatus(l, "ffprobe", "ffprobe", "Reads video length and size. Comes with ffmpeg."),
 		whisperStatus(l),
+		ytdlpStatus(l),
 	}
 	for _, m := range Models {
 		p := ModelPath(l, m.Name)
@@ -315,6 +316,39 @@ func whisperStatus(l config.Layout) Component {
 	return c
 }
 
+// ytdlpStatus memeriksa yt-dlp: opsional, hanya untuk video dari tautan YouTube.
+// Tidak lewat checkRuns: yt-dlp memakai --version, bukan -version.
+func ytdlpStatus(l config.Layout) Component {
+	c := Component{
+		ID: "yt-dlp", Name: "yt-dlp", Kind: KindTool, Pointable: true,
+		Detail:      "Downloads videos from a YouTube link. Not needed for uploaded files.",
+		Size:        "~40 MB",
+		Installable: ytdlpRecipe() != nil,
+		Hint:        "Download the standalone build from the releases page.",
+		URL:         "https://github.com/yt-dlp/yt-dlp/releases",
+	}
+	p := os.Getenv("CLIPPER_YTDLP_BIN")
+	if p == "" {
+		p = filepath.Join(l.ToolsDir, exeName("yt-dlp"))
+		if _, err := os.Stat(p); err != nil {
+			p, _ = exec.LookPath("yt-dlp")
+		}
+	}
+	if p == "" {
+		return c
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, p, "--version").CombinedOutput()
+	if err != nil {
+		c.Detail = fmt.Sprintf("yt-dlp is at %s but will not run: %v", p, err)
+		return c
+	}
+	c.Installed, c.Path = true, p
+	c.Detail += " Version " + strings.TrimSpace(string(out)) + "."
+	return c
+}
+
 // Missing melaporkan komponen wajib yang belum ada. Dipakai untuk menjawab
 // "kenapa tombol mulai tidak bisa ditekan" sebelum pengguna menekannya.
 func Missing(cs []Component) []string {
@@ -356,6 +390,8 @@ func Install(ctx context.Context, l config.Layout, id string, onProgress func(Pr
 		return installRecipe(ctx, l, ffmpegRecipe(), "ffmpeg", ffmpegHint(), onProgress)
 	case "whisper":
 		return installRecipe(ctx, l, whisperRecipe(), "whisper.cpp", whisperHint(), onProgress)
+	case "yt-dlp":
+		return installRecipe(ctx, l, ytdlpRecipe(), "yt-dlp", "download it from github.com/yt-dlp/yt-dlp/releases", onProgress)
 	case "ollama", "chrome":
 		return fmt.Errorf("%s is a separate application: install it yourself, then press Refresh", id)
 	}

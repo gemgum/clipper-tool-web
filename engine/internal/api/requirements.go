@@ -145,6 +145,8 @@ func (s *Server) setComponentPath(w http.ResponseWriter, r *http.Request) {
 		key = "CLIPPER_FFPROBE_BIN"
 	case "whisper":
 		key = "CLIPPER_WHISPER_BIN"
+	case "yt-dlp":
+		key = "CLIPPER_YTDLP_BIN"
 	default:
 		writeErr(w, 400, "that component cannot be pointed at a file")
 		return

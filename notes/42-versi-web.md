@@ -109,3 +109,28 @@ melakukan yang diizinkan role-nya. Kontraknya
   hanya menampilkan status.
 - **SSRF**: kartu berita & pembuat berita mengambil URL apa pun dari server.
   Dapat diterima untuk tim yang memegang sandi; jangan bagikan sandinya keluar.
+
+## Video dari tautan YouTube (14 Oktober 2026)
+
+Kartu Source menerima tautan YouTube: `/api/fetch/check` memeriksa dulu (tanpa
+mengunduh) lalu `/api/fetch` mengunduh ke `data/uploads`. Mesinnya berurutan —
+yt-dlp client bawaan → yt-dlp `android_vr` → Cobalt self-hosted — lihat
+`engine/internal/ytdl`. Hanya ID video yang diteruskan, tidak pernah tautan mentah.
+
+Di VPS:
+
+- **yt-dlp** di `bin/yt-dlp`, versi + sha256 dipaku di `setup/recipe.go`
+  (`ytdlpVersion`). Naikkan berkala: YouTube berubah tiap beberapa minggu.
+- **Cobalt**, kontainer `cobalt`, hanya di 127.0.0.1:9000, image dipaku digest:
+
+  ```bash
+  docker run -d --name cobalt --restart unless-stopped \
+    -p 127.0.0.1:9000:9000 -e API_URL=http://127.0.0.1:9000/ \
+    --read-only --cap-drop ALL \
+    ghcr.io/imputnet/cobalt@sha256:63186dd68afd57ce3bb1f62cc4c139f5fa95b9c3e87a3cf5c6e4c7a570523f62
+  ```
+
+  `--security-opt no-new-privileges` membuat kontainer gagal start di Docker
+  snap ("operation not permitted"), jadi tidak dipakai. Engine menemukannya
+  lewat `CLIPPER_COBALT_URL=http://127.0.0.1:9000/` di `.env`. Jangan pakai
+  instance Cobalt publik: tautan dan videonya lewat server orang lain.

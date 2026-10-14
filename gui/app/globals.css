@@ -2673,6 +2673,19 @@ button.mc-cswatch.on { border-color: var(--accent); }
 .drop-zone > div { flex: 1 1 220px; }
 .drop-title { margin: 0; font-size: 16px; font-weight: 600; }
 .drop-hint { margin: 4px 0 0; font-size: 14px; color: var(--text-2); }
+.src-url {
+  flex: 1 0 100%; display: flex; align-items: center; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+.src-url .ico { width: 18px; height: 18px; color: var(--text-2); flex: none; }
+.src-url input { flex: 1; min-width: 0; }
+.src-url button { flex: none; }
+.src-url-note { flex: 1 0 100%; margin: 0; font-size: 13px; color: var(--text-2); }
+.src-url-warn {
+  flex: 1 0 100%; display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px;
+  border-radius: var(--r-sm); background: var(--bad-soft, rgb(229 72 77 / 12%)); color: var(--bad-text);
+  font-size: 13px; line-height: 1.45; white-space: pre-line;
+}
+.src-url-warn .ico { width: 16px; height: 16px; flex: none; margin-top: 1px; }
 .drop-progress { flex: 1 0 100%; height: 10px; border-radius: var(--r-full); background: var(--border); position: relative; }
 .drop-progress > div { height: 100%; border-radius: var(--r-full); background: var(--accent); }
 .drop-progress span { position: absolute; right: 0; top: 14px; font-size: 13px; color: var(--text-2); }
