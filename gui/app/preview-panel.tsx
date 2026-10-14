@@ -2,17 +2,14 @@
 
 // Ikon: lucide-react (ISC) — alasannya di gui/app/page.tsx.
 import { Eye, RotateCw, X } from "lucide-react";
-import Tip from "./tip";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
-import Stepper from "./stepper";
 import { PLAY_H, PLAY_W, CENTER_X, CENTER_Y, snap, useLayerDrag } from "./drag";
-import Guides, { GridPicker, PositionField } from "./guides";
+import Guides from "./guides";
 import { headlineAnchor, headlineBox, wrapHeadline } from "./watermark-model";
 import type { Watermark } from "./watermark-model";
-import Select from "./select";
 import Warn from "./warn";
 
 // Ruang koordinat, titik tengah, dan mesin seret tinggal di ./drag — dipakai
@@ -23,7 +20,7 @@ export { PLAY_W, PLAY_H, CENTER_X, CENTER_Y } from "./drag";
 // Area yang tertutup UI tiap aplikasi (fraksi tinggi/lebar frame 9:16).
 // Angka awal hasil pengukuran kasar — sesuaikan bila UI aplikasi berubah.
 //
-// Tinggal di sini bersama pratinjau, bukan di <FramePanel>: pembatas ini
+// Tinggal di sini bersama pratinjau: pembatas ini
 // menggambar overlay DI ATAS bingkai dan mengatur ke mana subtitle boleh
 // ditaruh — bukan bagaimana video dipasang ke bingkai.
 export type Zone = { top: number; bottom: number; right: number };
@@ -59,23 +56,18 @@ const hex = (c: string) => (c.startsWith("#") ? c : c === "yellow" ? "#ffdd00" :
 export const linesFor = (subMode: string, subSpeed: string) =>
   subMode === "word" ? 1 : subSpeed === "dense" ? 3 : 2;
 
-// Bingkai 9:16 + seretan subtitle + kendali huruf dan posisi.
-//
-// children diletakkan di ujung kolom setelan: di situlah <FramePanel> duduk,
-// sebab kendali bingkai memang mengubah gambar di sebelah kiri.
+// Bingkai 9:16 + seretan subtitle, watermark, dan headline. Setelannya ada di
+// kartu More controls (more-controls.tsx).
 export default function PreviewPanel({
   path, reframe, background, zoom, zone,
   fonts, subFont, setSubFont, fontManual, setFontManual, fontCheck, fontChecking,
   subSize, setSubSize, subColor, setSubColor, subOutline, setSubOutline, subBox, setSubBox,
   subMode, setSubMode, subHighlight, setSubHighlight, subSpeed, setSubSpeed,
   subX, setSubX, subY, setSubY, blockH, centerAnchorY,
-  watermark, moveWatermark, moveHeadline, wmOpen, watermarkPanel,
-  platform, setPlatform, inUnsafe, onPlaceSafe, addLog, children,
-  part, grid, setGrid, alwaysGuides, setAlwaysGuides, showZones = true,
+  watermark, moveWatermark, moveHeadline,
+  addLog, grid, alwaysGuides, showZones = true,
 }: {
   path: string; reframe: string; background: string; zoom: number; zone?: Zone;
-  platform: string; setPlatform: (v: string) => void;
-  inUnsafe: boolean; onPlaceSafe: () => void;
   fonts: Font[];
   subFont: string; setSubFont: (v: string) => void;
   fontManual: boolean; setFontManual: (v: boolean) => void;
@@ -93,18 +85,10 @@ export default function PreviewPanel({
   watermark: Watermark;
   moveWatermark: (x: number, y: number) => void;
   moveHeadline: (x: number, y: number) => void;
-  // wmOpen menukar isi kolom setelan: selagi menyala, hanya kelompok
-  // watermark yang tampil. Alasannya tinggi, dan angkanya di watermark-panel.tsx.
-  wmOpen: boolean;
-  watermarkPanel: React.ReactNode;
   addLog: (text: string) => void;
-  children?: React.ReactNode;
-  // Halaman klip (DESIGN.md §4): pratinjau berdiri sendiri di kolom kanan,
-  // setelannya di laci "Pengaturan lanjutan". Dua instans, satu sumber state —
-  // karena itu kisi tinggal di halaman, bukan di sini.
-  part: "preview" | "settings";
-  grid: number; setGrid: (v: number) => void;
-  alwaysGuides: boolean; setAlwaysGuides: (v: boolean) => void;
+  // Kisi & garis panduan diatur di panel Position (more-controls.tsx).
+  grid: number;
+  alwaysGuides: boolean;
   /** Kotak centang "Tampilkan area yang tertutup UI aplikasi". */
   showZones?: boolean;
 }) {
@@ -176,12 +160,11 @@ export default function PreviewPanel({
   // dibuang lalu dimuat ulang sendiri. Ditunda 500 ms supaya path yang sedang
   // diketik tidak memicu satu permintaan per huruf.
   useEffect(() => {
-    if (part !== "preview") return; // instans setelan tidak memuat gambar
     resetPreview();
     if (!path) return;
     const timer = setTimeout(() => loadPreview(true), 500);
     return () => clearTimeout(timer);
-  }, [path, resetPreview, loadPreview, part]);
+  }, [path, resetPreview, loadPreview]);
 
   // Mesin seret ada di ./drag — satu untuk ketiga lapis, dan halaman watermark
   // memakai yang sama.
@@ -217,8 +200,7 @@ export default function PreviewPanel({
   const colorHex = hex(subColor);
   const highlightHex = hex(subHighlight);
 
-  if (part === "preview") {
-    return (
+  return (
       <div className="sub-layout pv-only">
       <div className="sub-preview">
         <div className="preview9x16" ref={boxRef}>
@@ -394,119 +376,4 @@ export default function PreviewPanel({
       </div>
     );
   }
-  return (
-    <div className="sub-settings adv-settings">
-        {/* Kelompok subtitle, penempatan, dan bingkai MENGHILANG selagi watermark
-            terbuka. Bukan disembunyikan supaya rapi — kolom ini tidak punya sisa
-            tinggi sama sekali, jadi dua kelompok besar tidak bisa berdiri
-            bersama tanpa membuatnya bergulir. */}
-        {!wmOpen && <>
-        <div className="group">
-        <div className="group-title" role="heading" aria-level={3}>{t("groupSubtitle")}</div>
-        <div className="grid3">
-          <div className="field"><label>{t("font")}
-            {/* Font manual yang ditolak: lambang di label, bukan kalimat merah
-                di bawah kotaknya — kalimat itu panjangnya berubah tiap ketikan
-                dan seluruh kisi ikut naik-turun. */}
-            {fontManual && fontCheck && !fontCheck.valid && <Warn>{fontCheck.error}</Warn>}</label>
-            <Select
-              value={fontManual ? "__manual__" : subFont}
-              onChange={(v) => {
-                if (v === "__manual__") { setFontManual(true); return; }
-                setFontManual(false); setSubFont(v);
-              }}
-              options={[
-                ...fonts.map((f) => ({ value: f.name, label: f.name })),
-                { value: "__manual__", label: t("fontOther") },
-              ]} />
-            {fontManual && (
-              <>
-                <input style={{ marginTop: 6 }} value={subFont} spellCheck={false}
-                  placeholder={t("fontPlaceholder")} onChange={(e) => setSubFont(e.target.value)} />
-                {/* Satu baris, selalu: apa pun keadaannya tingginya sama. */}
-                <div className="meta req-line">
-                  {fontChecking ? t("fontChecking")
-                    : !fontCheck ? t("fontHint")
-                    : fontCheck.valid ? <span className="ok">{t("fontFound", { family: fontCheck.family, source: fontCheck.source })}</span>
-                    : fontCheck.error}
-                </div>
-              </>
-            )}</div>
-          <div className="field"><label>{t("color")}</label>
-            <Select value={subColor} onChange={setSubColor} options={[
-              { value: "white", label: t("colorWhite") },
-              { value: "yellow", label: t("colorYellow") },
-            ]} /></div>
-          <div className="field"><label>{t("size")}</label>
-            <Stepper value={subSize} onChange={setSubSize} min={40} max={140} step={2} /></div>
 
-          <div className="field"><label>{t("subStyle")} <Tip text={t("subStyleTip")} /></label>
-            <Select value={subMode} onChange={setSubMode} options={[
-              { value: "normal", label: t("subNormal") },
-              { value: "highlight", label: t("subHighlight") },
-              { value: "karaoke", label: t("subKaraoke") },
-              { value: "word", label: t("subWord") },
-            ]} /></div>
-          <div className="field"><label>{t("subSpeed")} <Tip text={t("subSpeedTip")} /></label>
-            <Select value={subSpeed} onChange={setSubSpeed} options={[
-              { value: "slow", label: t("speedSlow") },
-              { value: "normal", label: t("speedNormal") },
-              { value: "dense", label: t("speedDense") },
-            ]} /></div>
-          <div className="field"><label>{t("outline")}</label>
-            <Stepper value={subOutline} onChange={setSubOutline} min={0} max={12} /></div>
-          {/* Warna sorot hanya berarti pada gaya yang menyorot; alasannya
-              tertulis di ⓘ, bukan cuma diredupkan. */}
-          <div className="field"><label>{t("highlightColor")} {subMode === "normal" && <Tip text={t("highlightWhy")} />}</label>
-            <Select value={subHighlight} onChange={setSubHighlight} disabled={subMode === "normal"} options={[
-              { value: "#FFD400", label: t("colorYellow") }, { value: "#FFFFFF", label: t("colorWhite") },
-              { value: "#55E08A", label: t("colorGreen") }, { value: "#FF8A3D", label: t("colorOrange") },
-            ]} /></div>
-          <div className="field field-check">
-            <label className="chk"><input type="checkbox" checked={subBox}
-              onChange={(e) => setSubBox(e.target.checked)} /> {t("boxBackground")}</label>
-          </div>
-          <GridPicker grid={grid} setGrid={setGrid} always={alwaysGuides} setAlways={setAlwaysGuides} />
-
-        </div>
-        </div>
-
-        {/* Penempatan: di mana subtitle berdiri, dan batas mana yang tidak boleh
-            ditabrak. Pembatas platform ada DI SINI, bukan di kelompok bingkai —
-            ia mengatur ke mana subtitle boleh ditaruh, bukan bagaimana video
-            dipasang. */}
-        <div className="group">
-          <div className="group-title" role="heading" aria-level={3}>{t("groupPlacement")}</div>
-          <div className="grid3">
-            {/* Peringatan "menabrak zona" jadi LAMBANG di label, bukan baris
-                teks di bawah kisi: baris itu muncul dan hilang tiap kali
-                subtitle digeser, dan tiap kali itu terjadi kelompok Frame di
-                bawahnya melompat. */}
-            {/* Peringatan "menabrak zona" jadi LAMBANG di label, bukan baris
-                teks di bawah kisi: baris itu muncul dan hilang tiap kali
-                subtitle digeser, dan tiap kali itu terjadi kelompok Frame di
-                bawahnya melompat. */}
-            <PositionField
-              label={<>{t("position")}{inUnsafe && <Warn>{t("unsafeWarning")}</Warn>}</>}
-              x={subX} y={subY}
-              onReset={() => { setSubX(CENTER_X); setSubY(CENTER_Y); }} />
-            <div className="field"><label>{t("platformGuide")} <Tip text={t("platformGuideTip")} /></label>
-              <Select value={platform} onChange={setPlatform} options={[
-                ...Object.keys(PLATFORMS).map((k) => ({
-                  value: k, label: k === "generic" ? t("platformGeneric") : PLATFORMS[k].label,
-                })),
-                { value: "off", label: t("platformNone") },
-              ]} /></div>
-            <div className="field field-check">
-              <button className="ghost" disabled={!zone} onClick={onPlaceSafe}>{t("placeSafe")}</button>
-            </div>
-          </div>
-        </div>
-
-        {children}
-        </>}
-
-        {watermarkPanel}
-    </div>
-  );
-}

@@ -28,7 +28,7 @@ import { headlineAnchor, headlineBox, watermarkOn, wrapHeadline } from "./waterm
 // Yang tetap terlihat di kedua keadaan: bingkai pratinjau — sebab semua yang
 // diatur di sini mengubah gambar itu.
 export default function WatermarkPanel({
-  watermark, setWatermark, onPickImage, open, setOpen, allowLLM = true, gridControl,
+  watermark, setWatermark, onPickImage, open, setOpen, allowLLM = true, gridControl, bare,
 }: {
   watermark: Watermark;
   setWatermark: (patch: Partial<Watermark>) => void;
@@ -47,6 +47,8 @@ export default function WatermarkPanel({
   // berisi satu-satunya jawaban yang mungkin bukan keterangan, ia teka-teki.
   // Kalau tidak ada yang bisa dipilih, tidak ada yang perlu ditampilkan.
   allowLLM?: boolean;
+  // bare = tanpa judul lipat: panel More controls sudah punya judulnya sendiri.
+  bare?: boolean;
 }) {
   const { t } = useI18n();
   const name = watermark.image ? watermark.image.split(/[\\/]/).pop() : "";
@@ -63,9 +65,7 @@ export default function WatermarkPanel({
     wrapHeadline(watermark.hlText, watermark.hlSize, hlBox.w),
     watermark.hlSize, watermark.hlDX, watermark.hlDY, hlBox);
 
-  return (
-    <Section open={open} onToggle={setOpen}
-      title={`${t("groupWatermark")} · ${watermarkOn(watermark) ? t("watermarkOn_") : t("watermarkOff_")}`}>
+  const fields = (
       <div className="grid3">
         <div className="field"><label>{t("wmImage")} <Tip text={t("wmImageTip")} /></label>
           <div className="field-inline">
@@ -135,6 +135,12 @@ export default function WatermarkPanel({
             placeholder={source === "llm" ? t("headlineFromLLM") : t("headlinePlaceholder")}
             onChange={(e) => setWatermark({ hlText: e.target.value })} /></div>
       </div>
+  );
+  if (bare) return fields;
+  return (
+    <Section open={open} onToggle={setOpen}
+      title={`${t("groupWatermark")} · ${watermarkOn(watermark) ? t("watermarkOn_") : t("watermarkOff_")}`}>
+      {fields}
     </Section>
   );
 }

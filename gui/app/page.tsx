@@ -21,7 +21,7 @@
 // ada di font mana pun.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Captions, CaseSensitive, Highlighter, Layers, Mic, Music, Play, Send, SlidersHorizontal, SquarePlay } from "lucide-react";
+import { Camera, Captions, CaseSensitive, Highlighter, Layers, Mic, Music, Play, Send, SquarePlay } from "lucide-react";
 import PageHeader from "./page-header";
 import { useAI, useAISettings } from "./ai";
 import { useI18n } from "./i18n";
@@ -32,16 +32,13 @@ import { useKeep, useRestore } from "./persist";
 
 import SourceCard from "./source-card";
 import { StepCard, ChoiceCards, Segmented, Swatches, Toggle } from "./clip-steps";
-import MoreControls from "./more-controls";
+import MoreControls, { zoomBounds } from "./more-controls";
 import Stepper from "./stepper";
 import PreviewPanel, { CENTER_X, CENTER_Y, PLATFORMS, PLAY_H, PLAY_W, linesFor } from "./preview-panel";
 import type { Font, FontCheck } from "./preview-panel";
-import FramePanel, { zoomBounds } from "./frame-panel";
-import WatermarkPanel from "./watermark-panel";
-import { DEFAULT_WATERMARK, watermarkOn, watermarkToAPI } from "./watermark-model";
+import { DEFAULT_WATERMARK, watermarkToAPI } from "./watermark-model";
 import type { Watermark } from "./watermark-model";
-import SetupPanel from "./setup-panel";
-import type { WhisperModel } from "./setup-panel";
+import type { WhisperModel } from "./more-controls";
 import RunView from "./run-view";
 import ResultView, { downloadAllURL } from "./result-view";
 import type { JobClip } from "./result-view";
@@ -89,9 +86,6 @@ export default function Home() {
   // Watermark (banner + headline). Satu objek, bukan belasan state: ia melintasi
   // tiga berkas dan diteruskan utuh ke pratinjau maupun panel setelannya.
   const [watermark, setWatermarkState] = useState<Watermark>(DEFAULT_WATERMARK);
-  // Kelompok watermark menukar isi kolom setelan, jadi keadaannya tinggal di sini
-  // — bukan di dalam salah satu kelompok yang saling menutup.
-  const [wmOpen, setWmOpen] = useState(false);
   const setWatermark = useCallback((patch: Partial<Watermark>) => {
     setWatermarkState((b) => ({ ...b, ...patch }));
   }, []);
@@ -132,11 +126,6 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  // Uji LLM dipegang DI SINI, bukan di dalam SetupPanel: yang perlu tahu
-  // uji sedang jalan adalah tombol Mulai di panel sebelah. Model yang sedang
-  // dipaksa memuat diri tidak bisa melayani job sekaligus — job yang dimulai di
-  // tengah uji cuma menunggu antrean tanpa memberitahu apa yang ditunggunya.
-  const [testing, setTesting] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
   // Tiga layar, satu alur (DESIGN.md §3): Atur klip → Sedang diproses → Hasil.
@@ -153,7 +142,6 @@ export default function Home() {
   const [grid, setGrid] = useState<number>(20);
   const [alwaysGuides, setAlwaysGuides] = useState(false);
   const [showZones, setShowZones] = useState(true);
-  const advRef = useRef<HTMLDetailsElement | null>(null);
   const router = useRouter();
   // Mesin AI dari Pengaturan (global, atau pengecualian alat "clips"). Ia
   // MENANG atas isian lama yang tersimpan: pemilihnya sudah tidak ada di sini.
@@ -557,7 +545,7 @@ export default function Home() {
   }, []);
 
   // Geometri blok subtitle. Tinggal di halaman, bukan di <PreviewPanel>, sebab
-  // <FramePanel> memakainya juga: peringatan "menabrak zona" dan tombol "taruh
+  // More controls memakainya juga: peringatan "menabrak zona" dan tombol "taruh
   // di area aman" keduanya butuh tinggi blok yang sama.
   //
   // Jarak antarbaris libass PERSIS sebesar ukuran fontnya, berapa pun fontnya —
@@ -589,7 +577,7 @@ export default function Home() {
   };
   // Operator tidak pernah mengetik koordinat (DESIGN.md §4.2): ganti platform,
   // ukuran, atau gaya → subtitle ditaruh lagi tepat di atas area caption.
-  // Posisi manual tetap ada di Pengaturan lanjutan, sampai pilihan berikutnya.
+  // Posisi manual (seret di pratinjau, panel Position) berlaku sampai pilihan berikutnya.
   const placeRef = useRef(placeSafe);
   placeRef.current = placeSafe;
   useEffect(() => { placeRef.current(); }, [platform, subSize, subMode, subSpeed]);
@@ -610,10 +598,10 @@ export default function Home() {
     { label: t("sumClean"), value: saveMode === "burn" ? t("no") : t("yes") },
   ];
 
-  const canStart = !busy && !testing && !!path && !modelMissing;
+  const canStart = !busy && !!path && !modelMissing;
   const preview = (
     <PreviewPanel
-      part="preview" grid={grid} setGrid={setGrid} alwaysGuides={alwaysGuides} setAlwaysGuides={setAlwaysGuides}
+      grid={grid} alwaysGuides={alwaysGuides}
       showZones={showZones}
       path={path} reframe={reframe} background={background} zoom={zoom} zone={zone}
       fonts={fonts} subFont={subFont} setSubFont={setSubFont}
@@ -629,22 +617,15 @@ export default function Home() {
       subX={subX} setSubX={setSubX} subY={subY} setSubY={setSubY}
       blockH={blockH} centerAnchorY={centerAnchorY}
       watermark={watermark} moveWatermark={moveWatermark} moveHeadline={moveHeadline}
-      wmOpen={false} watermarkPanel={null}
-      platform={platform} setPlatform={setPlatform}
-      inUnsafe={inUnsafe} onPlaceSafe={placeSafe} addLog={addLog}
+      addLog={addLog}
     />
   );
 
   // Aksi kepala halaman berganti per layar; judulnya tetap (DESIGN.md §3).
   const actions = screen === "setup" ? (
     <>
-      <button type="button" className="ghost" onClick={() => {
-        if (advRef.current) { advRef.current.open = true; advRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }
-      }}>
-        <SlidersHorizontal className="ico" aria-hidden="true" /> {t("advancedTitle")}
-      </button>
       <button type="button" className="primary big" onClick={start} disabled={!canStart}>
-        <Play className="ico" aria-hidden="true" /> {testing ? t("llmTesting") : t("makeClips", { n: maxClips })}
+        <Play className="ico" aria-hidden="true" /> {t("makeClips", { n: maxClips })}
       </button>
     </>
   ) : screen === "run" ? (
@@ -719,18 +700,23 @@ export default function Home() {
             <SourceCard path={path} onPick={() => setPicker("video")} onFile={useFile}
               uploading={uploading} uploadPct={uploadPct} />
 
-            <MoreControls disabled={!path}
+            <MoreControls disabled={!path} addLog={addLog} web={web}
               model={model} setModel={setModel} models={models} transcriber={transcriber}
-              engine={engine} llmModel={llmModel}
-              resolution={resolution} setResolution={setResolution} fps={fps} setFps={setFps}
+              engine={engine} setEngine={setEngine} llmModel={llmModel} setLlmModel={setLlmModel}
+              transcriptFix={transcriptFix} setTranscriptFix={setTranscriptFix} terms={terms} setTerms={setTerms}
+              resolution={resolution} setResolution={setResolution} quality={quality} setQuality={setQuality}
+              fps={fps} setFps={setFps} outputDir={outputDir} setOutputDir={setOutputDir} onPickOut={() => setPicker("out")}
               fonts={fonts} subFont={subFont} setSubFont={setSubFont} fontManual={fontManual} setFontManual={setFontManual}
-              subOutline={subOutline} setSubOutline={setSubOutline}
-              reframe={reframe} zoom={zoom} setZoom={setZoom}
-              watermarkOn={watermarkOn(watermark)}
-              onOpenAdvanced={() => {
-                setWmOpen(true);
-                if (advRef.current) { advRef.current.open = true; advRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }
-              }} />
+              fontCheck={fontCheck} fontChecking={fontChecking}
+              subColor={subColor} setSubColor={setSubColor} subSize={subSize} setSubSize={setSubSize}
+              subOutline={subOutline} setSubOutline={setSubOutline} subSpeed={subSpeed} setSubSpeed={setSubSpeed}
+              subBox={subBox} setSubBox={setSubBox} subMode={subMode} setSubMode={setSubMode}
+              subX={subX} subY={subY} centerAnchorY={centerAnchorY} onCentre={() => { setSubX(CENTER_X); setSubY(centerAnchorY); }}
+              platform={platform} setPlatform={setPlatform} inUnsafe={inUnsafe} hasZone={!!zone} onPlaceSafe={placeSafe}
+              grid={grid} setGrid={setGrid} alwaysGuides={alwaysGuides} setAlwaysGuides={setAlwaysGuides}
+              reframe={reframe} setReframe={changeReframe} background={background} setBackground={setBackground}
+              zoom={zoom} setZoom={setZoom}
+              watermark={watermark} setWatermark={setWatermark} onPickImage={() => setPicker("banner")} />
 
             <StepCard icon={Captions} title={t("step2Title")} hint={t("step2Hint")} disabled={!path}>
               <ChoiceCards label={t("step2Title")} value={subMode === "word" ? "normal" : subMode} onChange={setSubMode} options={[
@@ -785,65 +771,6 @@ export default function Home() {
               </div>
             </StepCard>
 
-            {/* Laci lanjutan (DESIGN.md §4.2): <details> asli, tertutup secara
-                bawaan. Isinya setelan yang sama persis seperti sebelumnya. */}
-            <details className="card adv" ref={advRef}>
-              <summary>{t("advancedSummary")}</summary>
-              <p className="meta adv-hint">{t("advancedHint")}</p>
-              <SetupPanel hideClips
-                model={model} setModel={setModel} models={models}
-                resolution={resolution} setResolution={setResolution}
-                quality={quality} setQuality={setQuality} fps={fps} setFps={setFps}
-                durationPreset={durationPreset} setDurationPreset={setDurationPreset}
-                maxClips={maxClips} setMaxClips={setMaxClips}
-                saveMode={saveMode} setSaveMode={setSaveMode}
-                engine={engine} setEngine={setEngine}
-                llmModel={llmModel} setLlmModel={setLlmModel}
-                transcriptFix={transcriptFix} setTranscriptFix={setTranscriptFix}
-                terms={terms} setTerms={setTerms} addLog={addLog}
-                testing={testing} setTesting={setTesting}
-                transcriber={transcriber}
-              />
-              <PreviewPanel
-                part="settings" grid={grid} setGrid={setGrid} alwaysGuides={alwaysGuides} setAlwaysGuides={setAlwaysGuides}
-                path={path} reframe={reframe} background={background} zoom={zoom} zone={zone}
-                fonts={fonts} subFont={subFont} setSubFont={setSubFont}
-                fontManual={fontManual} setFontManual={setFontManual}
-                fontCheck={fontCheck} fontChecking={fontChecking}
-                subSize={subSize} setSubSize={setSubSize}
-                subColor={subColor} setSubColor={setSubColor}
-                subOutline={subOutline} setSubOutline={setSubOutline}
-                subBox={subBox} setSubBox={setSubBox}
-                subMode={subMode} setSubMode={setSubMode}
-                subHighlight={subHighlight} setSubHighlight={setSubHighlight}
-                subSpeed={subSpeed} setSubSpeed={setSubSpeed}
-                subX={subX} setSubX={setSubX} subY={subY} setSubY={setSubY}
-                blockH={blockH} centerAnchorY={centerAnchorY}
-                watermark={watermark} moveWatermark={moveWatermark} moveHeadline={moveHeadline}
-                wmOpen={false}
-                watermarkPanel={
-                  <WatermarkPanel watermark={watermark} setWatermark={setWatermark} open={wmOpen} setOpen={setWmOpen}
-                    onPickImage={() => setPicker("banner")} />
-                }
-                platform={platform} setPlatform={setPlatform}
-                inUnsafe={inUnsafe} onPlaceSafe={placeSafe} addLog={addLog}
-              >
-                <FramePanel
-                  reframe={reframe} onReframe={changeReframe}
-                  background={background} setBackground={setBackground}
-                  zoom={zoom} setZoom={setZoom}
-                />
-              </PreviewPanel>
-              {!web && (
-                <div className="field adv-out">
-                  <label htmlFor="out-dir">{t("outputDir")}</label>
-                  <div className="path-row">
-                    <input id="out-dir" value={outputDir} onChange={(e) => setOutputDir(e.target.value)} placeholder={t("outputDirPlaceholder")} />
-                    <button type="button" className="ghost" onClick={() => setPicker("out")}>{t("pickerGo")}…</button>
-                  </div>
-                </div>
-              )}
-            </details>
           </div>
 
           {/* Pratinjau: kolom kanan yang menempel saat halaman digulir (§4.3). */}

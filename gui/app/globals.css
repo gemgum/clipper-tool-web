@@ -2569,30 +2569,33 @@ button.swatch-btn.on { border: 2px solid var(--text); box-shadow: 0 0 0 3px rgb(
 .mc-hint { font-size: 13px; color: var(--text-2); }
 .mc .step-body { margin-top: 14px; }
 .mc-icons { display: flex; flex-wrap: wrap; gap: 6px 4px; }
+/* Tombol ikon bergaya sama dengan rail kiri: ikon garis polos berwarna
+   netral, yang aktif berlatar aksen lembut — bukan ubin warna-warni. */
 button.mc-btn {
-  display: flex; flex-direction: column; align-items: center; gap: 7px; width: 76px; min-height: 0;
-  padding: 4px 0; background: none; border: 0; color: var(--text-2);
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  width: 76px; height: 60px; min-height: 0; padding: 0; border: 0; border-radius: 12px;
+  background: none; color: var(--text-2); transition: background .12s, color .12s;
 }
-button.mc-btn:hover .mc-ico { transform: translateY(-1px); }
+button.mc-btn:hover { background: var(--panel2); color: var(--text); }
+button.mc-btn.on { background: var(--accent-soft); color: var(--accent); }
 .mc-label { font-size: 11.5px; font-weight: 500; line-height: 1.2; text-align: center; }
-.clips-v2 .step-field > .stepper { max-width: 160px; }
-button.mc-btn.on .mc-label { color: var(--text); }
-.mc-ico {
-  width: 46px; height: 46px; border-radius: 13px; flex: none; color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 25%), 0 2px 6px rgb(0 0 0 / 15%);
-  transition: transform var(--dur-base) var(--ease);
-}
-.mc-ico .ico { width: 20px; height: 20px; }
-button.mc-btn.on .mc-ico { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mc-transcription { background: linear-gradient(160deg, #6b8cff, #3b63e8); }
-.mc-ai { background: linear-gradient(160deg, #b48cff, #7c4ff0); }
-.mc-resolution { background: linear-gradient(160deg, #4fd88a, #22a95e); }
-.mc-fps { background: linear-gradient(160deg, #ff9a5c, #ef6a2c); }
-.mc-font { background: linear-gradient(160deg, #ffd25c, #f0a91e); }
-.mc-outline { background: linear-gradient(160deg, #ff8fb8, #e8508a); }
-.mc-zoom { background: linear-gradient(160deg, #5fe0d6, #1fb3ab); }
-.mc-watermark { background: linear-gradient(160deg, #9aa2ff, #6470f0); }
+button.mc-btn.on .mc-label { font-weight: 600; }
+.mc-ico { display: flex; align-items: center; justify-content: center; flex: none; }
+.mc-ico .ico { width: 20px; height: 20px; stroke-width: 1.7; }
+.mc-panel .mc-ico { width: 42px; height: 42px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.mc-alert { position: absolute; top: 6px; right: 18px; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); border: 2px solid var(--panel); }
+/* Panel berisi beberapa isian: label kecil di atas tiap kendali. */
+.mc-control { display: flex; flex-direction: column; gap: 16px; container-type: inline-size; }
+.mc-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.mc-sub { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-2); }
+.mc-gap { margin-top: 8px; }
+.mc-xy { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); min-width: 90px; }
+.mc-control .mc-row .ghost { display: inline-flex; align-items: center; gap: 6px; }
+.mc-control .bad { color: var(--bad-text); }
+.mc-control .path-row input { flex: 1; min-width: 0; }
+.mc-control .stepper { max-width: 200px; }
+.mc-control .grid3 .stepper { max-width: none; }
+.mc-control .field-inline > button { min-height: var(--ctl-h, 40px); gap: 6px; }
 .mc-panel {
   display: flex; gap: 14px; align-items: flex-start; margin-top: 16px; padding: 16px;
   border: 1px solid var(--border); border-radius: 12px; background: var(--panel2);
@@ -2631,12 +2634,6 @@ button.mc-link { background: none; border: 0; padding: 0; min-height: 0; font: i
 .drop-progress > div { height: 100%; border-radius: var(--r-full); background: var(--accent); }
 .drop-progress span { position: absolute; right: 0; top: 14px; font-size: 13px; color: var(--text-2); }
 
-/* Laci lanjutan. */
-details.adv { padding: 18px 24px; }
-details.adv > summary { font-size: 15px; font-weight: 600; cursor: pointer; }
-.adv-hint { margin: 12px 0 16px; font-size: 14px; }
-.adv .sub-settings, .adv .adv-out { margin-top: 20px; }
-.adv-settings { container-type: inline-size; }
 
 /* Pratinjau (§4.3): 9:16, lebar maks 372 px. */
 .preview-card .sub-layout.pv-only { display: block; --pv-w: min(372px, 100%); }
