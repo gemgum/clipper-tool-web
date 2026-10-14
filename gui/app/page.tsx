@@ -21,7 +21,7 @@
 // ada di font mana pun.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Play, SlidersHorizontal } from "lucide-react";
+import { Camera, Captions, CaseSensitive, Highlighter, Layers, Mic, Music, Play, Send, SlidersHorizontal, SquarePlay } from "lucide-react";
 import PageHeader from "./page-header";
 import { useAI, useAISettings } from "./ai";
 import { useI18n } from "./i18n";
@@ -31,13 +31,14 @@ import Picker from "./picker";
 import { useKeep, useRestore } from "./persist";
 
 import SourceCard from "./source-card";
-import { StepCard, ChoiceCards, Segmented, Swatches } from "./clip-steps";
+import { StepCard, ChoiceCards, Segmented, Swatches, Toggle } from "./clip-steps";
+import MoreControls from "./more-controls";
 import Stepper from "./stepper";
 import PreviewPanel, { CENTER_X, CENTER_Y, PLATFORMS, PLAY_H, PLAY_W, linesFor } from "./preview-panel";
 import type { Font, FontCheck } from "./preview-panel";
 import FramePanel, { zoomBounds } from "./frame-panel";
 import WatermarkPanel from "./watermark-panel";
-import { DEFAULT_WATERMARK, watermarkToAPI } from "./watermark-model";
+import { DEFAULT_WATERMARK, watermarkOn, watermarkToAPI } from "./watermark-model";
 import type { Watermark } from "./watermark-model";
 import SetupPanel from "./setup-panel";
 import type { WhisperModel } from "./setup-panel";
@@ -718,11 +719,24 @@ export default function Home() {
             <SourceCard path={path} onPick={() => setPicker("video")} onFile={useFile}
               uploading={uploading} uploadPct={uploadPct} />
 
-            <StepCard n={2} title={t("step2Title")} hint={t("step2Hint")} disabled={!path}>
+            <MoreControls disabled={!path}
+              model={model} setModel={setModel} models={models} transcriber={transcriber}
+              engine={engine} llmModel={llmModel}
+              resolution={resolution} setResolution={setResolution} fps={fps} setFps={setFps}
+              fonts={fonts} subFont={subFont} setSubFont={setSubFont} fontManual={fontManual} setFontManual={setFontManual}
+              subOutline={subOutline} setSubOutline={setSubOutline}
+              reframe={reframe} zoom={zoom} setZoom={setZoom}
+              watermarkOn={watermarkOn(watermark)}
+              onOpenAdvanced={() => {
+                setWmOpen(true);
+                if (advRef.current) { advRef.current.open = true; advRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }
+              }} />
+
+            <StepCard icon={Captions} title={t("step2Title")} hint={t("step2Hint")} disabled={!path}>
               <ChoiceCards label={t("step2Title")} value={subMode === "word" ? "normal" : subMode} onChange={setSubMode} options={[
-                { value: "normal", name: t("styleNormalName"), desc: t("styleNormalDesc") },
-                { value: "highlight", name: t("styleHighlightName"), desc: t("styleHighlightDesc") },
-                { value: "karaoke", name: t("styleKaraokeName"), desc: t("styleKaraokeDesc") },
+                { value: "normal", name: t("styleNormalName"), desc: t("styleNormalDesc"), icon: CaseSensitive },
+                { value: "highlight", name: t("styleHighlightName"), desc: t("styleHighlightDesc"), icon: Highlighter },
+                { value: "karaoke", name: t("styleKaraokeName"), desc: t("styleKaraokeDesc"), icon: Mic },
               ]} />
               <div className="step-row">
                 <div className="step-field">
@@ -741,15 +755,15 @@ export default function Home() {
               </div>
             </StepCard>
 
-            <StepCard n={3} title={t("step3Title")} hint={t("step3Hint")} disabled={!path}>
+            <StepCard icon={Send} title={t("step3Title")} hint={t("step3Hint")} disabled={!path}>
               <ChoiceCards label={t("step3Title")} value={platform} onChange={setPlatform} options={[
-                { value: "tiktok", name: "TikTok", desc: t("platTiktokDesc") },
-                { value: "reels", name: "Reels", desc: t("platReelsDesc") },
-                { value: "shorts", name: "Shorts", desc: t("platShortsDesc") },
+                { value: "tiktok", name: "TikTok", desc: t("platTiktokDesc"), icon: Music },
+                { value: "reels", name: "Reels", desc: t("platReelsDesc"), icon: Camera },
+                { value: "shorts", name: "Shorts", desc: t("platShortsDesc"), icon: SquarePlay },
               ]} />
             </StepCard>
 
-            <StepCard n={4} title={t("step4Title")} disabled={!path}>
+            <StepCard icon={Layers} title={t("step4Title")} hint={t("step4Hint")} disabled={!path}>
               <div className="step-row">
                 <div className="step-field">
                   <p className="step-label">{t("clipCountLabel")}</p>
@@ -765,10 +779,10 @@ export default function Home() {
                   </select>
                 </div>
               </div>
-              <label className="chk step-check">
-                <input type="checkbox" checked={saveMode !== "burn"} onChange={(e) => setSaveMode(e.target.checked ? "both" : "burn")} />
-                {t("keepClean")}
-              </label>
+              <div className="step-toggle">
+                <Toggle checked={saveMode !== "burn"} onChange={(v) => setSaveMode(v ? "both" : "burn")}
+                  label={t("keepClean")} desc={t("keepCleanDesc")} />
+              </div>
             </StepCard>
 
             {/* Laci lanjutan (DESIGN.md §4.2): <details> asli, tertutup secara
@@ -840,10 +854,9 @@ export default function Home() {
                 <span className="chip">9:16</span>
               </div>
               {preview}
-              <label className="chk">
-                <input type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} />
-                {t("showCovered")}
-              </label>
+              <div className="pv-toggle">
+                <Toggle checked={showZones} onChange={setShowZones} label={t("showCovered")} />
+              </div>
               <p className="note">{t("autoPlaced", { platform: platformName })}</p>
             </section>
           </aside>

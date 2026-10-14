@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Film, Upload } from "lucide-react";
+import { Film, FolderOpen, Upload } from "lucide-react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
 import { StepCard, humanDuration } from "./clip-steps";
@@ -40,7 +40,7 @@ export default function SourceCard({
   const res = info?.height ? `${Math.min(info.width, info.height)}p` : "";
 
   return (
-    <StepCard n={1} title={t("step1Title")}>
+    <StepCard icon={FolderOpen} title={t("step1Title")} hint={t("step1Hint")}>
       {!path ? (
         <div className={"drop-zone" + (over ? " over" : "")}
           onDragOver={(e) => { e.preventDefault(); setOver(true); }}

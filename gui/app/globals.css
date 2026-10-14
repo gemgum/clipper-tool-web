@@ -2480,19 +2480,21 @@ button.link-btn:hover { color: var(--accent-hover); text-decoration: underline; 
 
 .step-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); padding: 24px; }
 .step-card.off { opacity: 0.55; }
-.step-head { display: flex; align-items: center; gap: 12px; }
+/* Kepala kartu: ubin ikon + judul + satu baris keterangan (rancangan 14 Okt 2026). */
+.step-head { display: flex; align-items: center; gap: 14px; }
 .step-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
-.step-n {
-  width: 28px; height: 28px; border-radius: 50%; flex: none;
-  background: var(--text); color: var(--panel);
-  font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+.step-ico {
+  width: 42px; height: 42px; border-radius: 12px; flex: none;
+  background: var(--accent-soft); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
 }
-.step-hint { margin: 6px 0 0 40px; font-size: 14px; color: var(--text-2); }
+.step-ico .ico { width: 20px; height: 20px; }
+.step-hint { margin: 3px 0 0; font-size: 14px; color: var(--text-2); }
 .step-body { border: 0; padding: 0; margin: 16px 0 0; min-width: 0; }
 .step-row { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 22px; }
 .step-card .step-row:first-child { margin-top: 0; }
 .step-field { flex: 1 1 220px; min-width: 0; }
-.step-label { display: block; margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--text); }
+.step-label { display: block; margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-2); }
 .step-check { margin-top: 18px; font-size: 15px; }
 .step-check input { width: 20px; height: 20px; accent-color: var(--accent); }
 
@@ -2505,6 +2507,13 @@ button.choice {
 }
 button.choice:hover { border-color: var(--faint); }
 button.choice.on { border: 2px solid var(--accent); padding: 13px; box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
+.choice-ico {
+  width: 34px; height: 34px; border-radius: 10px; margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sunken); color: var(--text-2);
+}
+.choice-ico .ico { width: 17px; height: 17px; }
+button.choice.on .choice-ico { background: var(--accent-soft); color: var(--accent); }
 .choice-name { font-size: 15px; font-weight: 700; }
 .choice-desc { font-size: 13px; color: var(--text-2); line-height: 1.4; }
 
@@ -2521,6 +2530,83 @@ button.choice.on { border: 2px solid var(--accent); padding: 13px; box-shadow: 0
 .swatches { display: flex; gap: 10px; }
 button.swatch-btn { width: 44px; height: 44px; padding: 0; min-height: 0; border-radius: var(--r-sm); border: 1px solid #c9cfd8; }
 button.swatch-btn.on { border: 2px solid var(--text); box-shadow: 0 0 0 3px rgb(21 24 29 / 12%); }
+/* Halaman klip: ukuran teks & pilihan lain sebagai pil, swatch bundar. */
+.clips-v2 .segmented { display: flex; flex-wrap: wrap; gap: 8px; border: 0; border-radius: 0; overflow: visible; }
+.clips-v2 .segmented button {
+  flex: none; height: 38px; padding: 0 18px; border-radius: var(--r-full);
+  border: 1px solid var(--border-strong); background: var(--panel2); color: var(--text-2);
+}
+.clips-v2 .segmented button + button { border-left: 1px solid var(--border-strong); }
+.clips-v2 .segmented button.on { background: var(--text); color: var(--panel); border-color: var(--text); }
+.clips-v2 .swatches { gap: 10px; align-items: center; }
+.clips-v2 button.swatch-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--border-strong); }
+.clips-v2 button.swatch-btn.on { border: 2px solid var(--panel); box-shadow: 0 0 0 2px var(--text); }
+
+/* Saklar: kotak centang asli yang digambar ulang. */
+.toggle-row { display: flex; align-items: center; gap: 12px; cursor: pointer; position: relative; }
+.toggle-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.toggle-label { font-size: 14.5px; font-weight: 600; color: var(--text); }
+.toggle-desc { font-size: 13px; color: var(--text-2); }
+.toggle-row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.toggle-track {
+  position: relative; width: 42px; height: 24px; border-radius: var(--r-full); flex: none;
+  background: var(--border-strong); transition: background var(--dur-base) var(--ease);
+}
+.toggle-track::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 25%); transition: transform var(--dur-base) var(--ease);
+}
+.toggle-row input:checked + .toggle-track { background: var(--accent); }
+.toggle-row input:checked + .toggle-track::after { transform: translateX(18px); }
+.toggle-row input:focus-visible + .toggle-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.step-toggle { margin-top: 20px; }
+.pv-toggle { margin-top: 16px; }
+
+/* Kartu "More controls": deret ikon, satu panel terbuka di bawahnya. */
+.step-card.mc { padding: 20px 24px; }
+.mc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+.mc-head h2 { flex: 1; margin: 0; font-size: 14px !important; font-weight: 700; }
+.mc-hint { font-size: 13px; color: var(--text-2); }
+.mc .step-body { margin-top: 14px; }
+.mc-icons { display: flex; flex-wrap: wrap; gap: 6px 4px; }
+button.mc-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 7px; width: 76px; min-height: 0;
+  padding: 4px 0; background: none; border: 0; color: var(--text-2);
+}
+button.mc-btn:hover .mc-ico { transform: translateY(-1px); }
+.mc-label { font-size: 11.5px; font-weight: 500; line-height: 1.2; text-align: center; }
+.clips-v2 .step-field > .stepper { max-width: 160px; }
+button.mc-btn.on .mc-label { color: var(--text); }
+.mc-ico {
+  width: 46px; height: 46px; border-radius: 13px; flex: none; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 25%), 0 2px 6px rgb(0 0 0 / 15%);
+  transition: transform var(--dur-base) var(--ease);
+}
+.mc-ico .ico { width: 20px; height: 20px; }
+button.mc-btn.on .mc-ico { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mc-transcription { background: linear-gradient(160deg, #6b8cff, #3b63e8); }
+.mc-ai { background: linear-gradient(160deg, #b48cff, #7c4ff0); }
+.mc-resolution { background: linear-gradient(160deg, #4fd88a, #22a95e); }
+.mc-fps { background: linear-gradient(160deg, #ff9a5c, #ef6a2c); }
+.mc-font { background: linear-gradient(160deg, #ffd25c, #f0a91e); }
+.mc-outline { background: linear-gradient(160deg, #ff8fb8, #e8508a); }
+.mc-zoom { background: linear-gradient(160deg, #5fe0d6, #1fb3ab); }
+.mc-watermark { background: linear-gradient(160deg, #9aa2ff, #6470f0); }
+.mc-panel {
+  display: flex; gap: 14px; align-items: flex-start; margin-top: 16px; padding: 16px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel2);
+}
+.mc-panel-body { flex: 1; min-width: 0; }
+.mc-panel-title { margin: 0; font-size: 15px; font-weight: 700; }
+.mc-panel-desc { margin: 2px 0 12px; font-size: 13px; color: var(--text-2); }
+.mc-control .sel-anchor { max-width: 340px; }
+.mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.mc-row .stepper { width: 200px; flex: none; }
+.mc-note { margin: 0; font-size: 13.5px; color: var(--text-2); }
+.mc-note b { color: var(--text); }
+.mc-note a, button.mc-link { color: var(--accent); font-weight: 600; }
+button.mc-link { background: none; border: 0; padding: 0; min-height: 0; font: inherit; font-weight: 600; }
 
 /* Kartu 1: sumber. */
 .src-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
@@ -2560,8 +2646,7 @@ details.adv > summary { font-size: 15px; font-weight: 600; cursor: pointer; }
 .pv-controls .preview-actions { display: flex; gap: 8px; }
 .pv-controls .frame-time { flex: 1; display: flex; align-items: center; gap: 10px; }
 .pv-controls .frame-time input { flex: 1; }
-.preview-card .chk { margin-top: 16px; font-size: 14px; display: flex; align-items: center; gap: 10px; }
-.preview-card .chk input { width: 18px; height: 18px; accent-color: var(--accent); }
+
 .note { margin: 14px 0 0; padding: 12px 14px; background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--r-sm); font-size: 13px; line-height: 1.5; }
 
 /* Layar 2 (§5). */
