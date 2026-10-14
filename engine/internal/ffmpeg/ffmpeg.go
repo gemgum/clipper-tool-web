@@ -559,3 +559,16 @@ func escapeFilterPath(p string) string {
 	p = strings.ReplaceAll(p, `'`, `\'`)
 	return p
 }
+
+// Thumb menulis satu frame kecil (lebar w, rasio asli) pada detik t ke out (JPEG).
+func (c *Client) Thumb(ctx context.Context, input string, t float64, w int, out string) error {
+	return c.run(ctx, "thumbnail", []string{
+		"-y", "-v", "error",
+		"-ss", fmt.Sprintf("%.3f", t),
+		"-i", CLIPath(input),
+		"-frames:v", "1",
+		"-vf", fmt.Sprintf("scale=%d:-2", w),
+		"-q:v", "5",
+		out,
+	})
+}

@@ -45,6 +45,8 @@ export default function Home() {
   const { lang, t } = useI18n();
 
   const [path, setPath] = useState("");
+  // Detik pratinjau: dipilih penggeser di Preview atau filmstrip di kartu Source.
+  const [previewTime, setPreviewTime] = useState(5);
   const [outputDir, setOutputDir] = useState("");
   const [model, setModel] = useState("base");
   const [resolution, setResolution] = useState("1080p");
@@ -305,7 +307,7 @@ export default function Home() {
   // Yang TIDAK disimpan: daftar klip & status job — itu milik engine, dan
   // ditarik ulang saat halaman dibuka.
   useKeep("clips", {
-    path, outputDir, model, resolution, quality, reframe, background, zoom, fps,
+    outputDir, model, resolution, quality, reframe, background, zoom, fps,
     durationPreset, maxClips, saveMode, transcriptFix, terms,
     engine, llmModel,
     subFont, subSize, subX, subY, subColor, subOutline, subBox, subMode, subHighlight, subSpeed,
@@ -315,7 +317,6 @@ export default function Home() {
     const set = <T,>(fn: (x: T) => void, val: unknown) => {
       if (val !== undefined && val !== null) fn(val as T);
     };
-    set(setPath, v.path);
     set(setOutputDir, v.outputDir);
     set(setModel, v.model);
     set(setResolution, v.resolution);
@@ -404,6 +405,24 @@ export default function Home() {
       addLog(t("logFetchFailed", { error: e.message }));
     } finally { setFetchPhase(""); }
   }, [addLog, t]);
+
+  // Video aktif disimpan PER AKUN di server (/api/source), bukan di
+  // localStorage: dengan akun yang sama, komputer mana pun membuka video dan
+  // pratinjau yang sama. Dibaca sekali saat halaman dibuka; setelah itu tiap
+  // pergantian (unggah, YouTube, Remove, job selesai) dikirim balik.
+  const sourceReady = useRef(false);
+  useEffect(() => {
+    fetch(eng(`/api/source`)).then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.path) setPath(d.path); })
+      .catch(() => {})
+      .finally(() => { sourceReady.current = true; });
+  }, []);
+  useEffect(() => {
+    if (!sourceReady.current) return;
+    fetch(eng(`/api/source`), {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }),
+    }).catch(() => {});
+  }, [path]);
 
   // removeSource: kosongkan sumber. Engine menghapus berkasnya di mode web bila
   // itu unggahan yang belum dipakai job; gagal pun sumber tetap dikosongkan.
@@ -662,6 +681,7 @@ export default function Home() {
       blockH={blockH} centerAnchorY={centerAnchorY}
       watermark={watermark} moveWatermark={moveWatermark} moveHeadline={moveHeadline}
       addLog={addLog}
+      previewTime={previewTime} setPreviewTime={setPreviewTime}
     />
   );
 
@@ -741,7 +761,7 @@ export default function Home() {
       {screen === "setup" && (
         <div className="setup-grid">
           <div className="setup-main">
-            <SourceCard path={path} onPick={() => setPicker("video")} onRemove={removeSource} onFile={useFile} onUrl={fetchUrl} fetchPhase={fetchPhase} fetchTitle={fetchTitle} fetchWarn={fetchWarn}
+            <SourceCard path={path} previewTime={previewTime} onSeek={setPreviewTime} onPick={() => setPicker("video")} onRemove={removeSource} onFile={useFile} onUrl={fetchUrl} fetchPhase={fetchPhase} fetchTitle={fetchTitle} fetchWarn={fetchWarn}
               uploading={uploading} uploadPct={uploadPct} />
 
             <MoreControls disabled={!path} addLog={addLog} web={web}

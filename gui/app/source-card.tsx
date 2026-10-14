@@ -5,6 +5,7 @@ import { Film, FolderOpen, Link2, Trash2, TriangleAlert, Upload } from "lucide-r
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
 import { StepCard, humanDuration } from "./clip-steps";
+import Filmstrip from "./filmstrip";
 
 type Info = { duration: number; width: number; height: number };
 
@@ -14,9 +15,10 @@ type Info = { duration: number; width: number; height: number };
 // TIDAK ditampilkan: bahasanya baru diketahui setelah transkripsi, dan angka
 // yang belum ada tidak dikarang.
 export default function SourceCard({
-  path, onPick, onRemove, onFile, onUrl, fetchPhase, fetchTitle, fetchWarn, uploading, uploadPct,
+  path, previewTime, onSeek, onPick, onRemove, onFile, onUrl, fetchPhase, fetchTitle, fetchWarn, uploading, uploadPct,
 }: {
   path: string;
+  previewTime: number; onSeek: (t: number) => void;
   onPick: () => void;
   onRemove: () => void;
   onFile: (f: File) => void;
@@ -68,6 +70,7 @@ export default function SourceCard({
           </button>
         </div>
       </div>
+      <Filmstrip className="src-film" path={path} duration={info?.duration || 0} time={previewTime} onPick={onSeek} />
     </section>
   );
 

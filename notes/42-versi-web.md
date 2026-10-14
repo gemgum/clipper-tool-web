@@ -141,3 +141,16 @@ Pembersihan unduhan (`sweepFetched`, saat engine mulai lalu tiap jam): sisa
 unduhan terputus (`.dl-*`, >6 jam) dan video `yt-*` yang >48 jam tidak dipakai
 job mana pun dihapus. Berkas hasil unduhan diperiksa ffprobe; yang rusak dibuang
 dan mesin berikutnya dicoba.
+
+## Video aktif per akun & cuplikan frame (15 Oktober 2026)
+
+Video yang sedang dipilih di halaman Clips dulu hanya tersimpan di localStorage
+browser — akun yang sama di komputer lain tidak melihat video maupun
+pratinjaunya. Kini disimpan di server per akun (`/api/source`,
+`data/sources/<hash subjek OIDC>.json`; tanpa OIDC satu akun bersama). Berkas
+yang sudah hilang (job sukses, Remove) dilaporkan kosong.
+
+`/api/thumb?path=&i=0..7` = 8 cuplikan frame (tengah tiap 1/8 video), dibuat
+sekali lalu disimpan di `data/thumbs/`, dibuang setelah 7 hari tak tersentuh.
+Tampil sebagai filmstrip di kartu Source dan di Preview; klik = pratinjau
+melompat ke detik itu.

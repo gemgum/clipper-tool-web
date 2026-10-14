@@ -105,13 +105,24 @@ const (
 )
 
 // sweepFetched membersihkan sisa YouTube di folder unggahan:
+//
 //   - .dl-* = unduhan yang terputus (engine restart/mati di tengah jalan);
+//
 //   - yt-*  = video yang diunduh tapi tidak dipakai job mana pun (pengguna
 //     berganti video atau menutup tab). Yang dipakai job tetap ada sampai job
 //     sukses (dropUploads) atau dihapus dari History (deleteJob).
 //
-// Hanya folder buatan /api/fetch yang disentuh; unggahan biasa tidak.
+//   - data/thumbs/* = cuplikan frame yang 7 hari tidak tersentuh.
+//
+// Di folder unggahan hanya folder buatan /api/fetch yang disentuh.
 func (s *Server) sweepFetched(now time.Time) {
+	// Cuplikan frame: murah dibuat ulang, jadi yang tak tersentuh 7 hari dibuang.
+	thumbs, _ := filepath.Glob(filepath.Join(s.thumbDir(), "*"))
+	for _, d := range thumbs {
+		if st, err := os.Stat(d); err == nil && now.Sub(st.ModTime()) > 7*24*time.Hour {
+			os.RemoveAll(d)
+		}
+	}
 	dirs, _ := filepath.Glob(filepath.Join(s.uploadDir(), "yt-*"))
 	for _, d := range dirs {
 		parts, _ := filepath.Glob(filepath.Join(d, ".dl-*"))

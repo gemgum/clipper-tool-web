@@ -11,6 +11,7 @@ import Guides from "./guides";
 import { headlineAnchor, headlineBox, wrapHeadline } from "./watermark-model";
 import type { Watermark } from "./watermark-model";
 import Warn from "./warn";
+import Filmstrip from "./filmstrip";
 
 // Ruang koordinat, titik tengah, dan mesin seret tinggal di ./drag — dipakai
 // bersama halaman watermark. Diekspor ulang dari sini supaya pemanggil lama
@@ -65,7 +66,7 @@ export default function PreviewPanel({
   subMode, setSubMode, subHighlight, setSubHighlight, subSpeed, setSubSpeed,
   subX, setSubX, subY, setSubY, blockH, centerAnchorY,
   watermark, moveWatermark, moveHeadline,
-  addLog, grid, alwaysGuides, showZones = true,
+  addLog, grid, alwaysGuides, showZones = true, previewTime, setPreviewTime,
 }: {
   path: string; reframe: string; background: string; zoom: number; zone?: Zone;
   fonts: Font[];
@@ -91,6 +92,8 @@ export default function PreviewPanel({
   alwaysGuides: boolean;
   /** Kotak centang "Tampilkan area yang tertutup UI aplikasi". */
   showZones?: boolean;
+  // Detik pratinjau tinggal di halaman: kartu Source memilihnya juga (filmstrip).
+  previewTime: number; setPreviewTime: (t: number) => void;
 }) {
   const { t } = useI18n();
 
@@ -99,7 +102,6 @@ export default function PreviewPanel({
   const [duration, setDuration] = useState(0);
   // null = belum diperiksa. false = video tanpa trek suara.
   const [hasAudio, setHasAudio] = useState<boolean | null>(null);
-  const [previewTime, setPreviewTime] = useState(5);
   // Dinaikkan tiap muat ulang manual supaya URL frame berubah — kalau URL-nya
   // sama persis, browser memakai gambar lama meski videonya sudah ditimpa.
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -143,7 +145,7 @@ export default function PreviewPanel({
     } catch (e: any) {
       if (!silent) addLog(t("logPreviewFailed", { error: e.message }));
     } finally { setPreviewBusy(false); }
-  }, [path, addLog, t]);
+  }, [path, addLog, t, setPreviewTime]);
 
   // Kembali ke keadaan awal: frame dilepas, durasi & waktu direset. Dipakai
   // tombol "reset" dan otomatis saat videonya berganti.
@@ -154,7 +156,7 @@ export default function PreviewPanel({
     setPreviewBusy(false);
     setDuration(0);
     setPreviewTime(5);
-  }, []);
+  }, [setPreviewTime]);
 
   // Video baru masuk (unggah, seret-lepas, atau path diketik) → preview lama
   // dibuang lalu dimuat ulang sendiri. Ditunda 500 ms supaya path yang sedang
@@ -372,6 +374,8 @@ export default function PreviewPanel({
             value={previewTime} onChange={(e) => setPreviewTime(Number(e.target.value))} />
           <span className="meta">{previewOn ? `${previewTime.toFixed(1)}s` : "–"}</span>
         </div>
+        {path && <Filmstrip className="pv-film" path={path} duration={previewOn ? duration : 0}
+          time={previewTime} onPick={setPreviewTime} />}
         </div>
       </div>
     );
