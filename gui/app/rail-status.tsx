@@ -2,22 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
 import { eng } from "./engine";
-import { useI18n, type MessageKey } from "./i18n";
+import { useI18n } from "./i18n";
 import { useAISettings } from "./ai";
 import { useEngines } from "./engine-picker";
 
-// Kaki rail (DESIGN-Navigasi §4): kartu pekerjaan berjalan + tombol status
-// mesin AI. Titik selalu berpasangan dengan kalimat — titik saja tidak dibaca
-// pembaca layar maupun orang buta warna.
+// Kaki rail: status mesin AI sebagai satu titik. Titik selalu berpasangan
+// dengan kalimat (aria-label + tooltip) — titik saja tidak dibaca pembaca layar
+// maupun orang buta warna. Pekerjaan berjalan tampil sebagai lencana Riwayat.
 
 type Kind = "clips" | "writer" | "captions" | "watermark";
 export type Running = { kind: Kind; progress: number; created: string };
 
-const KIND_LABEL: Record<Kind, MessageKey> = {
-  clips: "navClips", writer: "navWriter", captions: "navCaptions", watermark: "navWatermark",
-};
 
 // useRunning: pekerjaan yang sedang jalan di keempat alat yang punya job latar.
 // ponytail: polling 5 detik ke empat endpoint; ganti ke SSE bila terasa berat.
@@ -44,40 +40,6 @@ export function useRunning(): Running[] {
   return list;
 }
 
-// Sisa waktu kasar dari kemajuan & lama berjalan; -1 = belum bisa dihitung.
-const remaining = (r: Running) => {
-  const el = (Date.now() - Date.parse(r.created)) / 1000;
-  return r.progress > 0.05 ? (el * (1 - r.progress)) / r.progress : -1;
-};
-
-export function RailJob({ running }: { running: Running[] }) {
-  const { t } = useI18n();
-  if (running.length === 0) return null;
-  // Yang paling cepat selesai di depan; yang belum terhitung paling belakang.
-  const first = running.slice().sort((a, b) => {
-    const ra = remaining(a), rb = remaining(b);
-    return (ra < 0 ? Infinity : ra) - (rb < 0 ? Infinity : rb);
-  })[0];
-  const rem = remaining(first);
-  const pct = Math.round(first.progress * 100);
-  const eta = rem < 0 ? t("etaUnknown") : rem < 60 ? t("etaUnderMin") : t("etaAbout", { n: Math.round(rem / 60) });
-  return (
-    <Link href={`/history?f=${first.kind}`} className="rail-job" aria-live="polite">
-      <span className="rail-job-head">
-        <span className="rail-dot run pulse" aria-hidden="true" />
-        {running.length === 1 ? t("navRunningOne") : t("navRunning", { n: running.length })}
-      </span>
-      <span className="rail-job-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-        <span style={{ width: `${pct}%` }} />
-      </span>
-      <span className="rail-job-meta">
-        {[t(KIND_LABEL[first.kind]), `${pct}%`, eta].join(" · ")}
-        {running.length > 1 && ` · ${t("navRunningMore", { n: running.length - 1 })}`}
-      </span>
-    </Link>
-  );
-}
-
 export function RailAI() {
   const { t } = useI18n();
   const { data } = useAISettings();
@@ -94,14 +56,8 @@ export function RailAI() {
   const line2 = state === "ok" ? [name, g.model].filter(Boolean).join(" · ")
     : state === "idle" ? t("navAINotSetHint") : t("navAIDownHint");
   return (
-    <Link href="/requirements" className={"rail-ai " + state} aria-label={`${line1}. ${line2}`} data-tip={line1}>
+    <Link href="/requirements" className={"rail-ai " + state} aria-label={`${line1}. ${line2}`} data-tip={`${line1} · ${line2}`}>
       <span className={"rail-dot " + state} aria-hidden="true" />
-      <span className="rail-ai-short" aria-hidden="true">AI</span>
-      <span className="rail-ai-text">
-        <span className="rail-ai-1">{line1}</span>
-        <span className="rail-ai-2">{line2}</span>
-      </span>
-      <ChevronRight className="rail-ai-go" aria-hidden="true" />
     </Link>
   );
 }

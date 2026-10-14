@@ -2,33 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Scissors, Newspaper, PenLine, Captions, Stamp, History, Settings } from "lucide-react";
+import { Scissors, Newspaper, PenLine, Captions, Droplet, History, Settings } from "lucide-react";
 import { useI18n, type MessageKey } from "./i18n";
-import ThemeToggle from "./theme-toggle";
 import AccountButton from "./account";
-import { RailJob, RailAI, useRunning } from "./rail-status";
+import { RailAI, useRunning } from "./rail-status";
 import { useMe } from "./engine";
 
-// Navigasi kiri — DESIGN-Navigasi (bagian kedua DEsign-clipper-lanjutan.md).
-//
-// Dua kelompok: BUAT (alat) dan KELOLA (hasil + setelan). Satu pola lebar per
-// lebar jendela, tidak ada di antaranya: ≥1100px sidebar berlabel 220px
-// (varian B), di bawahnya rail ikon 72px dengan tooltip (varian A). Bentuknya
-// diatur CSS saja — komponen ini merender keduanya sama.
+// Navigasi kiri — rancangan 14 Oktober 2026: SATU rail sempit di semua lebar
+// jendela, ikon dengan label pendek di bawahnya. Alat di atas, Riwayat
+// dipisah garis, Pengaturan + status AI + akun di kaki. Nama lengkapnya tetap
+// di aria-label dan tooltip.
 
 // perm = izin Sarth Admin yang dibutuhkan halaman itu (engine/internal/api/access.go).
-type Item = { href: string; label: MessageKey; Icon: typeof Scissors; perm?: string };
-const CREATE: Item[] = [
-  { href: "/", label: "navClips", Icon: Scissors, perm: "clip.view" },
-  { href: "/news", label: "navNews", Icon: Newspaper, perm: "card.view" },
-  { href: "/writer", label: "navWriter", Icon: PenLine, perm: "article.view" },
-  { href: "/captions", label: "navCaptions", Icon: Captions, perm: "caption.view" },
-  { href: "/watermark", label: "navWatermark", Icon: Stamp, perm: "watermark.view" },
+type Item = { href: string; label: MessageKey; short: MessageKey; Icon: typeof Scissors; perm?: string };
+const TOOLS: Item[] = [
+  { href: "/", label: "navClips", short: "navShortClips", Icon: Scissors, perm: "clip.view" },
+  { href: "/news", label: "navNews", short: "navShortNews", Icon: Newspaper, perm: "card.view" },
+  { href: "/writer", label: "navWriter", short: "navShortWriter", Icon: PenLine, perm: "article.view" },
+  { href: "/captions", label: "navCaptions", short: "navShortCaptions", Icon: Captions, perm: "caption.view" },
+  { href: "/watermark", label: "navWatermark", short: "navShortWatermark", Icon: Droplet, perm: "watermark.view" },
 ];
-const MANAGE: Item[] = [
-  { href: "/history", label: "navHistory", Icon: History },
-  { href: "/requirements", label: "navSettings", Icon: Settings, perm: "settings.view" },
-];
+const HISTORY: Item = { href: "/history", label: "navHistory", short: "navHistory", Icon: History };
+const SETTINGS: Item = { href: "/requirements", label: "navSettings", short: "navSettings", Icon: Settings, perm: "settings.view" };
 
 // Ekspor statis Next menghasilkan /news/index.html, jadi alamat yang terbaca
 // browser berakhir dengan garis miring ("/news/") sedangkan href di daftar
@@ -45,7 +40,7 @@ export default function Nav() {
   // Tanpa login Sarth Admin (me = null) semua menu tampil, seperti dulu.
   const allowed = (i: Item) => !me || !i.perm || me.permissions.includes(i.perm);
 
-  const item = ({ href, label, Icon }: Item) => {
+  const item = ({ href, label, short, Icon }: Item) => {
     const on = samePath(path, href);
     const badge = href === "/history" && running.length > 0 ? running.length : 0;
     return (
@@ -55,31 +50,25 @@ export default function Nav() {
           <Icon className="rail-ico" aria-hidden="true" />
           {badge > 0 && <span className="rail-badge" aria-hidden="true">{badge}</span>}
         </span>
-        <span className="rail-label">{t(label)}</span>
-        {badge > 0 && <span className="rail-count" aria-hidden="true">{badge}</span>}
+        <span className="rail-label">{t(short)}</span>
       </Link>
     );
   };
 
   return (
     <nav className="rail" aria-label={t("navMain")}>
-      <Link href="/" className="rail-brand" aria-label="Clipper">
+      <Link href="/" className="rail-brand" aria-label="Clipper" data-tip="Clipper">
         {/* eslint-disable-next-line @next/next/no-img-element -- ekspor statis, tanpa optimasi gambar */}
-        <img className="rail-logo" src="/logo.png" alt="" width={36} height={27} />
-        <span className="rail-label">Clipper</span>
+        <img className="rail-logo" src="/logo.png" alt="" width={30} height={22} />
       </Link>
-      <div className="rail-group">{t("navCreate")}</div>
-      {CREATE.filter(allowed).map(item)}
-      <div className="rail-group">{t("navManage")}</div>
-      {MANAGE.filter(allowed).map(item)}
+      {TOOLS.filter(allowed).map(item)}
+      <div className="rail-sep" aria-hidden="true" />
+      {item(HISTORY)}
 
       <div className="rail-foot">
-        <RailJob running={running} />
+        {allowed(SETTINGS) && item(SETTINGS)}
         <RailAI />
-        <div className="rail-account">
-          <AccountButton />
-          <ThemeToggle />
-        </div>
+        <AccountButton />
       </div>
     </nav>
   );

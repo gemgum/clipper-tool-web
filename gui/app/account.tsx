@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { eng, useMe } from "./engine";
 import { LANGUAGES, useI18n } from "./i18n";
 import Popover from "./popover";
+import ThemeToggle from "./theme-toggle";
 
 const KEY = "clipper.code";
 
@@ -47,7 +48,6 @@ export default function AccountButton() {
       <>
         {/* Avatar = huruf pertama kode akses, kalau belum ada: ikon kosong. */}
         <span className="rail-avatar" aria-hidden="true">{me ? me.name[0]?.toUpperCase() : saved ? saved[0].toUpperCase() : <User className="ico" />}</span>
-        <span className="rail-label">{me ? me.name : t("navAccount")}</span>
       </>
     }>
       {(close) => (
@@ -55,6 +55,7 @@ export default function AccountButton() {
           {/* Bahasa = preferensi pribadi, sederajat dengan akun & tema
               (DESIGN-Navigasi §4), jadi pindah ke sini dari panel gerigi. */}
           <div className="settings-head">{t("settingsLanguage")}</div>
+          <div className="pop-theme"><span>{t("navTheme")}</span><ThemeToggle /></div>
           <div className="lang-switch">
             {LANGUAGES.map((l) => (
               <button key={l} type="button" className={l === lang ? "active" : ""} aria-pressed={l === lang} onClick={() => setLang(l)}>
