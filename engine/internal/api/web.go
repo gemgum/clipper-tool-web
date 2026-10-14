@@ -49,6 +49,13 @@ func (s *Server) SetWeb(password string) {
 	webRoot = s.uploadDir()
 	if s.mgr != nil {
 		s.mgr.OnDone = func(input string) { dropUploads(input) }
+		// Sapu sisa unduhan YouTube saat mulai, lalu tiap jam.
+		go func() {
+			for {
+				s.sweepFetched(time.Now())
+				time.Sleep(time.Hour)
+			}
+		}()
 	}
 }
 

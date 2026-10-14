@@ -95,8 +95,10 @@ melakukan yang diizinkan role-nya. Kontraknya
 
 ## Batas yang diketahui (sengaja belum dikerjakan)
 
-- **Unggahan dari job yang gagal/dibatalkan, dan gambar watermark,** tidak
-  dihapus otomatis. Bersihkan dengan cron
+- **Video sumber** dihapus saat job-nya sukses, atau saat job dihapus dari
+  History (kecuali masih dipakai job lain, mis. hasil Retry). Unggahan dari job
+  gagal yang tidak pernah dihapus, dan gambar watermark, tetap tinggal —
+  bersihkan dengan cron
   (`find data/uploads -mindepth 1 -maxdepth 1 -mtime +7 -exec rm -rf {} +`).
 - **Hasil (klip, kartu, caption, video watermark) tidak pernah dihapus** — tetap
   bisa diunduh dari History. Hapus lewat History atau cron yang sama untuk
@@ -134,3 +136,8 @@ Di VPS:
   snap ("operation not permitted"), jadi tidak dipakai. Engine menemukannya
   lewat `CLIPPER_COBALT_URL=http://127.0.0.1:9000/` di `.env`. Jangan pakai
   instance Cobalt publik: tautan dan videonya lewat server orang lain.
+
+Pembersihan unduhan (`sweepFetched`, saat engine mulai lalu tiap jam): sisa
+unduhan terputus (`.dl-*`, >6 jam) dan video `yt-*` yang >48 jam tidak dipakai
+job mana pun dihapus. Berkas hasil unduhan diperiksa ffprobe; yang rusak dibuang
+dan mesin berikutnya dicoba.

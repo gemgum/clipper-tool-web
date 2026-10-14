@@ -1328,6 +1328,10 @@ func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
 
 // deleteJob membuang satu job dari riwayat (lihat job.Manager.Delete).
 func (s *Server) deleteJob(w http.ResponseWriter, r *http.Request) {
+	var input string
+	if j, ok := s.mgr.Get(r.PathValue("id")); ok {
+		input = j.Input
+	}
 	if err := s.mgr.Delete(r.PathValue("id")); err != nil {
 		if os.IsNotExist(err) {
 			writeErr(w, 404, "job not found")
@@ -1335,6 +1339,11 @@ func (s *Server) deleteJob(w http.ResponseWriter, r *http.Request) {
 		}
 		writeErr(w, 409, err.Error())
 		return
+	}
+	// Job dihapus dari History → video sumber unggahannya ikut, kecuali masih
+	// dipakai job lain (Retry membuat job baru dengan sumber yang sama).
+	if input != "" && !s.inputInUse(input) {
+		dropUploads(input)
 	}
 	writeJSON(w, 200, map[string]bool{"deleted": true})
 }

@@ -102,3 +102,41 @@ printf 'Me at the zoo\n19\n` + live + `\n'
 		t.Fatalf("no engine: %v", err)
 	}
 }
+
+// Berkas yang lolos dari mesin tapi rusak (Verify gagal) dibuang, mesin
+// berikutnya dicoba, dan tidak ada sisa di folder hasil.
+func TestVerifyRejectsBrokenFile(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "fake")
+	script := `#!/bin/sh
+out=""; client="default"
+while [ $# -gt 0 ]; do
+  case "$1" in -o) out="$2"; shift ;; --extractor-args) client="$2"; shift ;; esac
+  shift
+done
+echo "$client" > "$out"
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out")
+	p, err := Download(context.Background(), "https://youtu.be/jNQXAC9IVRw", Options{
+		Dir: out, YtDlp: fake,
+		Verify: func(p string) error {
+			b, _ := os.ReadFile(p)
+			if strings.TrimSpace(string(b)) == "default" {
+				return os.ErrInvalid // "rusak"
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); !strings.Contains(string(b), "android_vr") {
+		t.Fatalf("kept the broken file: %q", b)
+	}
+	if left, _ := filepath.Glob(filepath.Join(out, ".dl-*")); len(left) != 0 {
+		t.Fatalf("leftovers: %v", left)
+	}
+}

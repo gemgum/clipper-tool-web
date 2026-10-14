@@ -78,6 +78,9 @@ type Options struct {
 	Cobalt   string // alamat Cobalt self-hosted; kosong = lewati
 	MaxBytes int64  // batas besar berkas
 	Log      func(string)
+	// Verify memeriksa berkas hasil (mis. ffprobe). Gagal = berkas dibuang dan
+	// mesin berikutnya dicoba; video rusak tidak pernah sampai ke pengguna.
+	Verify func(path string) error
 }
 
 // FromEnv mengisi alamat Cobalt dari CLIPPER_COBALT_URL.
@@ -189,6 +192,9 @@ func Download(ctx context.Context, raw string, o Options) (string, error) {
 		err = t.download(ctx, watch, out)
 		if err == nil {
 			err = nonEmpty(out)
+		}
+		if err == nil && o.Verify != nil {
+			err = o.Verify(out)
 		}
 		if err == nil {
 			err = os.Rename(out, final)

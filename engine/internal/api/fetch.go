@@ -1,11 +1,14 @@
 package api
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/gemgum/clipper/engine/internal/ffmpeg"
 	"github.com/gemgum/clipper/engine/internal/ytdl"
 )
 
@@ -32,7 +35,9 @@ func (s *Server) fetchVideo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	dir, err := os.MkdirTemp(s.uploadDir(), "")
+	// Awalan "yt-" menandai folder unduhan: hanya folder inilah yang disapu
+	// sweepFetched bila tidak pernah dipakai job.
+	dir, err := os.MkdirTemp(s.uploadDir(), "yt-")
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -40,6 +45,13 @@ func (s *Server) fetchVideo(w http.ResponseWriter, r *http.Request) {
 	o := ytdl.Options{Dir: dir, YtDlp: s.paths.YtDlp, FFmpeg: s.paths.FFmpeg,
 		Log: func(m string) { log.Print("fetch: ", m) }}
 	o.FromEnv()
+	ff := ffmpeg.New(s.paths.FFmpeg, s.paths.FFprobe)
+	o.Verify = func(p string) error {
+		if d, err := ff.Duration(r.Context(), p); err != nil || d <= 0 {
+			return errors.New("the downloaded file is not a playable video")
+		}
+		return nil
+	}
 	p, err := ytdl.Download(r.Context(), req.URL, o)
 	if err != nil {
 		os.RemoveAll(dir)
@@ -73,4 +85,54 @@ func (s *Server) checkVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true, "title": info.Title, "duration": info.Duration, "engine": info.Engine})
+}
+
+// inputInUse melaporkan apakah ada job yang masih menunjuk berkas ini.
+// Input tidak pernah berubah setelah job dibuat, jadi aman dibaca tanpa kunci.
+func (s *Server) inputInUse(p string) bool {
+	for _, j := range s.mgr.List() {
+		if j.Input == p {
+			return true
+		}
+	}
+	return false
+}
+
+// Batas umur untuk sweepFetched.
+const (
+	partialMaxAge = 6 * time.Hour  // sisa unduhan (.dl-*): unduhan hidup tak selama ini (nginx memutus di 1 jam)
+	fetchedMaxAge = 48 * time.Hour // video unduhan yang tidak pernah dipakai job
+)
+
+// sweepFetched membersihkan sisa YouTube di folder unggahan:
+//   - .dl-* = unduhan yang terputus (engine restart/mati di tengah jalan);
+//   - yt-*  = video yang diunduh tapi tidak dipakai job mana pun (pengguna
+//     berganti video atau menutup tab). Yang dipakai job tetap ada sampai job
+//     sukses (dropUploads) atau dihapus dari History (deleteJob).
+//
+// Hanya folder buatan /api/fetch yang disentuh; unggahan biasa tidak.
+func (s *Server) sweepFetched(now time.Time) {
+	dirs, _ := filepath.Glob(filepath.Join(s.uploadDir(), "yt-*"))
+	for _, d := range dirs {
+		parts, _ := filepath.Glob(filepath.Join(d, ".dl-*"))
+		for _, p := range parts {
+			if st, err := os.Stat(p); err == nil && now.Sub(st.ModTime()) > partialMaxAge {
+				os.RemoveAll(p)
+			}
+		}
+		st, err := os.Stat(d)
+		if err != nil || now.Sub(st.ModTime()) <= fetchedMaxAge {
+			continue
+		}
+		vids, _ := filepath.Glob(filepath.Join(d, "*.mp4"))
+		used := false
+		for _, v := range vids {
+			abs, _ := filepath.Abs(v)
+			used = used || s.inputInUse(abs)
+		}
+		if !used {
+			log.Print("fetch: removing unused download ", d)
+			os.RemoveAll(d)
+		}
+	}
 }
