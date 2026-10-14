@@ -56,6 +56,10 @@ type Server struct {
 	// web + password = mode web (branch webview, lihat web.go).
 	web      bool
 	password string
+	// auth = login Sarth Admin (AUTH_MODE=oidc, lihat oidc.go); nil = mati.
+	auth *oidcAuth
+	// routes = pola yang terdaftar di Handler terakhir (dibaca TestRoutePerms).
+	routes []string
 }
 
 func NewServer(mgr *job.Manager, l config.Layout) *Server {
@@ -97,7 +101,7 @@ func (s *Server) applyPaths() {
 
 // Handler membangun router.
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
+	mux := &gatedMux{ServeMux: http.NewServeMux(), s: s}
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/config", s.config)
 	mux.HandleFunc("GET /api/models", s.listModels)
@@ -188,7 +192,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/watermark/{id}/file", s.watermarkFile)
 	mux.HandleFunc("POST /api/watermark/{id}/cancel", s.cancelWatermark)
 	mux.HandleFunc("DELETE /api/watermark/{id}", s.watermarks.deleteHandler)
-	if s.web {
+	if s.auth != nil {
+		mux.HandleFunc("GET /auth/login", s.authLogin)
+		mux.HandleFunc("GET /auth/callback", s.authCallback)
+		mux.HandleFunc("GET /auth/me", s.authMe)
+		mux.HandleFunc("POST /auth/logout", s.authLogout)
+		mux.HandleFunc("GET /auth/signout", s.authSignout)
+	} else if s.web {
 		mux.HandleFunc("POST /api/login", s.login)
 		mux.HandleFunc("GET /login", loginPage)
 	}
@@ -202,6 +212,7 @@ func (s *Server) Handler() http.Handler {
 	// Urutannya dari yang paling murah & paling luas ke yang paling sempit:
 	// penjaga menolak bentuk permintaan yang mustahil datang dari GUI ini, CORS
 	// menolak halaman dari luar mesin, kunci menolak sisanya.
+	s.routes = mux.patterns
 	return s.withGuard(withCORS(s.withToken(mux), s.hosts...))
 }
 
@@ -676,7 +687,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 var Version = "dev"
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"status": "ok", "version": Version, "web": s.web})
+	writeJSON(w, 200, map[string]any{"status": "ok", "version": Version, "web": s.web, "oidc": s.auth != nil})
 }
 
 func (s *Server) config(w http.ResponseWriter, r *http.Request) {

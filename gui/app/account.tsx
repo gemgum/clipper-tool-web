@@ -2,6 +2,7 @@
 
 import { User } from "lucide-react";
 import { useEffect, useState } from "react";
+import { eng, useMe } from "./engine";
 import { LANGUAGES, useI18n } from "./i18n";
 import Popover from "./popover";
 
@@ -18,6 +19,8 @@ export default function AccountButton() {
   const { t, lang, setLang } = useI18n();
   const [code, setCode] = useState("");
   const [saved, setSaved] = useState("");
+  // Login Sarth Admin: kode akses diganti akun sungguhan.
+  const me = useMe();
 
   useEffect(() => {
     try {
@@ -25,6 +28,12 @@ export default function AccountButton() {
       setSaved(v); setCode(v);
     } catch {}
   }, []);
+
+  const signOut = async () => {
+    const r = await fetch(eng("/auth/logout"), { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const d = await r.json().catch(() => ({}));
+    window.location.href = d.url || "/";
+  };
 
   const save = (close: () => void) => {
     const v = code.trim();
@@ -37,8 +46,8 @@ export default function AccountButton() {
     <Popover width={280} buttonClass="rail-account-btn" side="beside" ariaLabel={t("navAccount")} label={
       <>
         {/* Avatar = huruf pertama kode akses, kalau belum ada: ikon kosong. */}
-        <span className="rail-avatar" aria-hidden="true">{saved ? saved[0].toUpperCase() : <User className="ico" />}</span>
-        <span className="rail-label">{t("navAccount")}</span>
+        <span className="rail-avatar" aria-hidden="true">{me ? me.name[0]?.toUpperCase() : saved ? saved[0].toUpperCase() : <User className="ico" />}</span>
+        <span className="rail-label">{me ? me.name : t("navAccount")}</span>
       </>
     }>
       {(close) => (
@@ -53,6 +62,13 @@ export default function AccountButton() {
               </button>
             ))}
           </div>
+          {me ? <>
+            <div className="settings-title">{me.name}</div>
+            <p className="meta">{me.email}</p>
+            <div className="pop-actions">
+              <button className="ghost" onClick={signOut}>{t("accountSignOut")}</button>
+            </div>
+          </> : <>
           <div className="settings-title">{t("accountTitle")}</div>
           <p className="meta">{t("accountHint")}</p>
           <input
@@ -68,6 +84,7 @@ export default function AccountButton() {
               {t("accountClear")}
             </button>}
           </div>
+          </>}
         </div>
       )}
     </Popover>

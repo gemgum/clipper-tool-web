@@ -74,6 +74,25 @@ di unit systemd (`deploy/clipper-vps.service`), situs nginx di
 Memperbarui: build biner statis + `gui/out`, `rsync` ke `bin/` dan `gui/out/`,
 `systemctl restart clipper`.
 
+## Login Sarth Admin (`AUTH_MODE=oidc`, 14 Oktober 2026)
+
+Pengganti sandi bersama: tiap orang login dengan akun Sarth, dan hanya bisa
+melakukan yang diizinkan role-nya. Kontraknya
+`sarth-admin/docs/INTEGRASI-APLIKASI.md` v1.1.0 — jangan menyalinnya ke sini.
+
+- Kode: `api/oidc.go` (login, sesi, verifikasi `id_token` RS256 dengan stdlib)
+  dan `api/access.go` (daftar izin yang dikirim + tabel route → izin).
+- Nyalakan DUA langkah: (1) tempel blok `.env` dari panel + `SESSION_SECRET`
+  (32+ karakter acak), restart — engine masih memakai `CLIPPER_PASSWORD` tapi
+  sudah mengirim daftar fitur (log `access: sent 21 permissions`); nilai
+  risiko & isi matriks di panel. (2) baru tambah `AUTH_MODE=oidc`, restart.
+- Redirect URI yang didaftarkan: `{PUBLIC_URL}/auth/callback`.
+- **Route baru wajib diberi izin di `routePerms`**; tanpanya 403, dan
+  `TestRoutePerms` gagal. Izin baru = tambah juga ke `permissions`.
+- Sesi di memori: restart = semua login ulang (biasanya tanpa mengetik sandi).
+- Semua orang tetap melihat semua job; izin membatasi JENIS aksi, bukan milik
+  siapa.
+
 ## Batas yang diketahui (sengaja belum dikerjakan)
 
 - **Unggahan dari job yang gagal/dibatalkan, dan gambar watermark,** tidak

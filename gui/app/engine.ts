@@ -50,6 +50,14 @@ function engineBase(): string {
 function init() {
   if (ready || typeof window === "undefined") return;
   ready = true;
+  // Login Sarth Admin: sesi habis/dicabut di tengah kerja → login ulang.
+  // Satu tempat untuk semua fetch, bukan di tiap pemanggil.
+  const native = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const r = await native(...args);
+    if (r.status === 401 && (await health()).oidc === true) window.location.href = "/auth/login";
+    return r;
+  };
   try {
     // Kunci dibersihkan dari bilah alamat setelah halaman termuat. Ia sudah
     // ditukar jadi cookie oleh engine SEBELUM skrip ini jalan (lihat token.go),
@@ -91,15 +99,39 @@ export function engineURL(): string {
 // Mode web (branch webview, notes/42): engine di server, jadi berkas DIUNGGAH
 // dan hasil DIUNDUH — pemilih folder & "buka folder" tidak bermakna di sana.
 // Engine yang menentukan, lewat /api/health; satu build GUI untuk kedua mode.
-let webPromise: Promise<boolean> | null = null;
+let healthPromise: Promise<{ web?: boolean; oidc?: boolean }> | null = null;
+
+function health() {
+  healthPromise ??= fetch(eng("/api/health"))
+    .then((r) => r.json())
+    .catch(() => ({}));
+  return healthPromise;
+}
 
 /** isWeb melaporkan apakah engine berjalan dalam mode web. */
 export function isWeb(): Promise<boolean> {
-  webPromise ??= fetch(eng("/api/health"))
-    .then((r) => r.json())
-    .then((d) => d.web === true)
-    .catch(() => false);
-  return webPromise;
+  return health().then((d) => d.web === true);
+}
+
+/** Me = orang yang login lewat Sarth Admin (GET /auth/me). */
+export type Me = { name: string; email: string; roles: string[]; permissions: string[] };
+
+let mePromise: Promise<Me | null> | null = null;
+
+/**
+ * useMe = akun yang sedang login; null bila login Sarth Admin tidak dipakai
+ * (desktop, sandi bersama) atau jawabannya belum datang. Hanya untuk
+ * menyembunyikan yang tidak boleh — engine tetap memeriksa setiap permintaan.
+ */
+export function useMe(): Me | null {
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    mePromise ??= health().then((d) =>
+      d.oidc ? fetch(eng("/auth/me")).then((r) => (r.ok ? r.json() : null)) : null,
+    ).catch(() => null);
+    mePromise.then(setMe);
+  }, []);
+  return me;
 }
 
 /** useWeb = isWeb sebagai hook; null selama jawabannya belum datang. */

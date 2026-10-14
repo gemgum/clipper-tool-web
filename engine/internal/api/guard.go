@@ -94,7 +94,7 @@ func (s *Server) withGuard(next http.Handler) http.Handler {
 			return
 		}
 		if strings.EqualFold(r.Header.Get("Sec-Fetch-Site"), "cross-site") &&
-			(s.token != "" || r.Header.Get("Origin") == "") {
+			(s.token != "" || s.auth != nil || r.Header.Get("Origin") == "") {
 			writeErr(w, 403, "this engine only answers pages it serves itself")
 			return
 		}

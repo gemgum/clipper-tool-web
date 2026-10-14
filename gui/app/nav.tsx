@@ -7,6 +7,7 @@ import { useI18n, type MessageKey } from "./i18n";
 import ThemeToggle from "./theme-toggle";
 import AccountButton from "./account";
 import { RailJob, RailAI, useRunning } from "./rail-status";
+import { useMe } from "./engine";
 
 // Navigasi kiri — DESIGN-Navigasi (bagian kedua DEsign-clipper-lanjutan.md).
 //
@@ -15,17 +16,18 @@ import { RailJob, RailAI, useRunning } from "./rail-status";
 // (varian B), di bawahnya rail ikon 72px dengan tooltip (varian A). Bentuknya
 // diatur CSS saja — komponen ini merender keduanya sama.
 
-type Item = { href: string; label: MessageKey; Icon: typeof Scissors };
+// perm = izin Sarth Admin yang dibutuhkan halaman itu (engine/internal/api/access.go).
+type Item = { href: string; label: MessageKey; Icon: typeof Scissors; perm?: string };
 const CREATE: Item[] = [
-  { href: "/", label: "navClips", Icon: Scissors },
-  { href: "/news", label: "navNews", Icon: Newspaper },
-  { href: "/writer", label: "navWriter", Icon: PenLine },
-  { href: "/captions", label: "navCaptions", Icon: Captions },
-  { href: "/watermark", label: "navWatermark", Icon: Stamp },
+  { href: "/", label: "navClips", Icon: Scissors, perm: "clip.view" },
+  { href: "/news", label: "navNews", Icon: Newspaper, perm: "card.view" },
+  { href: "/writer", label: "navWriter", Icon: PenLine, perm: "article.view" },
+  { href: "/captions", label: "navCaptions", Icon: Captions, perm: "caption.view" },
+  { href: "/watermark", label: "navWatermark", Icon: Stamp, perm: "watermark.view" },
 ];
 const MANAGE: Item[] = [
   { href: "/history", label: "navHistory", Icon: History },
-  { href: "/requirements", label: "navSettings", Icon: Settings },
+  { href: "/requirements", label: "navSettings", Icon: Settings, perm: "settings.view" },
 ];
 
 // Ekspor statis Next menghasilkan /news/index.html, jadi alamat yang terbaca
@@ -39,6 +41,9 @@ export default function Nav() {
   const path = usePathname();
   const { t } = useI18n();
   const running = useRunning();
+  const me = useMe();
+  // Tanpa login Sarth Admin (me = null) semua menu tampil, seperti dulu.
+  const allowed = (i: Item) => !me || !i.perm || me.permissions.includes(i.perm);
 
   const item = ({ href, label, Icon }: Item) => {
     const on = samePath(path, href);
@@ -63,9 +68,9 @@ export default function Nav() {
         <span className="rail-label">Clipper</span>
       </Link>
       <div className="rail-group">{t("navCreate")}</div>
-      {CREATE.map(item)}
+      {CREATE.filter(allowed).map(item)}
       <div className="rail-group">{t("navManage")}</div>
-      {MANAGE.map(item)}
+      {MANAGE.filter(allowed).map(item)}
 
       <div className="rail-foot">
         <RailJob running={running} />

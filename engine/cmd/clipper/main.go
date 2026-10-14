@@ -558,6 +558,21 @@ func cmdServe(layout config.Layout, args []string) {
 	hosts := fs.String("host", "", "")
 	_ = fs.Parse(args)
 	password := os.Getenv("CLIPPER_PASSWORD")
+	// AUTH_MODE=oidc: login lewat Sarth Admin, bukan sandi bersama. Nilai
+	// lain (atau kosong) = sandi bersama, untuk masa transisi.
+	oidc := *web && os.Getenv("AUTH_MODE") == "oidc"
+	oidcCfg := api.OIDCConfig{
+		Issuer: os.Getenv("OIDC_ISSUER"), ClientID: os.Getenv("OIDC_CLIENT_ID"),
+		ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"), PublicURL: os.Getenv("PUBLIC_URL"),
+		AdminURL: os.Getenv("SARTH_ADMIN_URL"), Slug: os.Getenv("SARTH_APP_SLUG"),
+		SyncToken: os.Getenv("SARTH_SYNC_TOKEN"), SessionSecret: os.Getenv("SESSION_SECRET"),
+	}
+	if oidc && (oidcCfg.Issuer == "" || oidcCfg.ClientID == "" || oidcCfg.ClientSecret == "" ||
+		oidcCfg.PublicURL == "" || oidcCfg.AdminURL == "" || oidcCfg.Slug == "" ||
+		oidcCfg.SyncToken == "" || len(oidcCfg.SessionSecret) < 32) {
+		fmt.Fprintln(os.Stderr, "AUTH_MODE=oidc needs the .env block from the Sarth Admin panel (OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, PUBLIC_URL, SARTH_ADMIN_URL, SARTH_APP_SLUG, SARTH_SYNC_TOKEN) plus SESSION_SECRET (32+ random characters)")
+		os.Exit(1)
+	}
 
 	opts := config.DefaultOptions()
 	if err := layout.Ensure(); err != nil {
@@ -581,7 +596,7 @@ func cmdServe(layout config.Layout, args []string) {
 	// loopback DAN semua -host nama lokal. Loopback saja tidak cukup — di VPS
 	// engine juga mendengarkan di 127.0.0.1, di belakang nginx yang
 	// meneruskan pengunjung publik ke sana. Sandi yang ada tidak pernah dibuang.
-	if *web && password == "" && !localOnly(listenAddr, *hosts) {
+	if *web && !oidc && password == "" && !localOnly(listenAddr, *hosts) {
 		fmt.Fprintln(os.Stderr, "-web needs CLIPPER_PASSWORD (in the environment or .env) and -host <public name>; only a local-only engine (127.0.0.1 with -host localhost) may run without one")
 		os.Exit(1)
 	}
@@ -609,7 +624,15 @@ func cmdServe(layout config.Layout, args []string) {
 				srv.AllowHost(h)
 			}
 		}
-		srv.SetWeb(password)
+		if oidc {
+			srv.SetWeb("")
+			srv.SetOIDC(oidcCfg)
+		} else {
+			srv.SetWeb(password)
+			if oidcCfg.AdminURL != "" && oidcCfg.Slug != "" && oidcCfg.SyncToken != "" {
+				api.SyncPermissions(oidcCfg)
+			}
+		}
 	} else if *tokenMode == "on" || (*tokenMode == "auto" && !layout.Dev) {
 		token = api.NewToken()
 		srv.SetToken(token)
@@ -629,7 +652,9 @@ func cmdServe(layout config.Layout, args []string) {
 	fmt.Printf("  data    : %s%s\n", paths.DataDir, devNote(layout))
 	fmt.Printf("  API key : %s\n", maskKey(paths.APIKey))
 	fmt.Printf("  gui     : %s\n", api.GUIStatus(layout.GUIDir))
-	if *web && password == "" {
+	if oidc {
+		fmt.Printf("  key     : web: Sarth Admin sign-in (%s), open %s\n", oidcCfg.Issuer, oidcCfg.PublicURL)
+	} else if *web && password == "" {
 		fmt.Printf("  key     : web, local only: no password (listening on %s)\n", listenAddr)
 	} else if *web {
 		// Kuncinya TIDAK dicetak: stdout berakhir di journald, dan kunci di
