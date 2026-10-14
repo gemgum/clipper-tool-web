@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Clock, X } from "lucide-react";
+import { Check, Clock, Play, X } from "lucide-react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
 import LogPanel from "./log-panel";
+import { usePlayer } from "./video-player";
 import type { JobClip } from "./result-view";
 
 // Layar 2 — Sedang diproses (DESIGN.md §5). Menggantikan "Running · 24%" dan
@@ -41,6 +42,7 @@ export default function RunView({
   onChangeSettings: () => void;
 }) {
   const { t } = useI18n();
+  const player = usePlayer();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 5000);
@@ -108,17 +110,22 @@ export default function RunView({
             <h2>{t("clipsDone")}</h2>
             <span className="meta">{t("nOfM", { n: rendered.length, m: Math.max(total, clips.length) })}</span>
           </div>
+          {player.el}
           <div className="thumb-grid">
             {Array.from({ length: Math.max(Math.min(total, 10), clips.length) }, (_, i) => {
               const c = clips[i];
               if (!c) return <div key={i} className="thumb wait"><span>{t("waiting")}</span></div>;
               return (
-                <a key={c.id} className={"thumb" + (c.status === "failed" ? " failed" : "")}
-                  href={c.status === "rendered" ? eng(`/api/jobs/${c.job_id}/clips/${c.id}/file`) : undefined}
-                  download={c.status === "rendered" ? `${c.id}.mp4` : undefined}>
+                <div key={c.id} className={"thumb" + (c.status === "failed" ? " failed" : "")}>
                   {c.status === "rendered" && <video src={eng(`/api/jobs/${c.job_id}/clips/${c.id}/file`) + "#t=1"} preload="metadata" muted />}
+                  {c.status === "rendered" && (
+                    <button type="button" className="play-over" aria-label={t("playClip", { n: i + 1 })}
+                      onClick={() => player.open(eng(`/api/jobs/${c.job_id}/clips/${c.id}/file`), c.title || t("playClip", { n: i + 1 }))}>
+                      <Play className="ico" aria-hidden="true" />
+                    </button>
+                  )}
                   <span className="thumb-badge">{c.status === "failed" ? t("clipFailed") : `${Math.round(c.duration)}s`}</span>
-                </a>
+                </div>
               );
             })}
           </div>

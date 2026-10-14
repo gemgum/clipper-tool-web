@@ -3204,3 +3204,32 @@ button.wm-logo-empty { width: 100%; min-height: 72px; }
 .rail-brand[data-tip] { position: relative; }
 @keyframes rail-tip { from { opacity: 0; } to { opacity: 1; } }
 .rail-avatar .ico { width: 16px; height: 16px; }
+
+/* Tombol putar di atas thumbnail: menutupi seluruh gambar, ikon bulat di tengah. */
+.g-thumb, .hi-thumb, .thumb, .src-thumb { position: relative; }
+button.play-over {
+  position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+  min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: #fff; cursor: pointer;
+}
+button.play-over .ico {
+  width: 34px; height: 34px; padding: 9px; border-radius: 50%; box-sizing: border-box;
+  background: rgb(0 0 0 / 55%); fill: #fff; opacity: .85; transition: transform .12s ease, opacity .12s ease;
+}
+.src-thumb button.play-over .ico { width: 26px; height: 26px; padding: 6px; }
+button.play-over:hover .ico { opacity: 1; transform: scale(1.08); }
+button.play-over:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hi-thumb .hi-pick { z-index: 2; }
+
+/* Pemutar video (video-player.tsx). */
+dialog.player {
+  padding: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); color: var(--text);
+  max-width: min(94vw, 1200px); overflow: hidden;
+}
+dialog.player::backdrop { background: rgb(0 0 0 / 70%); }
+.player-head { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; }
+.player-title { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+dialog.player video { display: block; max-width: min(94vw, 1200px); max-height: calc(100dvh - 120px); background: #000; margin: 0 auto; }
+/* Layar penuh selalu menampilkan video UTUH. Thumbnail memakai object-fit: cover
+   supaya kotaknya penuh, dan aturan itu ikut terbawa ke layar penuh: klip 9:16
+   terpotong jadi 16:9 dan tampak di-zoom (dilaporkan dari lapangan). */
+video:fullscreen { object-fit: contain !important; background: #000; }

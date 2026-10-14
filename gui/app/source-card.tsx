@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Film, FolderOpen, Link2, Trash2, TriangleAlert, Upload } from "lucide-react";
+import { Film, FolderOpen, Link2, Play, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
 import { StepCard, humanDuration } from "./clip-steps";
 import Filmstrip from "./filmstrip";
+import { usePlayer } from "./video-player";
 
 type Info = { duration: number; width: number; height: number };
 
@@ -33,6 +34,7 @@ export default function SourceCard({
   const [info, setInfo] = useState<Info | null>(null);
   const [over, setOver] = useState(false);
   const [url, setUrl] = useState("");
+  const player = usePlayer();
   const fetching = fetchPhase !== "";
 
   useEffect(() => {
@@ -52,11 +54,16 @@ export default function SourceCard({
   if (path) return (
     <section className="step-card src-card">
       <div className="src-row">
+        {player.el}
         <div className="src-thumb">
           {info ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img alt="" src={eng(`/api/frame?path=${encodeURIComponent(path)}&t=${Math.min(5, info.duration / 2).toFixed(1)}&reframe=fit&background=black&zoom=0`)} />
           ) : <Film className="ico" aria-hidden="true" />}
+          <button type="button" className="play-over" aria-label={t("playVideo")}
+            onClick={() => player.open(eng(`/api/media?path=${encodeURIComponent(path)}`), name)}>
+            <Play className="ico" aria-hidden="true" />
+          </button>
         </div>
         <div className="src-text">
           <h2 className="src-k">{t("step1Title")}</h2>

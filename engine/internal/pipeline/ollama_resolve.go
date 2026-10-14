@@ -41,9 +41,24 @@ func resolveOllama(ctx context.Context, url, model string) (*ollama.Client, stri
 	// sementara yang terpasang bernama "llama3.1:latest".
 	name := ""
 	for _, m := range st.Installed {
-		if m.Name == model || ollama.BaseName(m.Name) == ollama.BaseName(model) {
+		if model != "" && (m.Name == model || ollama.BaseName(m.Name) == ollama.BaseName(model)) {
 			name = m.Name
 			break
+		}
+	}
+	// Belum ada model yang DIPILIH (setelan "default"): pakai model terpasang
+	// yang sanggup, atau yang pertama. Ini bukan penggantian diam-diam — tidak
+	// ada pilihan yang diganti, dan namanya dicatat di label di bawah. Dulu ""
+	// dicocokkan apa adanya dan selalu gagal: "model "" is not installed".
+	if model == "" {
+		for _, m := range st.Installed {
+			if m.Ready {
+				name = m.Name
+				break
+			}
+		}
+		if name == "" {
+			name = st.Installed[0].Name
 		}
 	}
 	if name == "" {

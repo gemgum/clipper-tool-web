@@ -90,6 +90,10 @@ func (p *Pipeline) Run(ctx context.Context, jobID, input, workDir, outDir string
 	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
 		return nil, fmt.Errorf("work folder %q: %w", tmpDir, err)
 	}
+	// Berkas antara (audio.wav ~70 MB per jam video, potongan audio, .ass)
+	// tidak dipakai lagi setelah job selesai: Retry mengambil transkrip dari
+	// cache, bukan dari sini. Dibuang apa pun hasilnya.
+	defer os.RemoveAll(tmpDir)
 
 	rec := newRecorder()
 	// Durasi video dipakai menghitung rasio realtime di ringkasan. Gagal probe
@@ -550,6 +554,10 @@ func (p *Pipeline) Rerender(ctx context.Context, input, workDir, outDir string, 
 	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
 		return nil, fmt.Errorf("work folder %q: %w", tmpDir, err)
 	}
+	// Berkas antara (audio.wav ~70 MB per jam video, potongan audio, .ass)
+	// tidak dipakai lagi setelah job selesai: Retry mengambil transkrip dari
+	// cache, bukan dari sini. Dibuang apa pun hasilnya.
+	defer os.RemoveAll(tmpDir)
 	got, err := p.Transcript(ctx, input, tmpDir, 0, false, onProgress)
 	if err != nil {
 		return nil, err

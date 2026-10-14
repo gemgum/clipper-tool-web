@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/probe", s.probe)
 	mux.HandleFunc("GET /api/frame", s.frame)
 	mux.HandleFunc("GET /api/thumb", s.thumb)
+	mux.HandleFunc("GET /api/media", s.media)
 	mux.HandleFunc("GET /api/source", s.getSource)
 	mux.HandleFunc("POST /api/source", s.setSource)
 	mux.HandleFunc("POST /api/upload", s.upload)
@@ -670,11 +671,15 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		dst := filepath.Join(dir, name)
 		f, err := os.Create(dst)
 		if err != nil {
+			os.RemoveAll(dir)
 			writeErr(w, 500, err.Error())
 			return
 		}
 		if _, err := io.Copy(f, part); err != nil {
+			// Unggahan terputus: berkas setengah jadi (bisa GB) tidak boleh
+			// tertinggal di server.
 			f.Close()
+			os.RemoveAll(dir)
 			writeErr(w, 500, "simpan file: "+err.Error())
 			return
 		}

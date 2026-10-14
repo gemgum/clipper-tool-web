@@ -74,3 +74,33 @@ func TestThumb(t *testing.T) {
 		t.Fatalf("i out of range accepted: %d", rec.Code)
 	}
 }
+
+// /api/media mengalirkan video sumber dengan Range (pemutar bisa melompat), dan
+// di mode web menolak berkas di luar folder unggahan.
+func TestMedia(t *testing.T) {
+	root := t.TempDir()
+	s := &Server{paths: config.Paths{DataDir: filepath.Join(root, "data")}}
+	webRoot = s.uploadDir()
+	t.Cleanup(func() { webRoot = "" })
+	vid := filepath.Join(s.uploadDir(), "1", "v.mp4")
+	os.MkdirAll(filepath.Dir(vid), 0o755)
+	os.WriteFile(vid, []byte("0123456789"), 0o644)
+	outside := filepath.Join(root, "secret.mp4")
+	os.WriteFile(outside, []byte("x"), 0o644)
+
+	get := func(p, rng string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/media?path="+p, nil)
+		if rng != "" {
+			req.Header.Set("Range", rng)
+		}
+		s.media(rec, req)
+		return rec
+	}
+	if rec := get(vid, "bytes=2-4"); rec.Code != 206 || rec.Body.String() != "234" {
+		t.Fatalf("range: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := get(outside, ""); rec.Code != 404 {
+		t.Fatalf("outside file served: %d", rec.Code)
+	}
+}

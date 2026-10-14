@@ -141,3 +141,16 @@ func (s *Server) setSource(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, activeSource{Path: p})
 }
+
+// media mengalirkan video sumber untuk pemutar di GUI. http.ServeFile melayani
+// Range, jadi pemutar bisa melompat ke menit mana pun tanpa mengunduh semuanya.
+// Di mode web hostPath hanya mengizinkan folder unggahan.
+func (s *Server) media(w http.ResponseWriter, r *http.Request) {
+	path := hostPath(r.URL.Query().Get("path"))
+	st, err := os.Stat(path)
+	if path == "" || err != nil || st.IsDir() {
+		writeErr(w, 404, "video not found")
+		return
+	}
+	http.ServeFile(w, r, path)
+}

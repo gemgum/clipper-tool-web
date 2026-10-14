@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gemgum/clipper/engine/internal/ffmpeg"
@@ -98,6 +99,10 @@ func (s *Server) inputInUse(p string) bool {
 	return false
 }
 
+// videoExt = akhiran berkas yang dianggap video sumber oleh sapuan unggahan.
+var videoExt = map[string]bool{".mp4": true, ".mov": true, ".mkv": true, ".webm": true,
+	".avi": true, ".m4v": true, ".ts": true, ".flv": true, ".wmv": true}
+
 // Batas umur untuk sweepFetched.
 const (
 	partialMaxAge = 6 * time.Hour  // sisa unduhan (.dl-*): unduhan hidup tak selama ini (nginx memutus di 1 jam)
@@ -123,6 +128,7 @@ func (s *Server) sweepFetched(now time.Time) {
 			os.RemoveAll(d)
 		}
 	}
+	s.sweepUploads(now)
 	dirs, _ := filepath.Glob(filepath.Join(s.uploadDir(), "yt-*"))
 	for _, d := range dirs {
 		parts, _ := filepath.Glob(filepath.Join(d, ".dl-*"))
@@ -167,4 +173,34 @@ func (s *Server) removeUpload(w http.ResponseWriter, r *http.Request) {
 		removed = os.IsNotExist(err)
 	}
 	writeJSON(w, 200, map[string]bool{"removed": removed})
+}
+
+// sweepUploads membuang video unggahan biasa yang tidak pernah dipakai: folder
+// berisi TEPAT SATU berkas video, lebih dari 48 jam, dan tidak ditunjuk job mana
+// pun. Syarat "satu berkas" menjaga hasil caption & watermark, yang ditulis di
+// sebelah videonya; gambar watermark dan gambar kartu (bukan video) tidak
+// tersentuh, begitu pula folder images/ dan unduhan yt-* (diurus sweepFetched).
+func (s *Server) sweepUploads(now time.Time) {
+	entries, _ := os.ReadDir(s.uploadDir())
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == "images" || strings.HasPrefix(e.Name(), "yt-") {
+			continue
+		}
+		d := filepath.Join(s.uploadDir(), e.Name())
+		files, err := os.ReadDir(d)
+		if err != nil || len(files) != 1 || files[0].IsDir() ||
+			!videoExt[strings.ToLower(filepath.Ext(files[0].Name()))] {
+			continue
+		}
+		v := filepath.Join(d, files[0].Name())
+		st, err := os.Stat(v)
+		if err != nil || now.Sub(st.ModTime()) <= fetchedMaxAge {
+			continue
+		}
+		if abs, _ := filepath.Abs(v); s.inputInUse(abs) {
+			continue
+		}
+		log.Print("upload: removing unused upload ", d)
+		os.RemoveAll(d)
+	}
 }

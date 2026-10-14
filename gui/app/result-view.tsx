@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Download, Play, RotateCw } from "lucide-react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
+import { usePlayer } from "./video-player";
 
 // Bentuk klip yang dikirim engine (types.Clip) — hanya field yang dipakai GUI.
 export type JobClip = {
@@ -45,6 +46,7 @@ export default function ResultView({
 }) {
   const { t } = useI18n();
   const [filter, setFilter] = useState<"all" | "strong" | "new">("all");
+  const player = usePlayer();
   const [downloaded, setDownloaded] = useState<Set<string>>(() => new Set());
   const [bytes, setBytes] = useState(0);
   useEffect(() => { setDownloaded(loadDownloaded()); }, []);
@@ -114,6 +116,7 @@ export default function ResultView({
         </div>
       </div>
 
+      {player.el}
       <div className="clip-gallery">
         {shown.map((c) => {
           const band = scoreBand(c.score);
@@ -121,7 +124,11 @@ export default function ResultView({
           return (
             <article key={key(c)} className="g-card">
               <div className="g-thumb">
-                <video src={fileURL(c) + "#t=1"} preload="metadata" muted id={`v-${c.id}`} />
+                <video src={fileURL(c) + "#t=1"} preload="metadata" muted />
+                <button type="button" className="play-over" aria-label={t("playClip", { n: no })}
+                  onClick={() => player.open(fileURL(c), c.title || `${t("playClip", { n: no })}`)}>
+                  <Play className="ico" aria-hidden="true" />
+                </button>
                 <span className="g-no">{no}</span>
                 <span className={"g-score " + band}>{t(band === "strong" ? "scoreStrong" : band === "medium" ? "scoreMedium" : "scorePlain")}</span>
                 <span className="g-dur">{Math.round(c.duration)}s</span>
@@ -134,11 +141,7 @@ export default function ResultView({
                     <Download className="ico" aria-hidden="true" /> {t("downloadClip")}
                   </a>
                   <button type="button" className="ghost icon-only" aria-label={t("playClip", { n: no })}
-                    onClick={() => {
-                      const v = document.getElementById(`v-${c.id}`) as HTMLVideoElement | null;
-                      if (!v) return;
-                      v.controls = true; v.muted = false; v.play().catch(() => {});
-                    }}>
+                    onClick={() => player.open(fileURL(c), c.title || t("playClip", { n: no }))}>
                     <Play className="ico" aria-hidden="true" />
                   </button>
                 </div>

@@ -83,6 +83,12 @@ func (m *Manager) load() {
 		if v.Status == StatusRunning || v.Status == StatusQueued {
 			v.Status = StatusCanceled
 		}
+		// Saat engine mulai tidak ada job yang berjalan, jadi folder kerja tmp/
+		// semuanya sisa: job yang terputus engine mati, atau dari versi lama
+		// yang belum membuangnya sendiri (audio.wav ~70 MB per job).
+		if v.Dir != "" && filepath.Base(v.Dir) == v.Dir {
+			_ = os.RemoveAll(filepath.Join(m.layout.DataDir, v.Dir, "tmp"))
+		}
 		v.Clips = existingClips(v.Clips)
 		j := &Job{
 			ID: v.ID, Dir: v.Dir, Status: v.Status, Stage: v.Stage,

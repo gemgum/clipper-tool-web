@@ -1,11 +1,14 @@
 package api
 
 import (
+	"errors"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/gemgum/clipper/engine/internal/config"
@@ -13,7 +16,7 @@ import (
 )
 
 // Sapuan: unduhan lama yang tidak dipakai dan sisa unduhan terputus hilang;
-// yang dipakai job, yang masih baru, dan unggahan biasa tetap ada.
+// yang dipakai job dan yang masih baru tetap ada.
 func TestSweepFetched(t *testing.T) {
 	root := t.TempDir()
 	l := config.Layout{DataDir: filepath.Join(root, "data")}
@@ -42,7 +45,8 @@ func TestSweepFetched(t *testing.T) {
 	s.mgr.Create(usedAbs, config.DefaultOptions())
 	s.sweepFetched(time.Now())
 
-	for p, want := range map[string]bool{used: true, unused: false, young: true, partial: false, plain: true} {
+	// plain: unggahan biasa lama yang tak dipakai ikut dibuang (sweepUploads).
+	for p, want := range map[string]bool{used: true, unused: false, young: true, partial: false, plain: false} {
 		if _, err := os.Stat(p); (err == nil) != want {
 			t.Errorf("%s exists=%v, want %v", p, err == nil, want)
 		}
@@ -112,5 +116,59 @@ func TestRemoveUpload(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Dir(free)); !os.IsNotExist(err) {
 		t.Error("empty upload folder left behind")
+	}
+}
+
+// Unggahan biasa: hanya folder berisi SATU video lama yang tidak dipakai job
+// yang dibuang. Hasil caption/watermark di sebelahnya, gambar, dan video yang
+// dipakai job tetap ada.
+func TestSweepUploads(t *testing.T) {
+	root := t.TempDir()
+	l := config.Layout{DataDir: filepath.Join(root, "data")}
+	s := &Server{paths: config.Paths{DataDir: l.DataDir}, mgr: job.NewManager(l, config.Paths{}, 1)}
+	old := time.Now().Add(-72 * time.Hour)
+	mk := func(rel string, age time.Time) string {
+		p := filepath.Join(s.uploadDir(), rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("x"), 0o644)
+		os.Chtimes(p, age, age)
+		return p
+	}
+	stale := mk("1/talk.mp4", old)
+	fresh := mk("2/talk.mp4", time.Now())
+	used := mk("3/talk.mp4", old)
+	withResult := mk("4/talk.mp4", old)
+	result := mk("4/talk.txt", old)
+	logo := mk("5/logo.png", old)
+	card := mk("images/c.mp4", old)
+	usedAbs, _ := filepath.Abs(used)
+	s.mgr.Create(usedAbs, config.DefaultOptions())
+
+	s.sweepUploads(time.Now())
+
+	for p, want := range map[string]bool{stale: false, fresh: true, used: true, withResult: true, result: true, logo: true, card: true} {
+		if _, err := os.Stat(p); (err == nil) != want {
+			t.Errorf("%s exists=%v, want %v", p, err == nil, want)
+		}
+	}
+	if _, err := os.Stat(filepath.Dir(stale)); !os.IsNotExist(err) {
+		t.Error("stale upload folder left behind")
+	}
+}
+
+// Unggahan yang terputus di tengah jalan tidak meninggalkan berkas setengah jadi.
+func TestUploadBrokenStreamLeavesNothing(t *testing.T) {
+	s := &Server{paths: config.Paths{DataDir: filepath.Join(t.TempDir(), "data")}}
+	head := "--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"big.mp4\"\r\n\r\n0123456789"
+	body := io.MultiReader(strings.NewReader(head), iotest.ErrReader(errors.New("connection reset")))
+	req := httptest.NewRequest("POST", "/api/upload", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=B")
+	rec := httptest.NewRecorder()
+	s.upload(rec, req)
+	if rec.Code == 200 {
+		t.Fatal("broken upload reported success")
+	}
+	if left, _ := os.ReadDir(s.uploadDir()); len(left) != 0 {
+		t.Fatalf("partial upload left behind: %v", left)
 	}
 }

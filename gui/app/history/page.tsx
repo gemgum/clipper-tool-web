@@ -11,12 +11,13 @@
 // ditutup.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Download, FileText, History, Trash2 } from "lucide-react";
+import { Download, FileText, History, Play, Trash2 } from "lucide-react";
 import EmptyState from "../empty-state";
 import { useConfirm } from "../confirm";
 import PageHeader from "../page-header";
 import Alerts from "../alerts";
 import { eng, engineURL } from "../engine";
+import { usePlayer } from "../video-player";
 import { useI18n } from "../i18n";
 import type { MessageKey } from "../i18n";
 
@@ -57,6 +58,7 @@ export default function HistoryPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const player = usePlayer();
   const [ask, confirmEl] = useConfirm();
   // Pratinjau kartu ukuran penuh: <dialog> bawaan (Esc & fokus diurus browser).
   const zoomRef = useRef<HTMLDialogElement>(null);
@@ -176,6 +178,7 @@ export default function HistoryPage() {
 
   return (
     <div className="screen scroll clips-v2 history-v2">
+      {player.el}
       <PageHeader title={t("tabHistory")} subtitle={t("hiSub")}>
         {picked.size > 0 && (
           <>
@@ -284,6 +287,12 @@ export default function HistoryPage() {
                           <div key={c.id} className={"hi-clip" + (picked.has(k) ? " on" : "") + (c.status === "failed" ? " failed" : "")}>
                             <div className="hi-thumb">
                               {c.status !== "failed" && <video src={file + "#t=1"} preload="metadata" muted />}
+                              {c.status !== "failed" && (
+                                <button type="button" className="play-over" aria-label={t("playClip", { n: c.id })}
+                                  onClick={() => player.open(file, c.title || c.id)}>
+                                  <Play className="ico" aria-hidden="true" />
+                                </button>
+                              )}
                               {c.status !== "failed" && (
                                 <input type="checkbox" className="hi-pick" checked={picked.has(k)} onChange={() => toggle(k)} aria-label={t("hiPickClip", { n: c.id })} />
                               )}

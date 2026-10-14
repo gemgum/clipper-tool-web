@@ -154,3 +154,16 @@ yang sudah hilang (job sukses, Remove) dilaporkan kosong.
 sekali lalu disimpan di `data/thumbs/`, dibuang setelah 7 hari tak tersentuh.
 Tampil sebagai filmstrip di kartu Source dan di Preview; klik = pratinjau
 melompat ke detik itu.
+
+## Pembersihan berkas antara (15 Oktober 2026)
+
+- `job_*/tmp/` (audio.wav ~70 MB per jam video, potongan audio, .ass) dibuang
+  saat job selesai apa pun hasilnya, dan semuanya saat engine mulai (sisa job
+  yang terputus). Retry memakai cache transkrip, bukan folder ini.
+- Unggahan yang terputus di tengah jalan langsung dihapus.
+- Video unggahan biasa: folder berisi tepat satu video, >48 jam, tidak dipakai
+  job mana pun → dihapus tiap jam (`sweepUploads`). Hasil caption/watermark di
+  sebelah videonya, gambar, dan `images/` tidak tersentuh.
+
+Pemutar video: `/api/media?path=` mengalirkan video sumber dengan Range (folder
+unggahan saja di mode web); klip diputar dari `/api/jobs/{id}/clips/{clip}/file`.

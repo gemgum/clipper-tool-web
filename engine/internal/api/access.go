@@ -80,6 +80,7 @@ var routePerms = map[string]string{
 	"GET /api/probe":               permAnyone,
 	"GET /api/frame":               permAnyone,
 	"GET /api/thumb":               permAnyone,
+	"GET /api/media":               permAnyone,
 	"GET /api/source":              permAnyone,
 	"POST /api/source":             permAnyone,
 	"POST /api/upload":             permAnyone,
