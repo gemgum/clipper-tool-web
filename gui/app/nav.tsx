@@ -64,7 +64,8 @@ export default function Nav() {
   return (
     <nav className="rail" aria-label={t("navMain")}>
       <Link href="/" className="rail-brand" aria-label="Clipper">
-        <span className="rail-logo" aria-hidden="true">C</span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- ekspor statis, tanpa optimasi gambar */}
+        <img className="rail-logo" src="/logo.png" alt="" width={36} height={27} />
         <span className="rail-label">Clipper</span>
       </Link>
       <div className="rail-group">{t("navCreate")}</div>
