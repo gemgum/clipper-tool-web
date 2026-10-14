@@ -61,6 +61,14 @@ func (m *Manager) Persist(id string) {
 // load membaca seluruh riwayat dari disk ke dalam manager. Dipanggil sekali
 // saat manager dibuat, sebelum permintaan pertama dilayani.
 func (m *Manager) load() {
+	// Saat engine mulai tidak ada job yang berjalan, jadi SEMUA folder kerja
+	// job_*/tmp/ adalah sisa: job yang terputus engine mati, versi lama yang
+	// belum membuangnya sendiri, atau job yang sudah dihapus dari History
+	// (folder kliknya sengaja dibiarkan, tmp/-nya tidak). audio.wav ~70 MB/job.
+	tmps, _ := filepath.Glob(filepath.Join(m.layout.DataDir, "job_*", "tmp"))
+	for _, d := range tmps {
+		_ = os.RemoveAll(d)
+	}
 	entries, err := os.ReadDir(m.jobsDir())
 	if err != nil {
 		return
@@ -82,12 +90,6 @@ func (m *Manager) load() {
 		// halaman klip menyambung ke SSE job yang tidak akan pernah berbunyi.
 		if v.Status == StatusRunning || v.Status == StatusQueued {
 			v.Status = StatusCanceled
-		}
-		// Saat engine mulai tidak ada job yang berjalan, jadi folder kerja tmp/
-		// semuanya sisa: job yang terputus engine mati, atau dari versi lama
-		// yang belum membuangnya sendiri (audio.wav ~70 MB per job).
-		if v.Dir != "" && filepath.Base(v.Dir) == v.Dir {
-			_ = os.RemoveAll(filepath.Join(m.layout.DataDir, v.Dir, "tmp"))
 		}
 		v.Clips = existingClips(v.Clips)
 		j := &Job{
