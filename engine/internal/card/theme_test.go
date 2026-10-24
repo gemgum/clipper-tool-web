@@ -154,3 +154,22 @@ func TestCarouselPages(t *testing.T) {
 		t.Fatal("tanpa Whole tidak ada halaman lanjutan")
 	}
 }
+
+// Baris pendek (daftar harga) memakan satu baris penuh: 40 baris "1 gram: Rp…"
+// tidak boleh dijejalkan ke satu halaman 4:5 hanya karena hurufnya sedikit.
+func TestCarouselShortLinesCountAsLines(t *testing.T) {
+	var body []string
+	for i := 0; i < 40; i++ {
+		body = append(body, "‎1 gram: Rp2.467.000")
+	}
+	req := Request{Whole: true, Ratio: Ratio45, Article: news.Article{Title: "Judul"}, Body: body}
+	pages := Pages(req, 1080, 1350)
+	if len(pages) < 3 || strings.HasPrefix(pages[0][0], "‎") {
+		t.Fatalf("40 baris pendek harus jadi >= 3 halaman tanpa tanda arah teks, dapat %d", len(pages))
+	}
+	req.Box, req.Page = &PageBox{Fill: "#ffffff", Text: "#111111"}, 1
+	html, _, err := New(nil, t.TempDir()).HTML(context.Background(), req)
+	if err != nil || !strings.Contains(string(html), `class="box"`) || !strings.Contains(string(html), "#ffffff") {
+		t.Fatalf("halaman gaya box harus memakai kotak Mark: err=%v", err)
+	}
+}

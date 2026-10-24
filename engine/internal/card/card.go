@@ -206,6 +206,9 @@ type Request struct {
 	Whole bool     `json:"whole"`
 	Body  []string `json:"body"`
 	Page  int      `json:"page"`
+	// Box = gaya box untuk halaman lanjutan: foto artikel memenuhi bingkai dan
+	// teks di dalam kotak bergaya kotak judul Mark. nil = panel tema.
+	Box *PageBox `json:"box"`
 	// Theme = salah satu dari empat tampilan jadi (DESIGN-NEWSCARD §5.2):
 	// dark | light | photo | paper. Kosong = perilaku lama (style + colors).
 	// Bila diisi, ia menang atas Colors.

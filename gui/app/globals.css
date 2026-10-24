@@ -3415,3 +3415,12 @@ fieldset.wm-timed { margin: 0; padding: 0; border: 0; min-width: 0; }
 .logo-ctl > button { height: 32px; min-height: 0; margin: 0; padding: 0 10px; border-radius: var(--r-sm);
   display: inline-flex; align-items: center; justify-content: center; }
 .logo-ctl > button.wm-pin { width: 32px; padding: 0; }
+
+/* Tab Text News: pemilih Teks kartu | Caption di atas grupnya, selebar kartu. */
+.nc-subtabs { margin-bottom: 12px; }
+.nc-subtabs .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+/* Fieldset pembungkus (ringkasan, isi carousel) ikut susunan Pad: jarak label
+   ↔ kotak sama dengan Caption. */
+.mc-r-pad > fieldset.cp-plain { display: flex; flex-direction: column; gap: 6px; }
+/* Isi carousel: tinggi mengikuti teksnya, dibatasi supaya tetap ringkas. */
+textarea.nc-story { field-sizing: content; min-height: 160px; max-height: 520px; line-height: 1.6; }

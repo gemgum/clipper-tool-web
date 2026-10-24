@@ -192,20 +192,36 @@ func (s *Server) newsWrite(w http.ResponseWriter, r *http.Request) {
 		Model  string `json:"model"`
 		Lang   string `json:"lang"`
 		Kind   string `json:"kind"`
+		// Text = badan berita yang sudah ada di GUI (isi carousel, paragraf
+		// dipisah baris baru). Diisi = ditulis ulang dari teks itu, tanpa
+		// mengunduh artikelnya lagi; Title/Source melengkapinya.
+		Text   string `json:"text"`
+		Title  string `json:"title"`
+		Source string `json:"source"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	if req.Kind != writer.KindSummary && req.Kind != writer.KindCaption {
-		writeErr(w, 400, fmt.Sprintf("kind must be %q or %q", writer.KindSummary, writer.KindCaption))
+	if req.Kind != writer.KindSummary && req.Kind != writer.KindCaption && req.Kind != writer.KindStory {
+		writeErr(w, 400, fmt.Sprintf("kind must be %q, %q or %q", writer.KindSummary, writer.KindCaption, writer.KindStory))
 		return
 	}
 	ln := firstNonEmpty(req.Lang, lang(r))
-	content, err := news.FetchContent(r.Context(), req.URL, s.browser(), s.paths.DataDir, ln)
-	if err != nil {
-		writeErr(w, 502, err.Error())
-		return
+	var content news.Content
+	if strings.TrimSpace(req.Text) != "" {
+		content.Article = news.Article{Title: req.Title, Source: req.Source, URL: req.URL}
+		for _, p := range strings.Split(req.Text, "\n") {
+			if p = strings.TrimSpace(p); p != "" {
+				content.Paragraphs = append(content.Paragraphs, news.Paragraph{Index: len(content.Paragraphs), Text: p})
+			}
+		}
+	} else {
+		var err error
+		if content, err = news.FetchContent(r.Context(), req.URL, s.browser(), s.paths.DataDir, ln); err != nil {
+			writeErr(w, 502, err.Error())
+			return
+		}
 	}
 	complete, engineName, err := EngineFor(req.Engine, req.Model)
 	if err != nil {

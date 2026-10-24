@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -167,6 +168,12 @@ const maxImages = 8
 // articleImages menyusun daftar foto: og/twitter, JSON-LD, lalu <img> di
 // badan artikel. Alamat dijadikan absolut, kembar dibuang, ikon/logo/piksel
 // pelacak dan gambar ber-width/height < 100 dilewati.
+//
+// Foto di dalam <figure> diambil juga walau badan artikelnya tidak dikenali:
+// galeri foto (detik "fototravel": 7 foto di #slider-foto__detail) menaruh
+// fotonya di <figure>, di luar penanda badan mana pun. Kembar dikenali dari
+// NAMA BERKAS tanpa query — detik menyajikan foto yang sama sebagai
+// /api/wm/…?w=1200 dan /community/media/…?w=700.
 func articleImages(h string, base *url.URL, meta, ld string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -176,23 +183,39 @@ func articleImages(h string, base *url.URL, meta, ld string) []string {
 			return
 		}
 		abs, err := base.Parse(src)
-		if err != nil || (abs.Scheme != "http" && abs.Scheme != "https") || seen[abs.String()] {
+		if err != nil || (abs.Scheme != "http" && abs.Scheme != "https") {
 			return
 		}
-		seen[abs.String()] = true
+		key := path.Base(abs.Path)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
 		out = append(out, abs.String())
 	}
 	add(meta)
 	add(ld)
-	body := bodyOf(h)
-	for _, tag := range reImgFull.FindAllString(body, -1) {
-		m := reImgTag.FindStringSubmatch(tag)
-		if m == nil || tinyOrIcon(tag, m[1]) {
-			continue
+	tags := reImgFull.FindAllString(bodyOf(h), -1)
+	for _, fig := range reFigure.FindAllString(h, -1) {
+		tags = append(tags, reImgFull.FindAllString(fig, -1)...)
+	}
+	for _, tag := range tags {
+		if src := imgSrc(tag); src != "" && !tinyOrIcon(tag, src) {
+			add(src)
 		}
-		add(m[1])
 	}
 	return out
+}
+
+// imgSrc = alamat foto sebuah <img>. Atribut lazy-load didahulukan: src-nya
+// sering cuma gambar pengganti sampai skrip halaman menukarnya.
+func imgSrc(tag string) string {
+	for _, re := range reImgSrc {
+		if m := re.FindStringSubmatch(tag); m != nil && !strings.HasPrefix(m[1], "data:") {
+			return m[1]
+		}
+	}
+	return ""
 }
 
 var (
@@ -229,9 +252,13 @@ var (
 	reLDURL   = regexp.MustCompile(`(?is)(https?:[^"']+\.(?:jpg|jpeg|png|webp|gif)[^"']*)`)
 	// Penanda badan artikel yang dipakai luas: WordPress (entry-content),
 	// Blogger (post-body), schema.org (itemprop=articleBody), dan <article>.
-	reArticleBody = regexp.MustCompile(`(?is)<(?:div|section|article)\b[^>]*(?:class|id|itemprop)\s*=\s*["'][^"']*(?:post-body|entry-content|article-body|articleBody|post-content)[^"']*["']`)
-	reBodyEnd     = regexp.MustCompile(`(?is)(?:post-footer|entry-footer|comments|<footer\b)`)
-	reImgTag      = regexp.MustCompile(`(?is)<img[^>]+src\s*=\s*["']([^"']+)["']`)
+	reArticleBody = regexp.MustCompile(`(?is)<(?:div|section|article)\b[^>]*(?:class|id|itemprop)\s*=\s*["'][^"']*(?:post-body|entry-content|article-body|article-content|articleBody|post-content)[^"']*["']`)
+	reBodyEnd     = regexp.MustCompile(`(?is)(?:post-footer|entry-footer|comments|<footer\b|</article>)`)
+	reFigure      = regexp.MustCompile(`(?is)<figure\b.*?</figure>`)
+	reImgSrc      = []*regexp.Regexp{
+		regexp.MustCompile(`(?is)\sdata-(?:lazy|lazy-src|src|original)\s*=\s*["']([^"']+)["']`),
+		regexp.MustCompile(`(?is)\ssrc\s*=\s*["']([^"']+)["']`),
+	}
 )
 
 // siteBadge memilih nama sumber untuk lencana kartu.

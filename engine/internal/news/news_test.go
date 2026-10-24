@@ -633,3 +633,33 @@ func TestIsJunkPemberitahuanLisensi(t *testing.T) {
 		}
 	}
 }
+
+// Galeri foto: semua foto di <figure> (juga yang lazy-load lewat data-lazy)
+// ikut jadi pilihan walau badan artikelnya tidak dikenali, dan foto yang sama
+// dari dua alamat (detik /api/wm/ vs /community/media/) cukup sekali.
+func TestArticleImagesGallery(t *testing.T) {
+	h := `<html><head><meta property="og:title" content="Galeri">
+<meta property="og:image" content="https://cdn.example.com/api/wm/2026/a-1_169.jpeg?w=1200"></head><body>
+<figure><img src="https://cdn.example.com/media/a-1_169.jpeg?w=700"></figure>
+<figure><img alt="x" data-lazy="https://cdn.example.com/media/a-2_169.jpeg?w=700"></figure>
+<figure><img src="data:image/gif;base64,R0" data-src="https://cdn.example.com/media/a-3_169.jpeg"></figure>
+<figure><img src="https://cdn.example.com/logo.png"></figure>
+</body></html>`
+	u, _ := url.Parse("https://example.com/foto/1")
+	a, err := parseArticle(h, u, "id")
+	if err != nil || len(a.Images) != 3 || !strings.Contains(a.Images[2], "a-3_169") {
+		t.Fatalf("galeri harus 3 foto unik tanpa logo, dapat %v (err %v)", a.Images, err)
+	}
+}
+
+// Badan berita di <div> sementara <p> di sekitarnya cuma teks pendek
+// (hukumonline): <p> pendek tidak boleh menahan lapis <div>.
+func TestShortParagraphsDoNotBlockDivBody(t *testing.T) {
+	line := "Auditor utama keuangan negara didakwa menerima suap ratusan juta rupiah agar laporan keuangan kementerian mendapat opini terbaik."
+	h := `<body><article class="article-content"><div style="x">` + line + `</div><div style="x">` + line + ` Lanjutan.</div></article>
+<p>Kami Hadir di Instagram</p><p>Tags:</p></body>`
+	ps := parseParagraphs(h)
+	if len(ps) != 2 || ps[0].Text != line {
+		t.Fatalf("badan <div> harus terbaca 2 paragraf, dapat %d", len(ps))
+	}
+}

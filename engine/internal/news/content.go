@@ -6,7 +6,9 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Paragraph satu blok teks dari badan artikel.
@@ -86,7 +88,79 @@ func FetchContent(ctx context.Context, page string, browse Browser, cacheDir, la
 	if err != nil {
 		return Content{}, err
 	}
-	return buildContent(art, string(raw))
+	content, err := buildContent(art, string(raw))
+	if err == nil {
+		appendPages(ctx, &content, string(raw), browse)
+	}
+	return content, err
+}
+
+// maxArticlePages = halaman artikel terbanyak yang disambung.
+const maxArticlePages = 10
+
+var reNextPage = regexp.MustCompile(`href=["']\?page=(\d+)["']`)
+
+// appendPages menyambung artikel yang dipecah ke beberapa halaman ("Halaman
+// Selanjutnya", ?page=2…). hukumonline memecah satu berita jadi 5 halaman, dan
+// tanpa ini hanya 7 paragraf halaman pertama yang terbaca (25 Oktober 2026).
+// Halaman yang gagal diunduh menghentikan penyambungan, bukan seluruh artikel.
+//
+// Halaman yang ditolak (hukumonline: tantangan bot Cloudflare, HTTP 429 sejak
+// halaman ketiga) dibuka lewat browser bila ada — browser lolos tantangannya.
+func appendPages(ctx context.Context, c *Content, first string, browse Browser) {
+	last := 1
+	for _, m := range reNextPage.FindAllStringSubmatch(first, -1) {
+		if n, err := strconv.Atoi(m[1]); err == nil && n > last {
+			last = min(n, maxArticlePages)
+		}
+	}
+	seen := map[string]bool{}
+	for _, t := range c.Body {
+		seen[t] = true
+	}
+	for n := 2; n <= last; n++ {
+		u, err := url.Parse(c.Article.URL)
+		if err != nil {
+			return
+		}
+		// Jeda antarhalaman: media yang membatasi laju menolak unduhan beruntun.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+		q := u.Query()
+		q.Set("page", strconv.Itoa(n))
+		u.RawQuery = q.Encode()
+		// Halaman tantangan bot kadang dijawab HTTP 200 — yang dinilai isinya:
+		// tanpa paragraf berita = gagal, coba lewat browser.
+		var paragraphs []Paragraph
+		var body []string
+		if raw, err := download(ctx, u.String()); err == nil {
+			paragraphs, body = parseBody(string(raw))
+		}
+		// Dua kali: tantangan bot kadang belum selesai saat DOM dibaca.
+		for try := 0; try < 2 && len(paragraphs) == 0 && browse != nil; try++ {
+			if dom, err := browse(ctx, u.String()); err == nil {
+				paragraphs, body = parseBody(dom)
+			}
+		}
+		if len(paragraphs) == 0 {
+			continue
+		}
+		for _, p := range paragraphs {
+			if !seen[p.Text] {
+				c.Paragraphs = append(c.Paragraphs, Paragraph{Index: len(c.Paragraphs), Text: p.Text})
+				c.WordCount += len(strings.Fields(p.Text))
+			}
+		}
+		for _, t := range body {
+			if !seen[t] {
+				seen[t] = true
+				c.Body = append(c.Body, t)
+			}
+		}
+	}
 }
 
 // contentFromHTML membangun Content dari satu HTML utuh (hasil browser).
@@ -167,6 +241,8 @@ var junkPhrases = []string{
 	// Paskibraka dapat diperoleh…", 18 Agustus 2026).
 	"dilarang keras mengambil", "dilarang mengambil konten", "dilarang memperbanyak",
 	"pengindeksan otomatis", "tanpa izin tertulis dari", "hak kekayaan intelektual",
+	// Halaman tantangan bot Cloudflare (hukumonline ?page=3, 25 Oktober 2026).
+	"security service to protect against malicious bots", "verify you are human", "checking your browser",
 }
 
 // parseParagraphs memecah HTML jadi paragraf badan berita.
@@ -195,7 +271,11 @@ func parseBody(h string) ([]Paragraph, []string) {
 	}
 
 	candidates := extractBlocks(h, reP)
-	if len(candidates) < 2 {
+	// Yang dihitung hanya blok sepanjang paragraf: <p> pendek (menu, label)
+	// tidak boleh menahan lapis berikutnya. hukumonline menaruh badan berita
+	// di <div> dan <p>-nya cuma teks kecil di sekitarnya — hasilnya NOL
+	// paragraf berita (25 Oktober 2026).
+	if longBlocks(candidates) < 2 {
 		// Blok yang isinya teks + tag SEBARIS (<a>, <b>, <span>, …).
 		//
 		// Inilah bentuk yang dipakai Blogspot: tiap paragraf satu <div>, dan
@@ -208,7 +288,7 @@ func parseBody(h string) ([]Paragraph, []string) {
 		// tersisa selalu blok terdalam.
 		candidates = append(candidates, extractBlocks(h, reInlineBlock)...)
 	}
-	if len(candidates) < 2 {
+	if longBlocks(candidates) < 2 {
 		// Situs yang memakai <div> per paragraf. Sengaja hanya <div> yang
 		// isinya teks polos (tanpa tag anak) agar tidak menangkap pembungkus
 		// besar yang memuat seluruh halaman.
@@ -231,6 +311,16 @@ func parseBody(h string) ([]Paragraph, []string) {
 		}
 	}
 	return out, all
+}
+
+func longBlocks(blocks []string) int {
+	n := 0
+	for _, t := range blocks {
+		if len(strings.Fields(t)) >= minParagraphWords {
+			n++
+		}
+	}
+	return n
 }
 
 func extractBlocks(h string, re *regexp.Regexp) []string {

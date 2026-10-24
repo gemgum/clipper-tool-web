@@ -7,6 +7,8 @@
 package news
 
 import (
+	"github.com/gemgum/clipper/engine/internal/httpx"
+
 	"context"
 	"encoding/xml"
 	"errors"
@@ -103,7 +105,9 @@ type atomEntry struct {
 	} `xml:"link"`
 }
 
-var httpClient = &http.Client{Timeout: 25 * time.Second}
+// Transport httpx.Retry: 429 dari media (hukumonline membatasi unduhan
+// halaman artikel beruntun) diulang dengan jeda, sama seperti panggilan LLM.
+var httpClient = &http.Client{Timeout: 25 * time.Second, Transport: httpx.Retry(nil)}
 
 // downloadLimit membatasi besar respons agar satu URL nakal tidak menghabiskan RAM.
 const downloadLimit = 4 << 20 // 4 MB

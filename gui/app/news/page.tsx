@@ -28,7 +28,7 @@ import Stage, { Shot, StageFrame } from "../stage";
 import Picker from "../picker";
 import Guides, { GridPicker } from "../guides";
 import { CENTER_X } from "../drag";
-import ColorPanel from "../color-panel";
+import ColorPanel, { toHex } from "../color-panel";
 import { watermarkColors } from "../watermark-panel";
 import { watermarkToAPI } from "../watermark-model";
 import type { Format } from "../watermark-model";
@@ -43,6 +43,8 @@ const CARD_TOP_MAX = 400;
 // Kelipatan 5: satu baris kartu berisi lima artikel.
 const PAGE = 25;
 // Ambang penghitung karakter (DESIGN-NEWSCARD §5.2).
+// tidy = satu paragraf per blok, dipisah SATU baris kosong; spasi berlebih dibuang.
+const tidy = (s: string) => s.split(/\n+/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n\n");
 const IDEAL = 140;
 const LIMIT = 180;
 
@@ -108,8 +110,11 @@ export default function News() {
   const ai = useAI("news");
   const engine = ai?.engine || "ollama";
   const model = ai?.model || "";
-  const [writing, setWriting] = useState<"" | "summary" | "caption">("");
-  const [checks, setChecks] = useState<{ summary: Violation[]; caption: Violation[] }>({ summary: [], caption: [] });
+  const [writing, setWriting] = useState<"" | "summary" | "caption" | "story">("");
+  const [checks, setChecks] = useState<{ summary: Violation[]; caption: Violation[]; story: Violation[] }>({ summary: [], caption: [], story: [] });
+  // story = isi halaman lanjutan carousel yang ditulis AI (bisa disunting);
+  // kosong = paragraf asli artikel.
+  const [story, setStory] = useState("");
   const [writeError, setWriteError] = useState("");
   const [uploading, setUploading] = useState(false);
 
@@ -124,6 +129,8 @@ export default function News() {
   const m = useMark({ format: FORMAT_OF[ratio] || "short", first: article.image, grid });
   const tpl = useTemplates((e) => setError(e));
   const [activeTpl, setActiveTpl] = useSticky("news.template", "");
+  // Tab Text dibagi dua (kiri teks kartu, kanan caption) supaya tidak memanjang.
+  const [textTab, setTextTab] = useSticky<"card" | "caption">("news.textTab", "card");
   // Pemilih berkas lokal untuk logo ke-i (-1 = tambah); null = tertutup.
   const [logoPicker, setLogoPicker] = useState<number | null>(null);
   const web = useWeb();
@@ -204,7 +211,7 @@ export default function News() {
   // Artikel baru = semua yang ditulis untuk artikel lama dibuang.
   const useArticle = useCallback((a: Article) => {
     setArticle({ ...EMPTY, ...a, images: a.images?.length ? a.images : (a.image ? [a.image] : []) });
-    setCaption(""); setHashtags(""); setChecks({ summary: [], caption: [] }); setWriteError("");
+    setCaption(""); setHashtags(""); setStory(""); setChecks({ summary: [], caption: [], story: [] }); setWriteError("");
     setShot(""); setSaved(null);
     if (a.title) applyDefault.current();
   }, []);
@@ -242,19 +249,24 @@ export default function News() {
   }, [link, readArticle, useArticle]);
 
   // ---------- Layar 2 ----------
-  const write = useCallback(async (kind: "summary" | "caption") => {
+  const write = useCallback(async (kind: "summary" | "caption" | "story") => {
     if (!article.url) return;
     setWriting(kind); setWriteError("");
     try {
-      const d = await post(`/api/news/write`, { url: article.url, engine, model, lang, kind }, "write failed");
+      // Isi carousel SELALU ditulis ulang dari teks ASLI artikel yang tersimpan
+      // (article.body) — bukan dari isi kotak, yang sesudah sekali tulis sudah
+      // berupa hasil AI. Artikelnya tidak diunduh lagi.
+      const text = kind === "story" ? (article.body?.length ? article.body.join("\n") : story) : "";
+      const d = await post(`/api/news/write`, { url: article.url, engine, model, lang, kind, text, title: article.title, source: article.source || article.domain }, "write failed");
       if (kind === "summary") setArticle((a) => ({ ...a, summary: d.text }));
+      else if (kind === "story") setStory(tidy(d.text));
       else { setCaption(d.text); setHashtags((d.hashtags || []).map((h: string) => "#" + h.replace(/^#/, "")).join(" ")); }
       setChecks((c) => ({ ...c, [kind]: d.violations || [] }));
     } catch (e: any) {
       // Ringkasan gagal: textarea tetap berisi teks artikel (§9), plus catatan kecil.
       setWriteError(t("ncAiFailed", { error: e.message }));
     } finally { setWriting(""); }
-  }, [article.url, engine, model, lang, t]);
+  }, [article.url, article.title, article.source, article.domain, article.body, story, engine, model, lang, t]);
 
   // "Otomatis dulu" (§2): begitu masuk layar 2, caption ditulis bila masih kosong.
   useEffect(() => {
@@ -280,8 +292,16 @@ export default function News() {
     hashtags: hashtags.split(/\s+/).map((h) => h.replace(/^#/, "")).filter(Boolean),
     photo: { fit: photoFit, fill: photoFill },
     fonts: { title: titleStep, paragraph: paragraphStep }, header: 0, card_top: cardTop, card_y: cardY,
-    whole, body: whole ? article.body || [] : [],
-  }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, whole]);
+    whole, body: !whole ? [] : story.trim() ? story.split(/\n+/).map((p) => p.trim()).filter(Boolean) : article.body || [],
+    // Gaya box: halaman lanjutan memakai rupa kotak judul Mark (warna lewat toHex,
+    // sama dengan pratinjau Mark). Gaya card: panel tema seperti kartu pertama.
+    box: whole && layout === "box" ? {
+      fill: toHex(m.watermark.hlBoxColor || "white"), text: toHex(m.watermark.hlColor),
+      outline: m.watermark.hlOutline, outline_color: toHex(m.watermark.hlOutlineColor || (m.watermark.hlColor === "black" ? "white" : "black")),
+      sharp: !!m.watermark.hlSharp,
+    } : null,
+  }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, whole, story,
+    layout, m.watermark.hlBoxColor, m.watermark.hlColor, m.watermark.hlOutline, m.watermark.hlOutlineColor, m.watermark.hlSharp]);
   // Yang benar-benar dirender (simpan & Preview result): kartu + gaya + Mark,
   // dibakar engine Mark yang sama dengan halaman Mark.
   const renderBody = (r: string, previewOnly: boolean) => JSON.stringify({
@@ -308,6 +328,11 @@ export default function News() {
     post<{ paragraphs: string[] }>(`/api/news/body`, { url: article.url, lang }, t("errReadArticle"))
       .then((d) => setArticle((a) => (a.url === article.url ? { ...a, body: d.paragraphs } : a))).catch((e) => setError(e.message));
   }, [whole, article.url, article.body]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Begitu badan artikel ada, kotak Carousel text berisi paragraf ASLI-nya;
+  // tombol AI lalu menceritakan ulang teks itu.
+  useEffect(() => {
+    if (article.body?.length && !story) setStory(tidy(article.body.join("\n")));
+  }, [article.body]); // eslint-disable-line react-hooks/exhaustive-deps
   const pages = live?.geometry.pages || 1;
   const previewResult = async () => {
     setShooting(true); setError("");
@@ -380,11 +405,11 @@ export default function News() {
   const newCard = () => { setScreen("pick"); setPicked(""); useArticle(EMPTY); setRenderError(""); };
 
   // ---------- isian tersimpan ----------
-  useKeep("news", { article, caption, hashtags, theme, ratio, align, titleAlign, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, saved, whole,
+  useKeep("news", { article, caption, hashtags, story, theme, ratio, align, titleAlign, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, saved, whole,
     layout, mark: { watermark: m.watermark, logos: m.logos, logoOn: m.logoOn } });
   useRestore<Record<string, unknown>>("news", (v) => {
     const set = <T,>(fn: (x: T) => void, val: unknown) => { if (val !== undefined && val !== null) fn(val as T); };
-    set(setArticle, v.article); set(setCaption, v.caption); set(setHashtags, v.hashtags);
+    set(setArticle, v.article); set(setCaption, v.caption); set(setHashtags, v.hashtags); set(setStory, v.story);
     if (typeof v.theme === "string" && (v.theme === "auto" || THEMES.some((x) => x.id === v.theme))) setTheme(v.theme);
     set(setRatio, v.ratio); set(setAlign, v.align); set(setTitleAlign, v.titleAlign); set(setCardY, v.cardY); set(setSaved, v.saved); set(setWhole, v.whole);
     if (v.layout === "card" || v.layout === "box") setLayout(v.layout);
@@ -603,8 +628,21 @@ export default function News() {
               )}
 
               {openTab === "headline" && <>
-                {/* Teks kartu SEKALI, lalu caption postingan. */}
-                <Group title={t("ncCardText")}>
+                {/* Dua bagian: teks kartu | caption postingan. */}
+                <div className="nc-subtabs">
+                  <Segmented label={t("ncTabText")} value={textTab} onChange={setTextTab}
+                    options={[{ value: "card", name: t("ncTextCard") }, { value: "caption", name: t("ncTextCaption") }]} />
+                </div>
+                {textTab === "card" && <Group title={t("ncCardText")}>
+                  <Row label={t("articleTitle")}>
+                    <input value={article.title} aria-label={t("articleTitle")} onChange={(e) => setArticle((a) => ({ ...a, title: e.target.value }))} />
+                  </Row>
+                  <Row label={t("sourceBadge")}>
+                    <input value={article.source} aria-label={t("sourceBadge")} onChange={(e) => setArticle((a) => ({ ...a, source: e.target.value }))} />
+                  </Row>
+                  <Row label={t("date")}>
+                    <input value={article.date} aria-label={t("date")} onChange={(e) => setArticle((a) => ({ ...a, date: e.target.value }))} />
+                  </Row>
                   <Pad>
                     {/* Ringkasan hanya ada di kartu News: mati di gaya box. */}
                     <fieldset className="cp-plain" disabled={layout === "box"}>
@@ -623,17 +661,27 @@ export default function News() {
                     {writeError && <p className="nc-note-err">{writeError}</p>}
                     </fieldset>
                   </Pad>
-                  <Row label={t("articleTitle")}>
-                    <input value={article.title} aria-label={t("articleTitle")} onChange={(e) => setArticle((a) => ({ ...a, title: e.target.value }))} />
-                  </Row>
-                  <Row label={t("sourceBadge")}>
-                    <input value={article.source} aria-label={t("sourceBadge")} onChange={(e) => setArticle((a) => ({ ...a, source: e.target.value }))} />
-                  </Row>
-                  <Row label={t("date")}>
-                    <input value={article.date} aria-label={t("date")} onChange={(e) => setArticle((a) => ({ ...a, date: e.target.value }))} />
-                  </Row>
-                </Group>
-                <Group title={t("ncCaptionTitle")}>
+                  {/* Isi carousel (kartu 2 dst.): mula-mula paragraf asli artikel, lalu
+                      AI menceritakan ulang teks itu bergaya kreator. Mati selama
+                      carousel (tab Format) belum dinyalakan. */}
+                  <Pad>
+                    <fieldset className="cp-plain" disabled={!whole}>
+                    <div className="nc-pad-head">
+                      <label className="mc-r-l" htmlFor="nc-story">{t("ncStoryLabel")}</label>
+                      <button type="button" className="ai-btn" onClick={() => write("story")} disabled={!!writing || !story.trim()}>
+                        <Sparkles className="ico" aria-hidden="true" /> {writing === "story" ? t("analyzing") : t("ncWriteForMe")}
+                      </button>
+                    </div>
+                    {/* Tingginya mengikuti isi (field-sizing), dan dirapikan per
+                        paragraf saat ditinggalkan. */}
+                    <textarea id="nc-story" className="nc-story" rows={6} value={story} placeholder={t("ncStoryEmpty")}
+                      onChange={(e) => { setStory(e.target.value); setChecks((c) => ({ ...c, story: [] })); }}
+                      onBlur={() => setStory((v) => tidy(v))} />
+                    <Checks list={checks.story} />
+                    </fieldset>
+                  </Pad>
+                </Group>}
+                {textTab === "caption" && <Group title={t("ncCaptionTitle")}>
                   <Pad>
                     <div className="nc-pad-head">
                       <label className="mc-r-l" htmlFor="nc-cap">{t("ncCaptionLabel")}</label>
@@ -647,7 +695,7 @@ export default function News() {
                   <Row label={t("ncHashtags")} note={t("ncCreditNote", { source: article.source || article.domain || "…" })}>
                     <input id="nc-tags" value={hashtags} aria-label={t("ncHashtags")} onChange={(e) => setHashtags(e.target.value)} placeholder="#..." />
                   </Row>
-                </Group>
+                </Group>}
               </>}
 
               {openTab === "mark" && <>
@@ -677,19 +725,20 @@ export default function News() {
                           <ThemePicker label={t("wmTheme")} value={theme} onChange={setTheme}
                             auto={{ onClick: () => setTheme("auto"), disabled: !article.image }} />
                         </Row>
-                        <Row label={t("ncHeadlineSize")}>
-                          {box ? sml(m.watermark.hlSize, (v) => m.setWatermark({ hlSize: v }), [SIZES[0], SIZES[1], SIZES[2]])
-                            : sml(sizeOf(titleStep), (v) => setTitleStep(steps[v]), ["s", "m", "l"])}
+                        {/* Satu ukuran & satu perataan untuk SEMUA teks kartu (keputusan
+                            pemilik 25 Oktober 2026): judul, ringkasan, dan teks halaman
+                            lanjutan carousel; gaya box ikut kotak judul Mark. */}
+                        <Row label={t("wmTextSize")}>
+                          {sml(box ? (["s", "m", "l"] as const)[SIZES.indexOf(m.watermark.hlSize)] ?? "m" : sizeOf(titleStep), (v) => {
+                            setTitleStep(steps[v]); setParagraphStep(steps[v]);
+                            if (box) m.setWatermark({ hlSize: SIZES[["s", "m", "l"].indexOf(v)] });
+                          }, ["s", "m", "l"])}
                         </Row>
-                        <Row label={t("ncHeadlineAlign")}>
-                          <AlignPicker label={t("ncHeadlineAlign")} value={box ? m.watermark.hlAlign || "left" : titleAlign}
-                            onChange={box ? (v) => m.setWatermark({ hlAlign: v }) : setTitleAlign} />
-                        </Row>
-                        <Row label={t("ncSummarySize")} off={box}>
-                          {sml(sizeOf(paragraphStep), (v) => setParagraphStep(steps[v]), ["s", "m", "l"])}
-                        </Row>
-                        <Row label={t("ncSummaryAlign")} off={box}>
-                          <AlignPicker label={t("ncSummaryAlign")} value={align} onChange={setAlign} />
+                        <Row label={t("wmAlign")}>
+                          <AlignPicker label={t("wmAlign")} value={box ? m.watermark.hlAlign || "left" : titleAlign} onChange={(v) => {
+                            setTitleAlign(v); setAlign(v);
+                            if (box) m.setWatermark({ hlAlign: v });
+                          }} />
                         </Row>
                       </Split>
                     </Group>
