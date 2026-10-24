@@ -183,6 +183,18 @@ func (s *Server) inlineCardImage(img string) (string, error) {
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(raw), nil
 }
 
+// inlineIllustrations = inlineCardImage untuk tiap foto lanjutan carousel.
+func (s *Server) inlineIllustrations(req *card.Request) error {
+	for i := range req.Illustrations {
+		img, err := s.inlineCardImage(req.Illustrations[i].Image)
+		if err != nil {
+			return err
+		}
+		req.Illustrations[i].Image = img
+	}
+	return nil
+}
+
 // newsWrite: "Ringkas otomatis" / "Tulis otomatis" (DESIGN-NEWSCARD §5.2).
 // Mesin dipilih seperti analyze; galatnya dikembalikan apa adanya (502).
 func (s *Server) newsWrite(w http.ResponseWriter, r *http.Request) {

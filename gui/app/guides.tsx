@@ -86,17 +86,18 @@ export default function Guides({
 
 // Kendali kisi: kerapatannya + tombol yang mengunci garis panduan tetap terlihat.
 export function GridPicker({
-  grid, setGrid, always, setAlways,
+  grid, setGrid, always, setAlways, inline,
 }: {
   grid: number;
   setGrid: (v: number) => void;
   always: boolean;
   setAlways: (v: boolean) => void;
+  // inline = tanpa label, untuk dipasang sebaris dengan alat lain (News: pager).
+  inline?: boolean;
 }) {
   const { t } = useI18n();
-  return (
-    <div className="field"><label>{t("grid")}</label>
-      <div className="field-inline">
+  const controls = (
+      <div className="field-inline" role="group" aria-label={t("grid")} title={inline ? t("grid") : undefined}>
         <Select value={String(grid)} onChange={(v) => setGrid(Number(v))}
           options={GRIDS.map((g) => ({ value: String(g), label: g === 0 ? t("gridOff") : String(g) }))} />
         <button className={"ghost tiny icon-only" + (always ? " active" : "")}
@@ -104,8 +105,9 @@ export function GridPicker({
           onClick={() => setAlways(!always)}>
           <Crosshair className="ico" aria-hidden="true" />
         </button>
-      </div></div>
+      </div>
   );
+  return inline ? controls : <div className="field"><label>{t("grid")}</label>{controls}</div>;
 }
 
 // Satu titik penempatan sebagai ANGKA, plus tombol kembali ke tengah bidang.

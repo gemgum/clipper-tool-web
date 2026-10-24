@@ -11,7 +11,7 @@
 //
 // Ikon: lucide-react (ISC) — alasannya di gui/app/page.tsx.
 import { copyText } from "../copy-link";
-import { ChevronLeft, ChevronRight, Copy, Download, Eye, ImageIcon, ImagePlus, Plus, X, RectangleVertical, Sparkles, Stamp, Type, Bookmark } from "lucide-react";
+import { Check, ChevronLeft, Crop as CropIcon, ChevronRight, Copy, Download, Eye, ImageIcon, ImagePlus, Plus, X, RectangleVertical, Sparkles, Stamp, Type, Bookmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../page-header";
@@ -24,11 +24,13 @@ import EmptyState from "../empty-state";
 import { useAI } from "../ai";
 import { AlignPicker, Segmented, Toggle, type Align } from "../clip-steps";
 import TabCard, { Group, Pad, Row, Split } from "../tab-card";
-import Stage, { Shot, StageFrame } from "../stage";
+import Stage, { Shot, StageBar, StageFrame } from "../stage";
 import Picker from "../picker";
-import Guides, { GridPicker } from "../guides";
+import Guides from "../guides";
+import CropDialog, { type Crop } from "../crop";
+import Select from "../select";
 import { CENTER_X } from "../drag";
-import ColorPanel, { toHex } from "../color-panel";
+import ColorPanel, { isDark, toHex } from "../color-panel";
 import { watermarkColors } from "../watermark-panel";
 import { watermarkToAPI } from "../watermark-model";
 import type { Format } from "../watermark-model";
@@ -58,7 +60,11 @@ type Feed = { id: string; name: string; url: string; topic: string };
 type Config = { feeds: Feed[]; has_browser: boolean; browser: string };
 type Violation = { kind: string; text: string; detail: string };
 // Geometry = card.Geometry: letak area foto & batas geser, piksel kanvas.
-type Geometry = { width: number; height: number; photo_top: number; photo_h: number; photo_base: number; scale: number; offset_w: number; offset_h: number; pages: number };
+type Geometry = { width: number; height: number; photo_top: number; photo_h: number; photo_base: number; scale: number; offset_w: number; offset_h: number; pages: number;
+  ill?: { index: number; x: number; y: number; w: number; h: number; base_x: number; base_y: number } };
+// Ill = foto lanjutan carousel: gambar di zona atas kartu ke-`page` (2 = kartu
+// kedua), digeser dx/dy dari tempat bawaannya (piksel kanvas).
+type Ill = { image: string; page: number; size: "s" | "m" | "l"; dx: number; dy: number; w?: number; h?: number; crop?: Crop | null };
 type Saved = { id: string; file: string; zip: string; width: number; height: number; bytes: number; pages?: number };
 type CardItem = { id: string; made: string; bytes: number; file: string; zip: string; title?: string; source?: string };
 
@@ -115,6 +121,22 @@ export default function News() {
   // story = isi halaman lanjutan carousel yang ditulis AI (bisa disunting);
   // kosong = paragraf asli artikel.
   const [story, setStory] = useState("");
+  // useSummary = ringkasan dipakai di kartu pertama (centang di tab Text).
+  const [useSummary, setUseSummary] = useState(true);
+  // ills = foto lanjutan carousel; selIll = yang sedang dipilih (daftar & pratinjau).
+  const [ills, setIlls] = useState<Ill[]>([]);
+  const [selIll, setSelIll] = useState(-1);
+  // cropIll = foto lanjutan yang sedang di-crop (jendela CropDialog), -1 = tidak ada.
+  const [cropIll, setCropIll] = useState(-1);
+  const illSrc = (image: string) => (image.startsWith("http") ? image : eng(`/api/image?path=${encodeURIComponent(image)}`));
+  // boxPhoto = gaya box: foto artikel di belakang kartu lanjutan; mati = tampilan kartu berwarna kotak.
+  const [boxPhoto, setBoxPhoto] = useState(true);
+  const setIll = (i: number, patch: Partial<Ill>) => setIlls((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  // Foto baru = halaman berikutnya setelah yang terakhir dipakai (berurutan).
+  const addIll = (image: string) => {
+    setIlls((l) => [...l, { image, page: Math.max(1, ...l.map((x) => x.page)) + 1, size: "m", dx: 0, dy: 0 }]);
+    setSelIll(ills.length);
+  };
   const [writeError, setWriteError] = useState("");
   const [uploading, setUploading] = useState(false);
 
@@ -211,7 +233,7 @@ export default function News() {
   // Artikel baru = semua yang ditulis untuk artikel lama dibuang.
   const useArticle = useCallback((a: Article) => {
     setArticle({ ...EMPTY, ...a, images: a.images?.length ? a.images : (a.image ? [a.image] : []) });
-    setCaption(""); setHashtags(""); setStory(""); setChecks({ summary: [], caption: [], story: [] }); setWriteError("");
+    setCaption(""); setHashtags(""); setStory(""); setIlls([]); setSelIll(-1); setChecks({ summary: [], caption: [], story: [] }); setWriteError("");
     setShot(""); setSaved(null);
     if (a.title) applyDefault.current();
   }, []);
@@ -274,33 +296,36 @@ export default function News() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, article.url]);
 
-  const uploadImage = useCallback(async (f: File) => {
+  const uploadImage = useCallback(async (f: File, asIll = false) => {
     setUploading(true); setError("");
     try {
       const form = new FormData(); form.append("file", f);
       const res = await fetch(eng(`/api/news/image`), { method: "POST", body: form });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "upload failed");
-      setArticle((a) => ({ ...a, image: d.path, images: [...(a.images || []), d.path] }));
+      if (asIll) addIll(d.path);
+      else setArticle((a) => ({ ...a, image: d.path, images: [...(a.images || []), d.path] }));
     } catch (e: any) { setError(e.message); }
     finally { setUploading(false); }
-  }, []);
+  }, [ills.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const themeDef = THEMES.find((x) => x.id === theme) || THEMES[0];
   const cardBody = useCallback((r: string, previewOnly: boolean) => JSON.stringify({
-    article, theme, style: themeDef.style, ratio: r, align, title_align: titleAlign, lang, preview: previewOnly, caption,
+    article: useSummary ? article : { ...article, summary: "" }, theme, style: /^#/.test(theme) ? (isDark(theme) ? "dark" : "light") : themeDef.style, ratio: r, align, title_align: titleAlign, lang, preview: previewOnly, caption,
     hashtags: hashtags.split(/\s+/).map((h) => h.replace(/^#/, "")).filter(Boolean),
     photo: { fit: photoFit, fill: photoFill },
     fonts: { title: titleStep, paragraph: paragraphStep }, header: 0, card_top: cardTop, card_y: cardY,
     whole, body: !whole ? [] : story.trim() ? story.split(/\n+/).map((p) => p.trim()).filter(Boolean) : article.body || [],
     // Gaya box: halaman lanjutan memakai rupa kotak judul Mark (warna lewat toHex,
     // sama dengan pratinjau Mark). Gaya card: panel tema seperti kartu pertama.
+    illustrations: whole ? ills.filter((x) => x.image) : [],
     box: whole && layout === "box" ? {
+      no_photo: !boxPhoto,
       fill: toHex(m.watermark.hlBoxColor || "white"), text: toHex(m.watermark.hlColor),
       outline: m.watermark.hlOutline, outline_color: toHex(m.watermark.hlOutlineColor || (m.watermark.hlColor === "black" ? "white" : "black")),
       sharp: !!m.watermark.hlSharp,
     } : null,
-  }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, whole, story,
+  }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, whole, story, useSummary, ills, boxPhoto,
     layout, m.watermark.hlBoxColor, m.watermark.hlColor, m.watermark.hlOutline, m.watermark.hlOutlineColor, m.watermark.hlSharp]);
   // Yang benar-benar dirender (simpan & Preview result): kartu + gaya + Mark,
   // dibakar engine Mark yang sama dengan halaman Mark.
@@ -405,12 +430,12 @@ export default function News() {
   const newCard = () => { setScreen("pick"); setPicked(""); useArticle(EMPTY); setRenderError(""); };
 
   // ---------- isian tersimpan ----------
-  useKeep("news", { article, caption, hashtags, story, theme, ratio, align, titleAlign, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, saved, whole,
+  useKeep("news", { article, caption, hashtags, story, useSummary, ills, boxPhoto, theme, ratio, align, titleAlign, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, saved, whole,
     layout, mark: { watermark: m.watermark, logos: m.logos, logoOn: m.logoOn } });
   useRestore<Record<string, unknown>>("news", (v) => {
     const set = <T,>(fn: (x: T) => void, val: unknown) => { if (val !== undefined && val !== null) fn(val as T); };
-    set(setArticle, v.article); set(setCaption, v.caption); set(setHashtags, v.hashtags); set(setStory, v.story);
-    if (typeof v.theme === "string" && (v.theme === "auto" || THEMES.some((x) => x.id === v.theme))) setTheme(v.theme);
+    set(setArticle, v.article); set(setCaption, v.caption); set(setHashtags, v.hashtags); set(setStory, v.story); set(setUseSummary, v.useSummary); set(setIlls, v.ills); set(setBoxPhoto, v.boxPhoto);
+    if (typeof v.theme === "string" && (v.theme === "auto" || /^#[0-9a-f]{6}$/i.test(v.theme) || THEMES.some((x) => x.id === v.theme))) setTheme(v.theme);
     set(setRatio, v.ratio); set(setAlign, v.align); set(setTitleAlign, v.titleAlign); set(setCardY, v.cardY); set(setSaved, v.saved); set(setWhole, v.whole);
     if (v.layout === "card" || v.layout === "box") setLayout(v.layout);
     if (v.mark && typeof v.mark === "object") m.applyMark(v.mark as Record<string, unknown>);
@@ -564,9 +589,6 @@ export default function News() {
                     <span className="mc-note">{t("ncEdgeDrag")}</span>
                     <button type="button" className="ghost" onClick={resetLook} disabled={standard}>{t("fontReset")}</button>
                   </>}>
-                    <Row label={t("ratio")}>
-                      <Segmented label={t("ratio")} value={ratio} onChange={setRatio} options={RATIOS.map((r) => ({ value: r.id, name: t(r.key) }))} />
-                    </Row>
                     <Row label={t("wmStyle")} note={t(layout === "box" ? "ncStyleBoxNote" : "ncStyleCardNote")}>
                       <Segmented label={t("wmStyle")} value={layout} onChange={changeLayout}
                         options={[{ value: "card" as const, name: t("wmStyleLook") }, { value: "box" as const, name: t("wmStyleBox") }]} />
@@ -574,6 +596,12 @@ export default function News() {
                     {/* Carousel: kartu pertama + badan artikel di halaman lanjutan. */}
                     <Row label={t("ncWhole")} note={t("ncWholeNote")} off={!article.url}>
                       <Toggle checked={whole} onChange={(on) => { setWhole(on); setPage(0); }} label={t("ncWholeOn")} />
+                    </Row>
+                    {/* Gaya box di kartu lanjutan: foto artikel di belakang, atau
+                        tampilan kartu (panel penuh) dengan warna kotak. */}
+                    <Row label={t("ncBg")} off={layout !== "box" || !whole}>
+                      <Segmented label={t("ncBg")} value={boxPhoto ? "photo" : "color"} onChange={(v) => setBoxPhoto(v === "photo")}
+                        options={[{ value: "photo", name: t("ncBgPhoto") }, { value: "color", name: t("ncBgColor") }]} />
                     </Row>
                     {/* Sudut kotak judul: hanya ada di gaya box. */}
                     <Row label={t("wmCorner")} off={layout !== "box"}>
@@ -607,6 +635,9 @@ export default function News() {
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img alt="" src={src.startsWith("http") ? src : eng(`/api/image?path=${encodeURIComponent(src)}`)} />
                               </button>
+                              {/* Pakai juga sebagai foto lanjutan carousel (kartu 2 dst.). */}
+                              <button type="button" className="ghost tiny icon-only photo-add" aria-label={t("ncIllUse")} title={t("ncIllUse")}
+                                disabled={!whole} onClick={() => addIll(src)}><Plus className="ico" aria-hidden="true" /></button>
                               {/* Hapus dari pilihan; foto terpilih yang dihapus diganti foto pertama yang tersisa. */}
                               <button type="button" className="ghost tiny icon-only photo-del" aria-label={t("ncPhotoRemove")} title={t("ncPhotoRemove")}
                                 onClick={() => setArticle((a) => {
@@ -624,6 +655,43 @@ export default function News() {
                         </div>
                       </Pad>
                       <Row label={t("imageURL")}><input value={article.image} aria-label={t("imageURL")} onChange={(e) => setArticle((a) => ({ ...a, image: e.target.value }))} /></Row>
+                </Group>
+              )}
+              {openTab === "photo" && (
+                // Foto lanjutan carousel: di zona atas kartu 2 dst., teks di bawahnya.
+                // Berurutan (foto ke-1 = kartu 2), halamannya bisa diganti per foto;
+                // posisinya diseret di pratinjau (menempel ke kisi).
+                <Group title={t("ncIllTitle")}>
+                  <Pad>
+                    <fieldset className="cp-plain nc-use-body" disabled={!whole}>
+                      <span className="mc-note">{whole ? t("ncIllNote") : t("ncIllOff")}</span>
+                      {ills.length > 0 ? (
+                        <ul className="item-list nc-ills">
+                          {ills.map((x, i) => (
+                            <li key={i} className={i === selIll ? "on" : ""} onClick={() => setSelIll(i)}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img className="nc-ill-thumb" alt="" src={illSrc(x.image)} />
+                              <div className="nc-ill-page">
+                                <Select value={String(x.page)} ariaLabel={t("ncIllPage")} onChange={(v) => { setIll(i, { page: Number(v) }); setPage(Number(v) - 1); }}
+                                  options={Array.from({ length: Math.max(pages, x.page) - 1 }, (_, k) => ({ value: String(k + 2), label: t("ncIllPageN", { n: k + 2 }) }))} />
+                              </div>
+                              <Segmented label={t("wmTextSize")} value={x.w ? ("" as "s") : x.size} onChange={(v) => setIll(i, { size: v, w: 0, h: 0 })}
+                                options={[{ value: "s" as const, name: "S" }, { value: "m" as const, name: "M" }, { value: "l" as const, name: "L" }]} />
+                              <button type="button" className={"ghost tiny icon-only" + (x.crop ? " active" : "")} aria-label={t("cropTitle")} title={t("cropTitle")}
+                                onClick={(e) => { e.stopPropagation(); setCropIll(i); }}><CropIcon className="ico" aria-hidden="true" /></button>
+                              <button type="button" className="ghost tiny icon-only" aria-label={t("ncPhotoRemove")} title={t("ncPhotoRemove")}
+                                onClick={(e) => { e.stopPropagation(); setIlls((l) => l.filter((_, j) => j !== i)); setSelIll(-1); }}><X className="ico" aria-hidden="true" /></button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <span className="meta">{t("ncIllNone")}</span>}
+                      <label className="ghost nc-ill-upload">
+                        <input type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={uploading || !whole}
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f, true); e.target.value = ""; }} />
+                        <ImagePlus className="ico" aria-hidden="true" /> {uploading ? "…" : t("ncIllUpload")}
+                      </label>
+                    </fieldset>
+                  </Pad>
                 </Group>
               )}
 
@@ -647,17 +715,26 @@ export default function News() {
                     {/* Ringkasan hanya ada di kartu News: mati di gaya box. */}
                     <fieldset className="cp-plain" disabled={layout === "box"}>
                     <div className="nc-pad-head">
-                      <label className="mc-r-l" htmlFor="nc-sum">{t("ncSummaryLabel")}</label>
-                      <button type="button" className="ai-btn" onClick={() => write("summary")} disabled={!!writing || !article.url}>
+                      {/* Centang = ringkasan dipakai di kartu. Mati: teksnya tetap
+                          disimpan, kartu tampil tanpa ringkasan (judul membesar). */}
+                      <label className={"nc-use" + (useSummary ? " on" : "")}>
+                        <input type="checkbox" checked={useSummary} onChange={(e) => setUseSummary(e.target.checked)} />
+                        <span className="nc-use-box" aria-hidden="true"><Check className="ico" /></span>
+                        <span className="nc-use-text">{t("ncSummaryLabel")}</span>
+                        <span className="nc-use-state">{t(useSummary ? "ncUseOn" : "ncUseOff")}</span>
+                      </label>
+                      <button type="button" className="ai-btn" onClick={() => write("summary")} disabled={!!writing || !article.url || !useSummary}>
                         <Sparkles className="ico" aria-hidden="true" /> {writing === "summary" ? t("analyzing") : t("ncSummarise")}
                       </button>
                     </div>
-                    <textarea id="nc-sum" rows={3} value={article.summary} onChange={(e) => { setArticle((a) => ({ ...a, summary: e.target.value })); setChecks((c) => ({ ...c, summary: [] })); }} />
+                    <fieldset className="cp-plain nc-use-body" disabled={!useSummary}>
+                    <textarea id="nc-sum" rows={3} value={article.summary} aria-label={t("ncSummaryLabel")} onChange={(e) => { setArticle((a) => ({ ...a, summary: e.target.value })); setChecks((c) => ({ ...c, summary: [] })); }} />
                     <div className="nc-count">
                       <span className={"count-" + band}>{t(band === "ok" ? "ncCharsOk" : band === "dense" ? "ncCharsDense" : "ncCharsLong", { n })}</span>
                       <span className="meta">{t("ncSafeLimit")}</span>
                     </div>
                     <Checks list={checks.summary} />
+                    </fieldset>
                     {writeError && <p className="nc-note-err">{writeError}</p>}
                     </fieldset>
                   </Pad>
@@ -715,9 +792,9 @@ export default function News() {
                   return (
                     <Group title={t("wmTabHeadline")}>
                       <Split sideOff={!box} side={<>
-                        <span className="mc-r-l">{t("outline")}</span>
-                        <Stepper value={m.watermark.hlOutline} onChange={(v) => m.setWatermark({ hlOutline: v })} min={0} max={12} step={1} suffix="px" />
-                        <ColorPanel targets={watermarkColors(m.watermark, m.setWatermark, t, true)} />
+                        {/* Tebal garis tepi ada di sasaran Outline panel warna; tongkat
+                            ajaib = warna otomatis dari foto artikel (Text & Box). */}
+                        <ColorPanel targets={watermarkColors(m.watermark, m.setWatermark, t, true, article.image ? m.autoColor : undefined)} />
                       </>}>
                         <Row label={t("wmTheme")} off={box}>
                           {/* Auto: engine mencari warna yang menyambung dasar foto artikel
@@ -761,20 +838,18 @@ export default function News() {
               <button type="button" className="wm-preview-btn" disabled={!article.title || shooting || (layout === "card" && !config?.has_browser)} onClick={previewResult}>
                 <Eye className="ico" aria-hidden="true" /> {shooting ? t("wmPreviewing") : t("wmPreviewResult")}
               </button>
-            }
-            tools={<>
-              {/* Carousel: pindah halaman pratinjau. */}
-              {pages > 1 && (
-                <div className="nc-pager" role="group" aria-label={t("ncPages")}>
-                  <button type="button" className="ghost tiny icon-only" aria-label={t("ncPagePrev")} disabled={page === 0} onClick={() => setPage(page - 1)}>
-                    <ChevronLeft className="ico" aria-hidden="true" /></button>
-                  <span>{page + 1} / {pages}</span>
-                  <button type="button" className="ghost tiny icon-only" aria-label={t("ncPageNext")} disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>
-                    <ChevronRight className="ico" aria-hidden="true" /></button>
-                </div>
-              )}
-              <GridPicker grid={grid} setGrid={setGrid} always={gridAlways} setAlways={setGridAlways} />
-            </>}>
+            }>
+              <StageBar grid={{ grid, setGrid, always: gridAlways, setAlways: setGridAlways }}
+                ratio={{ label: t("ratio"), value: ratio, onChange: setRatio, options: RATIOS.map((r) => ({ value: r.id, label: r.id })) }}
+                lead={pages > 1 && (
+                  <div className="nc-pager" role="group" aria-label={t("ncPages")}>
+                    <button type="button" className="ghost tiny icon-only" aria-label={t("ncPagePrev")} disabled={page === 0} onClick={() => setPage(page - 1)}>
+                      <ChevronLeft className="ico" aria-hidden="true" /></button>
+                    <span>{page + 1} / {pages}</span>
+                    <button type="button" className="ghost tiny icon-only" aria-label={t("ncPageNext")} disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>
+                      <ChevronRight className="ico" aria-hidden="true" /></button>
+                  </div>
+                )} />
             <StageFrame>
               <div className="nc-card nc-live" ref={cardRef} style={{ aspectRatio: ratio.replace(":", " / "), "--pvh": `${frameH}px` } as React.CSSProperties}>
                 {layout === "box" && page === 0 ? (
@@ -785,13 +860,53 @@ export default function News() {
                   <iframe title={t("previewTitle")} srcDoc={live.html} sandbox="" tabIndex={-1}
                     style={{ width: geo.width, height: geo.height, transform: `scale(${k})` }} />
                   {page === 0 && <div className="nc-drag can" {...edgeDrag} style={{ top: (geo.photo_top + geo.photo_h * 0.75) * k, bottom: 0 }} />}
+                  {/* Foto lanjutan halaman ini: seret (menempel ke kisi), klik = opsi halaman & ukuran. */}
+                  {page > 0 && geo.ill && ills[geo.ill.index] && (() => {
+                    const g = geo.ill, x = ills[g.index];
+                    // Ukuran & tempat bawaan dihitung di sini dari tarikan (w/h),
+                    // supaya kotaknya ikut tetikus tanpa menunggu engine.
+                    const w = x.w || g.w, h = x.h || g.h, baseX = x.w ? Math.round((geo.width - w) / 2) : g.base_x;
+                    const left = baseX + x.dx, top = g.base_y + x.dy;
+                    const drag = m.dragProps(left + w / 2, top + h / 2, (cx, cy) =>
+                      setIll(g.index, { dx: Math.round(cx - w / 2 - baseX), dy: Math.round(cy - h / 2 - g.base_y) }),
+                      g.base_y + h / 2, m.fh, baseX + w / 2);
+                    // Sudut kanan bawah: tarik = ukuran kotak bebas (piksel kanvas).
+                    const resize = (e: React.PointerEvent) => {
+                      e.stopPropagation();
+                      const sx = e.clientX, sy = e.clientY;
+                      const el = e.currentTarget as HTMLElement;
+                      el.setPointerCapture(e.pointerId);
+                      const mv = (ev: PointerEvent) => setIll(g.index, {
+                        w: Math.max(120, Math.round(w + ((ev.clientX - sx) * 2) / k)), h: Math.max(80, Math.round(h + (ev.clientY - sy) / k)),
+                      });
+                      const stop = () => { el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", stop); };
+                      el.addEventListener("pointermove", mv); el.addEventListener("pointerup", stop);
+                    };
+                    return <>
+                      <div className={"nc-ill-drag" + (selIll === g.index ? " on" : "")} {...drag}
+                        onPointerDown={(e) => { setSelIll(g.index); drag.onPointerDown(e); }}
+                        style={{ left: left * k, top: top * k, width: w * k, height: h * k }}>
+                        {selIll === g.index && <span className="nc-ill-resize" onPointerDown={resize} title={t("ncIllResize")} />}
+                      </div>
+                      {selIll === g.index && (
+                        <div className="nc-ill-bar">
+                          <Select value={String(x.page)} ariaLabel={t("ncIllPage")} onChange={(v) => { setIll(g.index, { page: Number(v) }); setPage(Number(v) - 1); }}
+                            options={Array.from({ length: Math.max(pages, x.page) - 1 }, (_, n) => ({ value: String(n + 2), label: t("ncIllPageN", { n: n + 2 }) }))} />
+                          <Segmented label={t("wmTextSize")} value={x.w ? ("" as "s") : x.size} onChange={(v) => setIll(g.index, { size: v, w: 0, h: 0 })}
+                            options={[{ value: "s" as const, name: "S" }, { value: "m" as const, name: "M" }, { value: "l" as const, name: "L" }]} />
+                          <button type="button" className={"ghost tiny icon-only" + (x.crop ? " active" : "")} aria-label={t("cropTitle")} title={t("cropTitle")}
+                            onClick={() => setCropIll(g.index)}><CropIcon className="ico" aria-hidden="true" /></button>
+                        </div>
+                      )}
+                    </>;
+                  })()}
                 </> : <span className="meta">{t("ncPreviewWait")}</span>}
                 {cardW > 0 && <Guides grid={grid} visible={gridAlways || m.dragAt !== null} playH={m.fh}
                   atX={(m.dragAt?.x ?? m.placed[m.sel]?.x) === CENTER_X} atY={(m.dragAt?.y ?? m.placed[m.sel]?.y) === m.fh / 2} dragAt={m.dragAt} />}
                 {/* Logo & judul Mark di atas kartu — lapisan yang sama dengan halaman Mark. */}
                 {/* Halaman lanjutan carousel: hanya logo — judul/kotak judul milik kartu pertama. */}
                 {cardW > 0 && <MarkLayers m={page === 0 ? m : { ...m, nb: null, hlLines: [] }} frameH={frameH} />}
-                {layout === "card" && band === "long" && <span className="nc-warn">{t("ncTooLongOnCard")}</span>}
+                {layout === "card" && useSummary && band === "long" && <span className="nc-warn">{t("ncTooLongOnCard")}</span>}
               </div>
             </StageFrame>
           </Stage>
@@ -862,6 +977,10 @@ export default function News() {
             </StageFrame>
           </Stage>
         </div>
+      )}
+      {cropIll >= 0 && ills[cropIll] && (
+        <CropDialog src={illSrc(ills[cropIll].image)} crop={ills[cropIll].crop}
+          onApply={(c) => { setIll(cropIll, { crop: c }); setCropIll(-1); }} onClose={() => setCropIll(-1)} />
       )}
       {shot && <Shot src={shot} label={t("wmPreviewResult")} onClose={() => setShot("")} />}
       {tpl.confirmEl}

@@ -2,6 +2,8 @@
 
 import { Wand2 } from "lucide-react";
 import { useI18n } from "./i18n";
+import ColorWheel from "./color-wheel";
+import Popover from "./popover";
 
 // Tampilan jadi kartu berita (DESIGN-NEWSCARD §5.2 + empat tambahan pemilik
 // 9 Oktober 2026). Warnanya ditetapkan engine (card.themeTable); di sini hanya
@@ -17,7 +19,7 @@ export const THEMES = [
   { id: "plum", key: "ncThemePlum", swatch: "#2E1F4A", style: "dark" },
 ] as const;
 
-// ThemePicker = kisi 4x2 contoh warna (nama hanya di title & aria-label) yang
+// ThemePicker = kisi 4x2: tujuh contoh warna + satu warna bebas (nama hanya di title & aria-label) yang
 // melebar penuh, plus tombol "Auto from image" opsional di kanan setinggi dua
 // baris warna. SATU pemilih untuk News dan Watermark.
 export default function ThemePicker({ value, onChange, label, auto }: {
@@ -26,15 +28,21 @@ export default function ThemePicker({ value, onChange, label, auto }: {
   auto?: { onClick: () => void; disabled?: boolean };
 }) {
   const { t } = useI18n();
+  const custom = /^#[0-9a-f]{6}$/i.test(value);
   return (
     <div className={"theme-pick" + (auto ? " with-auto" : "")}>
       <div className="theme-grid" role="group" aria-label={label}>
-        {THEMES.map((x) => (
+        {/* Tujuh tema + kotak terakhir = warna bebas (roda warna); nilainya #rrggbb. */}
+        {THEMES.filter((x) => x.id !== "plum").map((x) => (
           <button key={x.id} type="button" className={"theme-tile" + (value === x.id ? " on" : "")}
             aria-pressed={value === x.id} aria-label={t(x.key)} title={t(x.key)} onClick={() => onChange(x.id)}>
             <span className="theme-swatch" style={{ background: x.swatch }} />
           </button>
         ))}
+        <Popover width={460} ariaLabel={t("wmCustomColor")} buttonClass={"theme-tile theme-custom" + (custom ? " on" : "")}
+          label={<span className="theme-swatch" style={custom ? { background: value } : undefined} />}>
+          {() => <ColorWheel value={custom ? value.toLowerCase() : "#2e1f4a"} onChange={onChange} />}
+        </Popover>
       </div>
       {auto && (
         <button type="button" className={"ghost theme-auto" + (value === "auto" ? " active" : "")}

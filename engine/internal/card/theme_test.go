@@ -173,3 +173,49 @@ func TestCarouselShortLinesCountAsLines(t *testing.T) {
 		t.Fatalf("halaman gaya box harus memakai kotak Mark: err=%v", err)
 	}
 }
+
+// Ilustrasi page 2: zonanya dicadangkan (halaman itu memuat lebih sedikit),
+// Geometry.Ill menunjuk kotaknya yang sudah digeser, dan gaya box tanpa foto
+// latar memakai tampilan kartu berwarna kotak.
+func TestCarouselIllustration(t *testing.T) {
+	var body []string
+	for i := 0; i < 12; i++ {
+		body = append(body, strings.Repeat("Kalimat berita yang cukup panjang untuk mengisi baris. ", 3))
+	}
+	base := Request{Whole: true, Ratio: Ratio45, Article: news.Article{Title: "Judul"}, Body: body}
+	with := base
+	with.Illustrations = []Illustration{{Image: "data:image/png;base64,AAAA", Page: 2, Size: "l", DX: 10, DY: -5}}
+	p0, p1 := Pages(base, 1080, 1350), Pages(with, 1080, 1350)
+	if len(p1) < len(p0) {
+		t.Fatalf("ilustrasi tidak boleh mengurangi jumlah halaman: %d → %d", len(p0), len(p1))
+	}
+	with.Page = 1
+	with.Box = &PageBox{Fill: "#123456", Text: "#fafafa", NoPhoto: true}
+	html, geo, err := New(nil, t.TempDir()).HTML(context.Background(), with)
+	if err != nil || geo.Ill == nil || geo.Ill.Index != 0 || geo.Ill.X != geo.Ill.BaseX+10 || geo.Ill.Y != geo.Ill.BaseY-5 {
+		t.Fatalf("geometri ilustrasi salah: %+v err=%v", geo.Ill, err)
+	}
+	h := string(html)
+	if !strings.Contains(h, `class="ill"`) || strings.Contains(h, `class="box"`) || !strings.Contains(h, "background:#123456") {
+		t.Fatal("box tanpa foto latar harus berupa panel kartu berwarna kotak, dengan ilustrasi")
+	}
+}
+
+// Crop: potongan setengah kanan gambar 2:1 (AR 1) di kotak 600×400 tampil
+// 400×400 di tengah; gambarnya 800 lebar digeser -400 supaya separuh kanan
+// yang terlihat.
+func TestIllCropCSS(t *testing.T) {
+	dw, dh, dl, dt, iw, ih, il, it := illCropCSS(&Crop{X: 0.5, Y: 0, W: 0.5, H: 1, AR: 1}, 600, 400)
+	if dw != 400 || dh != 400 || dl != 100 || dt != 0 || iw != 800 || ih != 400 || il != -400 || it != 0 {
+		t.Fatalf("salah: %d %d %d %d %d %d %d %d", dw, dh, dl, dt, iw, ih, il, it)
+	}
+}
+
+// Tema berupa kode warna (pemilih warna bebas): panel = warna itu, judul terang di panel gelap.
+func TestCustomHexTheme(t *testing.T) {
+	b := New(nil, t.TempDir())
+	tc := b.themeFor(context.Background(), Request{Theme: "#123456"}, false)
+	if tc == nil || !strings.EqualFold(tc.Panel, "#123456") || tc.Title != "#FFFFFF" {
+		t.Fatalf("tema kode warna salah: %+v", tc)
+	}
+}

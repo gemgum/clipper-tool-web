@@ -227,6 +227,14 @@ export function useMark({ format, first, timed = false, grid }: { format: Format
   const applyLook = (theme: string) =>
     post<{ box: string; text: string; badge: string; on_badge: string }>("/api/watermark/look", { theme, file: first, format, card_y: watermark.hlCardY || 0 })
       .then((c) => setWatermark({ hlLook: theme, hlBoxColor: c.box, hlColor: c.text, hlBadge: c.badge, hlOnBadge: c.on_badge })).catch(() => {});
+  // Warna otomatis (tongkat ajaib di panel Colour). Box = warna panel dari
+  // gambar seperti kartu (Look "auto"), teks ikut supaya terbaca. Text = warna
+  // paling terbaca di atas latarnya: kotak bila menyala, selain itu gambarnya.
+  const autoColor = (target: "text" | "box") => {
+    const theme = target === "text" && watermark.hlBox ? toHex(watermark.hlBoxColor || "white") : "auto";
+    post<{ box: string; text: string }>("/api/watermark/look", { theme, file: first, format, card_y: watermark.hlCardY || 0 })
+      .then((c) => setWatermark(target === "box" ? { hlBoxColor: c.box, hlColor: c.text } : { hlColor: c.text })).catch(() => {});
+  };
   // Berkas pertama / format berganti → warna dari gambar dihitung ulang.
   useEffect(() => {
     const l = watermark.hlLook;
@@ -256,7 +264,7 @@ export function useMark({ format, first, timed = false, grid }: { format: Format
   return {
     fw, fh, format, first, watermark, setWatermark, logoOn, setLogoOn, logos, setLogos, setLogo, sel, setSel, cur, putLogo,
     dims, logoURL, onLogoLoad, layout, nb, cardStyle, cardOn, frameCardY, placed, curCell, otherCells, placeAt, eff,
-    fontScale, boxRef, dragAt, dragProps, stuck, logoDrag, toggleLock, hlLines, hlAt, headlineDrag, applyLook, applyMark,
+    fontScale, boxRef, dragAt, dragProps, stuck, logoDrag, toggleLock, hlLines, hlAt, headlineDrag, applyLook, applyMark, autoColor,
   };
 }
 export type Mark = ReturnType<typeof useMark>;
@@ -384,7 +392,7 @@ export function MarkLogoGroup({ m, web, openPicker, setError }: {
 export function MarkHeadline({ m }: { m: Mark }) {
   const { t } = useI18n();
   const { watermark, setWatermark, cardStyle, fh } = m;
-  const [fmt, setFmt] = useSticky<"size" | "outline" | "align">("mark.fmt", "size");
+  const [fmt, setFmt] = useSticky<string>("mark.fmt", "size");
   return (
     // SATU grup: sakelar kotak judul, lalu baris di kiri dan panel
     // warna di kanan. Baris khusus kotak judul selalu ada — dimatikan,
@@ -407,12 +415,13 @@ export function MarkHeadline({ m }: { m: Mark }) {
       <Split side={<>
         <span className="mc-r-l">{t("wmFormatTitle")}</span>
         {(() => {
-          // Kartu (Look) tidak punya garis tepi: Outline mati, sama dengan Box & Outline di Colour.
-          const off = (k: string) => (k === "align" && !watermark.hlBox) || (k === "outline" && cardStyle);
-          const cur = off(fmt) ? "size" : fmt;
+          // Tebal garis tepi pindah ke panel Colour (sasaran Outline).
+          const off = (k: string) => k === "align" && !watermark.hlBox;
+          // Simpanan lama bisa berisi "outline" (sudah pindah ke panel Colour) → size.
+          const cur = fmt !== "align" || off(fmt) ? "size" : "align";
           return <>
             <div className="segmented cp-targets" role="group" aria-label={t("wmFormatTitle")}>
-              {([["size", t("wmFmtSize")], ["outline", t("outline")], ["align", t("wmFmtAlign")]] as const).map(([k, name]) => (
+              {([["size", t("wmFmtSize")], ["align", t("wmFmtAlign")]] as const).map(([k, name]) => (
                 <button key={k} type="button" className={k === cur ? "on" : ""} aria-pressed={k === cur}
                   disabled={off(k)} onClick={() => setFmt(k)}>{name}</button>
               ))}
@@ -421,15 +430,13 @@ export function MarkHeadline({ m }: { m: Mark }) {
             <div className="wm-fmt-slot">
               {cur === "size" && <Segmented label={t("wmTextSize")} value={watermark.hlSize} onChange={(v) => setWatermark({ hlSize: v })}
                 options={[{ value: SIZES[0], name: t("wmSmall") }, { value: SIZES[1], name: t("wmMedium") }, { value: SIZES[2], name: t("wmLarge") }]} />}
-              {/* Outline: tepi HURUF pada judul biasa, tepi KOTAK pada kotak judul. */}
-              {cur === "outline" && <Stepper value={watermark.hlOutline} onChange={(v) => setWatermark({ hlOutline: v })} min={0} max={12} step={1} suffix="px" />}
               {cur === "align" && <AlignPicker label={t("wmAlign")} value={watermark.hlAlign || "left"} onChange={(v) => setWatermark({ hlAlign: v })} />}
             </div>
           </>;
         })()}
         {/* Kartu: warna panel datang dari Theme, dan kartu tidak bergaris tepi —
             hanya Text yang masih diatur di sini. */}
-        <ColorPanel targets={watermarkColors(watermark, setWatermark, t, true).map((x) => cardStyle && x.key !== "text" ? { ...x, off: true } : x)} />
+        <ColorPanel targets={watermarkColors(watermark, setWatermark, t, true, m.first ? m.autoColor : undefined).map((x) => cardStyle && x.key !== "text" ? { ...x, off: true } : x)} />
       </>}>
         <Row label={t("wmTitleText")}>
           {/* SATU kolom setinggi tetap di kedua mode (dulu input berganti

@@ -582,6 +582,12 @@ func (b *Builder) tone(ctx context.Context, url string) tone {
 }
 
 // autoLook = AutoLook foto artikel, disimpan per alamat (lihat tone).
+// AutoLookURL = autoLook untuk lapisan api: warna kotak "dari gambar" untuk
+// foto artikel News (alamat web atau data URI), yang bukan berkas lokal.
+func (b *Builder) AutoLookURL(ctx context.Context, url string) (LookColors, bool) {
+	return b.autoLook(ctx, url)
+}
+
 func (b *Builder) autoLook(ctx context.Context, url string) (LookColors, bool) {
 	key := url
 	if strings.HasPrefix(url, "data:") {

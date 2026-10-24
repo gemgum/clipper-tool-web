@@ -430,6 +430,8 @@ sama dengan `--stage-in` di CSS. Kartu di kolom terbatas wajib
 | Mark: panel Logo / Headline / Template | `mark.tsx` (`MarkLogoGroup`, `MarkHeadline`, `MarkTemplates`, `useTemplates`) |
 | Mark: lapisan di pratinjau | `mark.tsx` (`MarkLayers`, `MarkFont`) |
 | jendela "Preview result" | `stage.tsx` (`Shot`) |
+| baris alat di atas pratinjau (kisi + garis tengah + rasio, + pager News) | `stage.tsx` (`StageBar`) — Mark DAN News |
+| warna bebas (roda hue, S/L, HEX/RGB/CMYK/HSL, warna terakhir) | `color-wheel.tsx`, dibuka dari `ColorPanel` |
 
 Nama warna (`white`, `yellow`, `black`, `red`) diterjemahkan HANYA oleh
 `toHex`, dengan angka yang sama persis dengan `subtitle.assColor` di engine.

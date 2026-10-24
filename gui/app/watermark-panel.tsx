@@ -71,9 +71,7 @@ export default function WatermarkPanel({ watermark, setWatermark, onPickImage }:
         <Row label={t("headlineSize")}>
           <Stepper value={watermark.hlSize} onChange={(v) => setWatermark({ hlSize: v })} min={24} max={140} step={2} />
         </Row>
-        <Row label={t("outline")}>
-          <Stepper value={watermark.hlOutline} onChange={(v) => setWatermark({ hlOutline: v })} min={0} max={12} />
-        </Row>
+        {/* Tebal garis tepi ada di panel warna, sasaran Outline (watermarkColors). */}
         <Row label={t("headlinePosition")}>
           <Position x={Math.round(hlAt.x)} y={Math.round(hlAt.y)} onReset={() => setWatermark({ hlDX: 0, hlDY: 0 })} />
         </Row>
@@ -84,8 +82,14 @@ export default function WatermarkPanel({ watermark, setWatermark, onPickImage }:
 // Sasaran warna headline — SATU daftar untuk halaman klip dan Watermark.
 // withBox: halaman yang punya kotak judul (Watermark) selalu menampilkan "Box",
 // mati selagi kotaknya mati; halaman klip tidak punya kotak judul sama sekali.
-export const watermarkColors = (w: Watermark, set: (patch: Partial<Watermark>) => void, t: (k: MessageKey) => string, withBox = false): ColorTarget[] => [
-  { key: "text", name: t("mcColText"), value: w.hlColor, set: (c) => set({ hlColor: c }) },
-  ...(withBox ? [{ key: "box", name: t("wmColBox"), value: w.hlBoxColor || "white", set: (c: string) => set({ hlBoxColor: c }), off: !w.hlBox }] : []),
-  { key: "outline", name: t("outline"), value: w.hlOutlineColor || (w.hlColor === "black" ? "white" : "black"), set: (c) => set({ hlOutlineColor: c }) },
+// auto = warna otomatis (tongkat ajaib) untuk Text & Box, dari useMark.autoColor
+// (halaman yang punya gambar dasar). Tebal Outline ikut sasaran Outline.
+export const watermarkColors = (w: Watermark, set: (patch: Partial<Watermark>) => void, t: (k: MessageKey) => string, withBox = false,
+  auto?: (target: "text" | "box") => void): ColorTarget[] => [
+  { key: "text", name: t("mcColText"), value: w.hlColor, set: (c) => set({ hlColor: c }),
+    ...(auto ? { auto: { onClick: () => auto("text"), title: t("cpAutoText") } } : {}) },
+  ...(withBox ? [{ key: "box", name: t("wmColBox"), value: w.hlBoxColor || "white", set: (c: string) => set({ hlBoxColor: c }), off: !w.hlBox,
+    ...(auto ? { auto: { onClick: () => auto("box"), title: t("cpAutoBox") } } : {}) }] : []),
+  { key: "outline", name: t("outline"), value: w.hlOutlineColor || (w.hlColor === "black" ? "white" : "black"), set: (c) => set({ hlOutlineColor: c }),
+    width: { value: w.hlOutline, onChange: (v: number) => set({ hlOutline: v }) } },
 ];

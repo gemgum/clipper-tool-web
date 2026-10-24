@@ -25,10 +25,10 @@ import Alerts from "../alerts";
 import { watermarkToAPI, watermarkOn, frameSize } from "../watermark-model";
 import type { Format } from "../watermark-model";
 import { CENTER_X } from "../drag";
-import Guides, { GridPicker } from "../guides";
+import Guides from "../guides";
 import { Segmented } from "../clip-steps";
 import TabCard, { Group, Row, Split } from "../tab-card";
-import Stage, { Shot, StageFrame, useStageWidth } from "../stage";
+import Stage, { Shot, StageBar, StageFrame, useStageWidth } from "../stage";
 import { TechNotes } from "../log-panel";
 import { useJob } from "../use-job";
 import Picker from "../picker";
@@ -236,11 +236,7 @@ export default function WatermarkPage() {
                     </div>
                   </>}
                 </>}>
-                    <Row label={t("wmFormatTitle")} note={t("wmFormatTip")}>
-                      <Segmented label={t("wmFormatTitle")} value={format} onChange={setFormat}
-                        options={[{ value: "short" as Format, name: t("wmFormatShort") }, { value: "feed45" as Format, name: t("wmFormatFeed45") },
-                          { value: "feed11" as Format, name: t("wmFormatFeed11") }]} />
-                    </Row>
+                    {/* Format (rasio) ada di baris alat di atas pratinjau (StageBar), sama dengan News. */}
                     <Row label={t("wmFitTitle")}>
                       <Segmented label={t("wmFitTitle")} value={fit} onChange={setFit}
                         options={[{ value: "crop" as const, name: t("wmFitCrop") }, { value: "whole" as const, name: t("wmFitWhole") }]} />
@@ -283,8 +279,10 @@ export default function WatermarkPage() {
             <button type="button" className="wm-preview-btn" disabled={!first || shooting || nothing} title={t("wmPreviewTip")} onClick={previewResult}>
               <Eye className="ico" aria-hidden="true" /> {shooting ? t("wmPreviewing") : t("wmPreviewResult")}
             </button>
-          }
-          tools={<GridPicker grid={grid} setGrid={setGrid} always={gridAlways} setAlways={setGridAlways} />}>
+          }>
+          <StageBar grid={{ grid, setGrid, always: gridAlways, setAlways: setGridAlways }}
+            ratio={{ label: t("wmFormatTitle"), value: format, onChange: (v) => setFormat(v as Format),
+              options: [{ value: "short", label: "9:16" }, { value: "feed45", label: "4:5" }, { value: "feed11", label: "1:1" }] }} />
           <StageFrame>
             <div className="preview9x16 wm-frame" ref={m.boxRef}
               style={{ width: stageW, height: frameH, "--pvh": `${frameH}px` } as React.CSSProperties}>

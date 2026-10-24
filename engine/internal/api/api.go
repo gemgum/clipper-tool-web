@@ -509,6 +509,10 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Article.Image = img
+	if err := s.inlineIllustrations(&req.Request); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
 	id := previewID
 	if !req.Preview {
 		id = fmt.Sprintf("card-%d", time.Now().UnixNano())
@@ -617,6 +621,10 @@ func (s *Server) cardHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Article.Image = img
+	if err := s.inlineIllustrations(&req); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
 	page, geo, err := s.cards.HTML(r.Context(), req)
 	if err != nil {
 		writeErr(w, 400, err.Error())

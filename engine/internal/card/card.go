@@ -209,6 +209,8 @@ type Request struct {
 	// Box = gaya box untuk halaman lanjutan: foto artikel memenuhi bingkai dan
 	// teks di dalam kotak bergaya kotak judul Mark. nil = panel tema.
 	Box *PageBox `json:"box"`
+	// Illustrations = foto lanjutan carousel (pages.go).
+	Illustrations []Illustration `json:"illustrations"`
 	// Theme = salah satu dari empat tampilan jadi (DESIGN-NEWSCARD §5.2):
 	// dark | light | photo | paper. Kosong = perilaku lama (style + colors).
 	// Bila diisi, ia menang atas Colors.
@@ -417,15 +419,16 @@ func (b *Builder) Build(ctx context.Context, req Request, dir string, preview bo
 
 // Geometry = letak bagian kartu yang bisa diseret di pratinjau, piksel kanvas.
 type Geometry struct {
-	Width     int     `json:"width"`
-	Height    int     `json:"height"`
-	PhotoTop  int     `json:"photo_top"`  // tepi atas area foto (= pita CardTop)
-	PhotoH    int     `json:"photo_h"`    // tinggi area foto (sudah digeser CardY)
-	PhotoBase int     `json:"photo_base"` // tinggi area foto tanpa CardY
-	Scale     float64 `json:"scale"`      // piksel kanvas per piksel ruang 1920 (Header, CardTop)
-	OffsetW   int     `json:"offset_w"`   // batas geser foto mendatar (offsetLimit)
-	OffsetH   int     `json:"offset_h"`   // batas geser foto tegak
-	Pages     int     `json:"pages"`      // jumlah kartu carousel (1 = tanpa halaman lanjutan)
+	Width     int      `json:"width"`
+	Height    int      `json:"height"`
+	PhotoTop  int      `json:"photo_top"`     // tepi atas area foto (= pita CardTop)
+	PhotoH    int      `json:"photo_h"`       // tinggi area foto (sudah digeser CardY)
+	PhotoBase int      `json:"photo_base"`    // tinggi area foto tanpa CardY
+	Scale     float64  `json:"scale"`         // piksel kanvas per piksel ruang 1920 (Header, CardTop)
+	OffsetW   int      `json:"offset_w"`      // batas geser foto mendatar (offsetLimit)
+	OffsetH   int      `json:"offset_h"`      // batas geser foto tegak
+	Pages     int      `json:"pages"`         // jumlah kartu carousel (1 = tanpa halaman lanjutan)
+	Ill       *IllRect `json:"ill,omitempty"` // zona ilustrasi halaman lanjutan yang dipratinjau
 }
 
 // HTML = halaman kartu yang SAMA dengan yang difoto Chrome di Build, tanpa
@@ -439,8 +442,8 @@ func (b *Builder) HTML(ctx context.Context, req Request) ([]byte, Geometry, erro
 	width, height := Dims(req.Ratio)
 	pages := Pages(req, width, height)
 	if req.Page > 0 && req.Page <= len(pages) {
-		page, err := b.renderPage(ctx, req, width, height, req.Page+1, len(pages)+1, pages[req.Page-1])
-		return page, Geometry{Width: width, Height: height, Scale: float64(height) / 1920, Pages: len(pages) + 1}, err
+		page, ill, err := b.renderPage(ctx, req, width, height, req.Page+1, len(pages)+1, pages[req.Page-1])
+		return page, Geometry{Width: width, Height: height, Scale: float64(height) / 1920, Pages: len(pages) + 1, Ill: ill}, err
 	}
 	page, geo, err := b.render(ctx, req, width, height)
 	geo.Pages = len(pages) + 1
@@ -829,6 +832,14 @@ func (b *Builder) themeFor(ctx context.Context, req Request, hasImage bool) *the
 				tc = themeColors{Panel: p.Ink, Title: p.Paper, Body: p.Muted, Badge: p.Accent, OnBadge: p.OnAccent}
 			}
 		}
+		tc.PanelRGB = rgbOf(tc.Panel)
+		return &tc
+	}
+	// Warna bebas dari pemilih warna (kotak terakhir ThemePicker): panel =
+	// warna itu, judul/lencana dihitung Look supaya tetap terbaca.
+	if hex, ok := parseHex(req.Theme); ok {
+		c, _ := Look(hex, nil)
+		tc := themeColors{Panel: c.Panel, Title: c.Title, Body: c.Body, Badge: c.Badge, OnBadge: c.OnBadge}
 		tc.PanelRGB = rgbOf(tc.Panel)
 		return &tc
 	}

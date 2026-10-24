@@ -6,6 +6,10 @@
 // peta nama warna yang berbeda — tidak ada yang sama dengan engine.
 
 import { useEffect, useState } from "react";
+import ColorWheel from "./color-wheel";
+import Stepper from "./stepper";
+import { Wand2 } from "lucide-react";
+import Popover from "./popover";
 import { useI18n } from "./i18n";
 import type { MessageKey } from "./i18n";
 
@@ -75,7 +79,13 @@ function ColorCode({ value, onPick, label, bad }: { value: string; onPick: (c: s
 // Satu sasaran warna: nama di tombolnya, nilai sekarang, dan penyetelnya.
 // off = sasaran yang belum berlaku: tombolnya tetap ada tapi mati (jumlah tombol
 // tidak pernah berubah, jadi panelnya tidak pernah berubah tinggi).
-export type ColorTarget = { key: string; name: string; value: string; set: (hex: string) => void; off?: boolean };
+// auto = tombol tongkat ajaib (warna otomatis) menggantikan satu bulatan palet;
+// width = tebal garis (Outline) sebaris dengan kolom kode warna.
+export type ColorTarget = {
+  key: string; name: string; value: string; set: (hex: string) => void; off?: boolean;
+  auto?: { onClick: () => void; title: string };
+  width?: { value: number; onChange: (v: number) => void };
+};
 
 // ColorPanel = isi panel kanan <Split side={…}>. Sasaran yang hilang (mis. Box saat kotak
 // judul mati) jatuh ke sasaran pertama.
@@ -95,20 +105,30 @@ export default function ColorPanel({ targets }: { targets: ColorTarget[] }) {
         ))}
       </div>
       <div className="mc-cdots" role="group" aria-label={cur.name}>
-        {PALETTE.map((c) => {
+        {/* Sasaran bertongkat ajaib: merah muda keluar dari palet, tempatnya
+            dipakai tombol warna otomatis — jumlah bulatan tetap sepuluh. */}
+        {(cur.auto ? PALETTE.filter((c) => c.k !== "colorPink") : PALETTE).map((c) => {
           const on = hex === c.hex;
           return <button key={c.hex} type="button" className={"mc-cswatch" + (on ? " on" : "")} aria-pressed={on}
             aria-label={t(c.k)} title={t(c.k)} onClick={() => cur.set(c.hex)}>
             <span style={{ background: c.hex }} />
           </button>;
         })}
+        {cur.auto && (
+          <button type="button" className="mc-cswatch cp-wand" aria-label={cur.auto.title} title={cur.auto.title} onClick={cur.auto.onClick}>
+            <span><Wand2 className="ico" aria-hidden="true" /></span>
+          </button>
+        )}
       </div>
-      {/* Warna di luar palet: pemilih bawaan browser ATAU kode (HEX, rgb, hsl, cmyk, nama). */}
+      {/* Warna di luar palet: roda warna milik aplikasi (color-wheel.tsx) ATAU
+          kode (HEX, rgb, hsl, cmyk, nama). */}
       <div className="cp-custom">
-        <label className={"cp-any" + (PALETTE.some((c) => c.hex === hex) ? "" : " on")} title={t("wmCustomColor")}>
-          <input type="color" aria-label={t("wmCustomColor")} value={hex} onChange={(e) => cur.set(e.target.value)} />
-        </label>
+        <Popover width={460} ariaLabel={t("wmCustomColor")} buttonClass={"cp-any" + (PALETTE.some((c) => c.hex === hex) ? "" : " on")}
+          label={<span className="cp-any-ring" aria-hidden="true" />}>
+          {() => <ColorWheel value={hex} onChange={cur.set} />}
+        </Popover>
         <ColorCode value={hex} onPick={cur.set} label={`${cur.name}: ${t("wmColorCodeTip")}`} bad={t("wmColorCodeBad")} />
+        {cur.width && <Stepper value={cur.width.value} onChange={cur.width.onChange} min={0} max={12} step={1} suffix="px" />}
       </div>
     </>
   );

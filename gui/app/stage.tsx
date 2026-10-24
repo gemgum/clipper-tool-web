@@ -15,6 +15,8 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "./i18n";
+import { GridPicker } from "./guides";
+import Select from "./select";
 
 // Lebar BINGKAI (--stage-in di globals.css): lebar kolom (340, atau 280 di
 // jendela <= 1100 px) dikurangi 50 px padding & tepi kartu, dibatasi tinggi
@@ -57,6 +59,26 @@ export default function Stage({ title, action, badge, tools, help, bad, children
 }
 
 // StageFrame = slot tetap setinggi bingkai 9:16; bingkai apa pun di tengahnya.
+// StageBar = SATU baris alat DI ATAS bingkai, sama untuk Mark & News
+// (keputusan pemilik 25 Oktober 2026): [lead] · kisi + garis tengah · rasio.
+// Di atas bingkai, jadi tidak bergeser saat rasio berganti. lead = alat milik
+// halaman (pager carousel di News).
+export function StageBar({ lead, grid, ratio }: {
+  lead?: React.ReactNode;
+  grid: { grid: number; setGrid: (v: number) => void; always: boolean; setAlways: (v: boolean) => void };
+  ratio: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void };
+}) {
+  return (
+    <div className="stage-bar">
+      {lead}
+      <GridPicker inline {...grid} />
+      <div className="stage-bar-sel">
+        <Select value={ratio.value} onChange={ratio.onChange} ariaLabel={ratio.label} title={ratio.label} options={ratio.options} />
+      </div>
+    </div>
+  );
+}
+
 export function StageFrame({ children }: { children: React.ReactNode }) {
   return <div className="stage-slot">{children}</div>;
 }

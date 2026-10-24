@@ -241,6 +241,16 @@ func (s *Server) watermarkLook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	auto := req.Theme == "auto"
+	// Foto artikel News (alamat web / foto unggahan kartu): dibaca lewat card,
+	// bukan ffmpeg — tongkat ajaib warna kotak di halaman News.
+	if auto {
+		if url, err := s.inlineCardImage(req.File); err == nil && url != "" {
+			if c, ok := s.cards.AutoLookURL(r.Context(), url); ok {
+				writeJSON(w, 200, c)
+				return
+			}
+		}
+	}
 	var img image.Image
 	if file := hostPath(req.File); (auto || req.Theme == card.ThemePhoto) && file != "" {
 		fw, fh := config.FrameSize(req.Format)
