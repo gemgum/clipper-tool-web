@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageIcon, Lock, Magnet, Plus, Star, X } from "lucide-react";
 import { eng, post, upload } from "./engine";
 import { useI18n } from "./i18n";
-import { DEFAULT_WATERMARK, frameSize, headlineAnchor, headlineBox, watermarkToAPI, wrapHeadline } from "./watermark-model";
+import { DEFAULT_WATERMARK, frameSize, headlineAnchor, headlineBox, outlineColor, watermarkToAPI, wrapHeadline } from "./watermark-model";
 import type { Format, NewsLayout, Watermark } from "./watermark-model";
 import { useConfirm } from "./confirm";
 import { useLayerDrag } from "./drag";
@@ -23,6 +23,7 @@ import { baseName } from "./file-list";
 import Stepper from "./stepper";
 import { useSticky } from "./persist";
 import ThemePicker from "./themes";
+import { hexToRgb } from "./color-wheel";
 
 export const HL_FONT = "Montserrat";
 export const SIZES = [48, 64, 88];
@@ -527,7 +528,7 @@ export function MarkLayers({ m, frameH }: { m: Mark; frameH: number }) {
   // Ukuran huruf .ass → CSS: satuan Fontsize per tinggi bingkai, kali --pvh.
   const pv = (units: number) => `calc(${units / fh} * var(--pvh))`;
   // Garis tepi: warna pilihan, atau otomatis (hitam; putih untuk teks hitam).
-  const outline = toHex(eff.hlOutlineColor || (eff.hlColor === "black" ? "white" : "black"));
+  const outline = toHex(outlineColor(eff));
   const o = (eff.hlOutline * frameH) / fh;
   return <>
     {nb?.photo ? (
@@ -536,7 +537,7 @@ export function MarkLayers({ m, frameH }: { m: Mark; frameH: number }) {
       // digambar di sini dengan angka yang sama dengan subtitle.writeCard.
       (() => {
         const panel = toHex(eff.hlBoxColor || "white");
-        const rgb = [1, 3, 5].map((i) => parseInt(panel.slice(i, i + 2), 16)).join(",");
+        const rgb = hexToRgb(panel).join(",");
         const badge = toHex(eff.hlBadge || "#FFD400");
         const at = (a: string) => eff.hlAlign === "center" ? "center" : eff.hlAlign === "right" ? "flex-end" : a;
         return <>

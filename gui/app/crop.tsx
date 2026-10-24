@@ -5,8 +5,9 @@
 // Hasilnya pecahan gambar (0..1) + AR = rasio potongan dalam piksel asli —
 // engine memakainya untuk memuat potongan utuh di kotak ilustrasi (card.Crop).
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useI18n } from "./i18n";
+import { useEscape } from "./use-popup";
 
 export type Crop = { x: number; y: number; w: number; h: number; ar: number };
 
@@ -22,11 +23,7 @@ export default function CropDialog({ src, crop, onApply, onClose }: {
   const img = useRef<HTMLImageElement>(null);
   const grab = useRef<{ mode: string; px: number; py: number; r: typeof r } | null>(null);
 
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [onClose]);
+  useEscape(onClose);
 
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
   const down = (mode: string) => (e: React.PointerEvent) => {

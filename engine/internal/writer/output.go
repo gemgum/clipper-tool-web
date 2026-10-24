@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/gemgum/clipper/engine/internal/httpx"
 )
 
 // Post = berkas yang ditulis ke disk untuk satu artikel.
@@ -256,27 +256,19 @@ func saveImage(ctx context.Context, dir string, sources []Source) (string, error
 }
 
 func download(ctx context.Context, src, dir string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
+	raw, ct, err := httpx.GetImage(ctx, src, maxImageBytes)
 	if err != nil {
-		return "", err
-	}
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("image download returned HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("image download failed: %v", err)
 	}
 
-	name := "gambar" + imageExt(resp.Header.Get("Content-Type"), src)
+	name := "gambar" + imageExt(ct, src)
 	path := filepath.Join(dir, name)
 	f, err := os.Create(path)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
-	if _, err := io.Copy(f, io.LimitReader(resp.Body, maxImageBytes)); err != nil {
+	if _, err := f.Write(raw); err != nil {
 		os.Remove(path)
 		return "", err
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -36,7 +37,8 @@ func assColor(c string) string {
 		// Merah kartu berita (#B0121B), dipakai kotak judul (writeNewsBox).
 		return "&H001B12B0"
 	}
-	if strings.HasPrefix(c, "#") && len(c) == 7 {
+	// Hanya #rrggbb yang SAH: "#zzzzzz" dulu lolos dan menjadi warna ASS rusak.
+	if _, err := strconv.ParseUint(strings.TrimPrefix(c, "#"), 16, 32); err == nil && strings.HasPrefix(c, "#") && len(c) == 7 {
 		r, g, b := c[1:3], c[3:5], c[5:7]
 		return "&H00" + strings.ToUpper(b+g+r)
 	}
@@ -231,9 +233,9 @@ func writeHeadline(b *strings.Builder, watermark config.Watermark, text string, 
 // angka ini: pratinjau meminta tata letaknya ke engine (/api/watermark/layout),
 // jadi kotak di pratinjau = kotak di hasil.
 const (
-	newsMargin = 40 // jarak kotak ke tepi kiri & kanan bingkai
-	newsPad    = 32 // ruang napas di dalam kotak
-	newsRadius = 20 // sudut bulat; 0 bila Headline.Sharp
+	newsMargin = config.NewsBoxMargin
+	newsPad    = config.NewsBoxPad
+	newsRadius = config.NewsBoxRadius
 )
 
 // Box = tata letak kotak judul berita, ruang PlayRes.

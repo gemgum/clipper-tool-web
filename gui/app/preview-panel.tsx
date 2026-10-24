@@ -138,7 +138,6 @@ export default function PreviewPanel({
       if (!res.ok) throw new Error(data.error || t("errReadVideo"));
       setDuration(data.duration || 0);
       setHasAudio(data.has_audio !== false);
-      setHasAudio(data.has_audio !== false);
       setPreviewTime(Math.min(5, (data.duration || 10) / 2));
       setPreviewNonce((n) => n + 1);
       setPreviewOn(true);
@@ -151,7 +150,6 @@ export default function PreviewPanel({
   // tombol "reset" dan otomatis saat videonya berganti.
   const resetPreview = useCallback(() => {
     setPreviewOn(false);
-    setHasAudio(null);
     setHasAudio(null);
     setPreviewBusy(false);
     setDuration(0);

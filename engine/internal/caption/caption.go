@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"strings"
 	"unicode"
 
@@ -167,7 +168,7 @@ func Generate(ctx context.Context, complete writer.Completer, transcript string,
 		return nil, err
 	}
 
-	variants, err := parse(writer.ExtractJSON(raw))
+	variants, err := parse(textx.ExtractJSON(raw))
 	if err != nil {
 		return nil, writer.JSONError(opts.EngineName, raw, err)
 	}

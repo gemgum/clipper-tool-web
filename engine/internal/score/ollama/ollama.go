@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"io"
 	"net"
 	"net/http"
@@ -190,7 +191,7 @@ func (c *Client) Complete(ctx context.Context, system, user string, schema any, 
 
 	var cr chatResp
 	if err := json.Unmarshal(raw, &cr); err != nil {
-		return "", fmt.Errorf("the Ollama response could not be read (status %d): %s", resp.StatusCode, trunc(string(raw), 200))
+		return "", fmt.Errorf("the Ollama response could not be read (status %d): %s", resp.StatusCode, textx.Snip(string(raw), 200))
 	}
 	if cr.Error != "" {
 		return "", ollamaError(c.Model, cr.Error)
@@ -243,14 +244,6 @@ func ollamaError(model, msg string) error {
 		return fmt.Errorf("not enough RAM/VRAM for model %q: use a smaller model (%s)", model, msg)
 	}
 	return fmt.Errorf("Ollama failed to process the request: %s", msg)
-}
-
-func trunc(s string, n int) string {
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }
 
 // ModelInfo satu model terpasang di Ollama, sudah dinilai kelayakannya untuk
@@ -468,7 +461,7 @@ func Pull(ctx context.Context, url, model string, onProgress func(PullProgress))
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-		return fmt.Errorf("model download failed (status %d): %s", resp.StatusCode, trunc(string(raw), 200))
+		return fmt.Errorf("model download failed (status %d): %s", resp.StatusCode, textx.Snip(string(raw), 200))
 	}
 
 	// Tiap baris satu objek JSON. Baris terakhir yang berisi "error" menang atas
@@ -535,7 +528,7 @@ func (c *Client) PickMoments(ctx context.Context, cands []types.Candidate, offse
 		}
 	}
 	return nil, fmt.Errorf("local model %s returned JSON that could not be read (%d attempts): %w; reply: %s",
-		c.Model, pickAttempts, readErr, trunc(content, 300))
+		c.Model, pickAttempts, readErr, textx.Snip(content, 300))
 }
 
 // pickAttempts: berapa kali satu bagian diminta ulang bila balasannya bukan

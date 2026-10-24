@@ -145,6 +145,18 @@ func (s *Server) browse(w http.ResponseWriter, r *http.Request) {
 // Di Windows asli tidak ada yang diterjemahkan — di sana path itu sudah benar
 // apa adanya — tetapi kutipnya tetap dibuang, sebab Explorer yang sama juga
 // memasangnya di sana.
+// within = abs ada DI DALAM folder root (bukan root itu sendiri). Pagar
+// keamanan, jadi hanya ditulis sekali — dulu tersalin di dua tempat
+// newscard.go dengan aturan ".." yang berbeda.
+func within(root, abs string) bool {
+	r, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(r, abs)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func hostPath(p string) string {
 	// Di mode web hanya folder unggahan yang boleh ditunjuk (web.go).
 	return insideWebRoot(localPath(p))

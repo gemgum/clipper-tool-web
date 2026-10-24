@@ -14,6 +14,7 @@ import { Folder, Film, File } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "./i18n";
 import { eng, upload, useWeb } from "./engine";
+import { useEscape } from "./use-popup";
 
 type Entry = {
   name: string;
@@ -65,11 +66,7 @@ function UploadPicker({ mode, onPick, onClose, title }: PickerProps) {
   const [error, setError] = useState("");
 
   // Esc menutup, sama seperti pemilih berkas di bawah.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   const send = async (f: File) => {
     setError(""); setPct(0);
@@ -135,13 +132,7 @@ function BrowsePicker({ mode, start, onPick, onClose, title, hint }: PickerProps
 
   // Esc menutup — pemilih ini menutupi seluruh layar, jadi harus ada jalan
   // keluar yang tidak menuntut membidik tombol.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useEscape(onClose);
 
   // Di mode folder, berkas tetap ditampilkan tapi diredupkan: melihat isinya
   // itulah cara pengguna memastikan ia berada di folder yang benar.

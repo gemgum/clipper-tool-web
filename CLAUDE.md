@@ -479,6 +479,19 @@ dan tab Headline di Watermark. Jangan menyusun markup setelan sendiri.
 9. **Berkas/sumber** = kartu sendiri DI ATAS kartu setelan (Source di klip,
    Files di Watermark/Captions).
 
+## Pakai ulang dulu, baru menulis fungsi baru (aturan pemilik 25 Oktober 2026)
+
+**Dilarang membuat fungsi, komponen, hook, atau konstanta baru bila yang sudah
+ada masih bisa dipakai.** Sebelum menulis apa pun, cari dulu (`grep`) di
+paket/folder bersama: tabel "Komponen bersama" di atas untuk GUI; di engine
+`textx` (ExtractJSON, Snip), `httpx` (Retry, GetImage), `config` (NewsBox*,
+CardPhoto*, FrameSize), `news` (domain, clean, firstNonEmpty), dan `api/files.go`
+(within, hostPath). Kalau yang ada hampir cocok, PERLUAS fungsinya (parameter
+opsional, varian) — jangan menyalinnya dengan sedikit perubahan. Salinan
+yang ditemukan saat bekerja disatukan, bukan ditambah. Peninjauan 25 Oktober
+2026 menemukan empat pengunduh gambar, empat pengambil JSON LLM, dan lima
+pemotong teks yang sudah saling berbeda perilaku — itulah yang dicegah aturan ini.
+
 ## Konvensi
 
 - **Komentar** kode dalam **bahasa Indonesia**.

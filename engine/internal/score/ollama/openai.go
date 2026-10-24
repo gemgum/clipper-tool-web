@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"io"
 	"net/http"
 	"regexp"
@@ -247,10 +248,10 @@ func (c *Client) postChat(ctx context.Context, system, user string, schema any, 
 		// Alamat LENGKAP, bukan cuma base-nya: alamat yang salah isi (mis.
 		// endpoint gaya Anthropic milik DeepSeek) membalas 404 berbadan kosong,
 		// dan tanpa jalur penuh pesan itu tidak menunjukkan apa pun.
-		return "", fmt.Errorf("the reply from %s could not be read (status %d): %v; reply: %s", url, resp.StatusCode, err, trunc(string(raw), 200))
+		return "", fmt.Errorf("the reply from %s could not be read (status %d): %v; reply: %s", url, resp.StatusCode, err, textx.Snip(string(raw), 200))
 	}
 	if parsed.Error != nil {
-		return "", fmt.Errorf("%s refused the request: %s", url, trunc(errorMessage(parsed.Error), 200))
+		return "", fmt.Errorf("%s refused the request: %s", url, textx.Snip(errorMessage(parsed.Error), 200))
 	}
 	if len(parsed.Choices) == 0 {
 		return "", nil // balasan kosong: pemanggil yang memutuskan artinya

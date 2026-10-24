@@ -32,7 +32,7 @@ import Select from "../select";
 import { CENTER_X } from "../drag";
 import ColorPanel, { isDark, toHex } from "../color-panel";
 import { watermarkColors } from "../watermark-panel";
-import { watermarkToAPI } from "../watermark-model";
+import { outlineColor, watermarkToAPI } from "../watermark-model";
 import type { Format } from "../watermark-model";
 import { HL_FONT, MarkFont, MarkLayers, MarkLogoGroup, MarkTemplates, SIZES, useMark, useTemplates } from "../mark";
 import { Newspaper, LayoutGrid } from "lucide-react";
@@ -322,7 +322,7 @@ export default function News() {
     box: whole && layout === "box" ? {
       no_photo: !boxPhoto,
       fill: toHex(m.watermark.hlBoxColor || "white"), text: toHex(m.watermark.hlColor),
-      outline: m.watermark.hlOutline, outline_color: toHex(m.watermark.hlOutlineColor || (m.watermark.hlColor === "black" ? "white" : "black")),
+      outline: m.watermark.hlOutline, outline_color: toHex(outlineColor(m.watermark)),
       sharp: !!m.watermark.hlSharp,
     } : null,
   }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, whole, story, useSummary, ills, boxPhoto,

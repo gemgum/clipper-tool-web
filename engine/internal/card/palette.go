@@ -6,14 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 
+	"github.com/gemgum/clipper/engine/internal/httpx"
+
 	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
 	"math"
-	"net/http"
 	"strconv"
 	"strings"
 )
@@ -517,25 +517,11 @@ func fetchImage(ctx context.Context, url string) (image.Image, error) {
 		img, _, err := image.Decode(bytes.NewReader(raw))
 		return img, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	raw, _, err := httpx.GetImage(ctx, url, 12<<20)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("photo: %v", err)
 	}
-	// CDN yang melayani "format otomatis" (mis. Cloudinary f_auto) mengirim WebP
-	// bila diminta apa saja. Go tidak bisa membaca WebP tanpa dependency luar,
-	// jadi formatnya diminta terang-terangan.
-	req.Header.Set("Accept", "image/jpeg,image/png;q=0.9,*/*;q=0.5")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; clipper/1.0)")
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("photo returned HTTP %d", res.StatusCode)
-	}
-	img, _, err := image.Decode(io.LimitReader(res.Body, 12<<20))
+	img, _, err := image.Decode(bytes.NewReader(raw))
 	return img, err
 }
 

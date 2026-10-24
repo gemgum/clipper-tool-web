@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"strings"
 
 	"github.com/gemgum/clipper/engine/internal/news"
@@ -57,7 +58,7 @@ func WriteCardText(ctx context.Context, complete Completer, engineName string, c
 		Hashtags   []string `json:"hashtags"`
 		Paragraphs []string `json:"paragraphs"`
 	}
-	if err := json.Unmarshal([]byte(ExtractJSON(raw)), &r); err != nil {
+	if err := json.Unmarshal([]byte(textx.ExtractJSON(raw)), &r); err != nil {
 		return CardText{}, JSONError(engineName, raw, err)
 	}
 	if kind == KindStory {

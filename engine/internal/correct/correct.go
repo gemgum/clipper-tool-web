@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"strings"
 
 	"github.com/gemgum/clipper/engine/internal/types"
@@ -293,17 +294,6 @@ type reply struct {
 	} `json:"segments"`
 }
 
-// extractJSON mengambil blok objek JSON dari balasan. Model lokal kadang
-// membungkus JSON dengan pagar kode atau kalimat pengantar.
-func extractJSON(s string) string {
-	i := strings.IndexByte(s, '{')
-	j := strings.LastIndexByte(s, '}')
-	if i >= 0 && j > i {
-		return s[i : j+1]
-	}
-	return s
-}
-
 // acceptable memutuskan apakah satu koreksi layak dipakai.
 //
 // Inilah pagar yang membedakan "koreksi" dari "karangan": model boleh membenahi
@@ -408,7 +398,7 @@ func Correct(ctx context.Context, tr types.Transcript, terms []string, complete 
 			}
 			lastRaw = raw
 			r = reply{}
-			if readErr = json.Unmarshal([]byte(extractJSON(raw)), &r); readErr == nil {
+			if readErr = json.Unmarshal([]byte(textx.ExtractJSON(raw)), &r); readErr == nil {
 				break
 			}
 			// Balasan KOSONG tidak akan berubah kalau permintaannya sama

@@ -126,3 +126,13 @@ export function usePopup({
 
   return { pos, place };
 }
+
+// useEscape = Esc menutup jendela (Shot, crop, pemilih berkas). SATU hook —
+// dulu efek yang sama tersalin di empat tempat.
+export function useEscape(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+}

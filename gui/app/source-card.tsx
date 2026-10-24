@@ -7,6 +7,7 @@ import { eng } from "./engine";
 import { StepCard, humanDuration } from "./clip-steps";
 import Filmstrip from "./filmstrip";
 import { usePlayer } from "./video-player";
+import { baseName } from "./file-list";
 
 type Info = { duration: number; width: number; height: number };
 
@@ -47,7 +48,7 @@ export default function SourceCard({
     return () => clearTimeout(timer);
   }, [path]);
 
-  const name = path.split(/[\\/]/).pop() || path;
+  const name = baseName(path);
   const res = info?.height ? `${Math.min(info.width, info.height)}p` : "";
 
   // Sudah ada video: satu baris ringkas tanpa kepala kartu.

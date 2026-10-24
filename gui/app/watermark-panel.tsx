@@ -13,7 +13,8 @@ import { Row } from "./tab-card";
 import type { ColorTarget } from "./color-panel";
 import type { MessageKey } from "./i18n";
 import type { Watermark } from "./watermark-model";
-import { headlineAnchor, headlineBox, wrapHeadline } from "./watermark-model";
+import { headlineAnchor, headlineBox, outlineColor, wrapHeadline } from "./watermark-model";
+import { baseName } from "./file-list";
 
 export default function WatermarkPanel({ watermark, setWatermark, onPickImage }: {
   watermark: Watermark;
@@ -21,7 +22,7 @@ export default function WatermarkPanel({ watermark, setWatermark, onPickImage }:
   onPickImage: () => void;
 }) {
   const { t } = useI18n();
-  const name = watermark.image ? watermark.image.split(/[\\/]/).pop() : "";
+  const name = watermark.image ? baseName(watermark.image) : "";
   const llm = watermark.hlSource === "llm";
   // Titik SEBENARNYA headline di bidang, walau yang disimpan geseran: "540·520"
   // langsung terbaca sebagai tempat, "0·-40" menuntut pembacanya menghitung.
@@ -90,6 +91,6 @@ export const watermarkColors = (w: Watermark, set: (patch: Partial<Watermark>) =
     ...(auto ? { auto: { onClick: () => auto("text"), title: t("cpAutoText") } } : {}) },
   ...(withBox ? [{ key: "box", name: t("wmColBox"), value: w.hlBoxColor || "white", set: (c: string) => set({ hlBoxColor: c }), off: !w.hlBox,
     ...(auto ? { auto: { onClick: () => auto("box"), title: t("cpAutoBox") } } : {}) }] : []),
-  { key: "outline", name: t("outline"), value: w.hlOutlineColor || (w.hlColor === "black" ? "white" : "black"), set: (c) => set({ hlOutlineColor: c }),
+  { key: "outline", name: t("outline"), value: outlineColor(w), set: (c) => set({ hlOutlineColor: c }),
     width: { value: w.hlOutline, onChange: (v: number) => set({ hlOutline: v }) } },
 ];

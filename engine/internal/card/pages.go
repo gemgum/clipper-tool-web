@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gemgum/clipper/engine/internal/capture"
+	"github.com/gemgum/clipper/engine/internal/config"
 )
 
 // Carousel seluruh artikel (keputusan pemilik 24 Oktober 2026): kartu pertama
@@ -136,12 +137,12 @@ func illCropCSS(c *Crop, w, h int) (dw, dh, dl, dt, iw, ih, il, it int) {
 // latar memakai tampilan kartu dengan warna kotak (PageBox.NoPhoto).
 func boxed(req Request) bool { return req.Box != nil && !req.Box.NoPhoto }
 
-// Ukuran kotak gaya box = kotak judul Mark (subtitle.NewsBox): newsMargin 40,
-// newsPad 32, sudut 20 — ruang PlayRes yang lebarnya sama dengan kanvas.
+// Ukuran kotak gaya box = kotak judul Mark (subtitle.NewsBox) — angka yang
+// sama dari config, ruang PlayRes yang lebarnya sama dengan kanvas.
 const (
-	boxMargin = 40
-	boxPad    = 32
-	boxRadius = 20
+	boxMargin = config.NewsBoxMargin
+	boxPad    = config.NewsBoxPad
+	boxRadius = config.NewsBoxRadius
 )
 
 // maxParagraphs = paragraf terbanyak per halaman lanjutan (keputusan pemilik
@@ -295,7 +296,7 @@ type pageData struct {
 // renderPage = halaman lanjutan ke-n (2..total) berisi text.
 func (b *Builder) renderPage(ctx context.Context, req Request, width, height, n, total int, text []string) ([]byte, *IllRect, error) {
 	a := req.Article
-	hasImage := strings.HasPrefix(a.Image, "http") || strings.HasPrefix(a.Image, "data:image/")
+	hasImage := isImageURL(a.Image)
 	theme := b.themeFor(ctx, req, hasImage)
 	if theme == nil {
 		tc := themeTable[ThemeDark]

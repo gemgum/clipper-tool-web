@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"strings"
 	"unicode"
 
@@ -136,7 +137,7 @@ func ExtractFacts(ctx context.Context, content news.Content, complete news.Compl
 		return sheet, err
 	}
 
-	facts, err := parseFacts(ExtractJSON(raw))
+	facts, err := parseFacts(textx.ExtractJSON(raw))
 	if err != nil {
 		return sheet, JSONError(engineName, raw, err)
 	}
@@ -252,36 +253,6 @@ func contentWords(s string) []string {
 	return out
 }
 
-// ExtractJSON mengambil nilai JSON dari balasan yang kadang dibungkus prosa
-// atau pagar kode.
-//
-// Larik ikut dikenali, bukan cuma objek: model yang bentuk balasannya tidak
-// dipaksakan server kerap membalas "[...]" — dan mengambil dari "{" pertama
-// sampai "}" terakhir pada larik justru MEMOTONG isinya jadi JSON rusak.
-func ExtractJSON(s string) string {
-	s = strings.TrimSpace(s)
-	obj := span(s, "{", "}")
-	arr := span(s, "[", "]")
-	// Yang dipakai adalah yang MULAI lebih dulu: objek berisi larik akan cocok
-	// keduanya, dan pembungkus terluar yang benar.
-	if obj != "" && (arr == "" || strings.Index(s, "{") < strings.Index(s, "[")) {
-		return obj
-	}
-	if arr != "" {
-		return arr
-	}
-	return s
-}
-
-func span(s, open, close string) string {
-	i := strings.Index(s, open)
-	j := strings.LastIndex(s, close)
-	if i >= 0 && j > i {
-		return s[i : j+1]
-	}
-	return ""
-}
-
 // JSONError menerangkan balasan yang tidak bisa dibaca.
 //
 // Balasan yang TERPOTONG dibedakan dari yang bentuknya salah: keduanya muncul
@@ -293,12 +264,5 @@ func JSONError(engineName, raw string, err error) error {
 		hint = ": the reply was cut off before it ended, so the model ran out of its output budget"
 	}
 	return fmt.Errorf("%s returned JSON that could not be read: %w%s; reply: %s",
-		engineName, err, hint, truncate(strings.ReplaceAll(raw, "\n", " "), 300))
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
+		engineName, err, hint, textx.Snip(raw, 300))
 }

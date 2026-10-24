@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,7 +147,7 @@ func SelectParagraphs(ctx context.Context, content Content, complete Completer, 
 	}
 
 	var r reply
-	if err := json.Unmarshal([]byte(extractJSON(raw)), &r); err != nil {
+	if err := json.Unmarshal([]byte(textx.ExtractJSON(raw)), &r); err != nil {
 		return Selection{}, fmt.Errorf("%s returned JSON that could not be read: %w; reply: %s",
 			engineName, err, truncate(strings.ReplaceAll(raw, "\n", " "), 300))
 	}
@@ -239,17 +240,6 @@ func build(content Content, r reply, engineName string) Selection {
 		Engine:   engineName,
 		Note:     note,
 	}
-}
-
-// extractJSON mengambil blok objek JSON dari balasan. Model lokal kadang
-// membungkus JSON dengan pagar kode atau kalimat pengantar.
-func extractJSON(s string) string {
-	i := strings.IndexByte(s, '{')
-	j := strings.LastIndexByte(s, '}')
-	if i >= 0 && j > i {
-		return s[i : j+1]
-	}
-	return s
 }
 
 // --- cache ---

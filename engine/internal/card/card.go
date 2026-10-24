@@ -675,7 +675,7 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 	quote := req.Style == StyleQuote
 	// Foto boleh alamat http(s) ATAU data URI — unggahan pengguna ditanam
 	// sebagai data URI oleh pemanggil (api), sebab Chrome tidak membaca path.
-	hasImage := (strings.HasPrefix(a.Image, "http") || strings.HasPrefix(a.Image, "data:image/")) && !quote
+	hasImage := isImageURL(a.Image) && !quote
 
 	// Warna kartu: dari warna pilihan pengguna bila ada, selain itu dari rona
 	// fotonya. Keduanya lewat paletteFor yang sama, jadi satu warna cukup untuk

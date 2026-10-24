@@ -17,6 +17,7 @@ import { X } from "lucide-react";
 import { useI18n } from "./i18n";
 import { GridPicker } from "./guides";
 import Select from "./select";
+import { useEscape } from "./use-popup";
 
 // Lebar BINGKAI (--stage-in di globals.css): lebar kolom (340, atau 280 di
 // jendela <= 1100 px) dikurangi 50 px padding & tepi kartu, dibatasi tinggi
@@ -87,11 +88,7 @@ export function StageFrame({ children }: { children: React.ReactNode }) {
 // klik di mana saja atau Escape menutupnya. SATU jendela untuk Watermark & News.
 export function Shot({ src, label, onClose }: { src: string; label: string; onClose: () => void }) {
   const { t } = useI18n();
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [onClose]);
+  useEscape(onClose);
   return (
     <div className="stage-shot" role="dialog" aria-label={label} onClick={onClose}>
       {/* eslint-disable-next-line @next/next/no-img-element */}

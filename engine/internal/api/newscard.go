@@ -11,7 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/gemgum/clipper/engine/internal/httpx"
 
 	"github.com/gemgum/clipper/engine/internal/card"
 	"github.com/gemgum/clipper/engine/internal/config"
@@ -122,25 +123,15 @@ func (s *Server) cardPhotoFile(ctx context.Context, src string) (string, func(),
 			return "", none, fmt.Errorf("invalid image path")
 		}
 		for _, root := range []string{s.cardImageDir(), s.layout.CardsRoot()} {
-			r, _ := filepath.Abs(root)
-			if rel, err := filepath.Rel(r, abs); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+			if within(root, abs) {
 				return abs, none, nil
 			}
 		}
 		return "", none, fmt.Errorf("the card image must be a web address or an image uploaded for cards")
 	}
-	req, err := http.NewRequestWithContext(ctx, "GET", src, nil)
-	if err != nil {
-		return "", none, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Clipper)")
-	res, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	raw, _, err := httpx.GetImage(ctx, src, 25<<20)
 	if err != nil {
 		return "", none, fmt.Errorf("could not download the article photo: %v", err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", none, fmt.Errorf("could not download the article photo: HTTP %d", res.StatusCode)
 	}
 	f, err := os.CreateTemp(filepath.Join(s.paths.DataDir, "cache"), "card-photo-*.jpg")
 	if err != nil {
@@ -151,7 +142,7 @@ func (s *Server) cardPhotoFile(ctx context.Context, src string) (string, func(),
 			return "", none, err
 		}
 	}
-	_, err = io.Copy(f, io.LimitReader(res.Body, 25<<20))
+	_, err = f.Write(raw)
 	f.Close()
 	if err != nil {
 		os.Remove(f.Name())
@@ -168,8 +159,7 @@ func (s *Server) inlineCardImage(img string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid image path")
 	}
-	root, _ := filepath.Abs(s.cardImageDir())
-	if rel, err := filepath.Rel(root, abs); err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+	if !within(s.cardImageDir(), abs) {
 		return "", fmt.Errorf("the card image must be a web address or an image uploaded for cards")
 	}
 	raw, err := os.ReadFile(abs)

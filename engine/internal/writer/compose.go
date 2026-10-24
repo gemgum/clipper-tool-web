@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"regexp"
 	"strings"
 	"unicode"
@@ -265,7 +266,7 @@ func (d *Draft) dropRepeats() []Violation {
 		if drop {
 			what = "removed: it repeats"
 		}
-		vs = append(vs, Violation{"repetition", truncate(d.Body[du.at], 60),
+		vs = append(vs, Violation{"repetition", textx.Snip(d.Body[du.at], 60),
 			fmt.Sprintf("paragraph %d %s %s", du.at+1, what, du.label)})
 	}
 	if drop {
@@ -295,7 +296,7 @@ func askCompose(ctx context.Context, system, user string, complete news.Complete
 		return Draft{}, err
 	}
 	var d Draft
-	if err := json.Unmarshal([]byte(ExtractJSON(raw)), &d); err != nil {
+	if err := json.Unmarshal([]byte(textx.ExtractJSON(raw)), &d); err != nil {
 		return Draft{}, JSONError(engineName, raw, err)
 	}
 	d.strip()
@@ -563,7 +564,7 @@ func repetitions(d Draft) []Violation {
 	for i := 0; i < len(blocks); i++ {
 		for j := i + 1; j < len(blocks); j++ {
 			if similar(blocks[i], blocks[j]) {
-				vs = append(vs, Violation{"repetition", truncate(blocks[j], 60),
+				vs = append(vs, Violation{"repetition", textx.Snip(blocks[j], 60),
 					fmt.Sprintf("%s repeats %s", names[j], names[i])})
 			}
 		}

@@ -41,6 +41,7 @@ import type { WhisperModel } from "./more-controls";
 import RunView from "./run-view";
 import ResultView, { downloadAllURL } from "./result-view";
 import type { JobClip } from "./result-view";
+import { baseName } from "./file-list";
 
 export default function Home() {
   const { lang, t } = useI18n();
@@ -628,7 +629,7 @@ export default function Home() {
   // setara text-stroke ukuran/9 di mockup, yang separuhnya jatuh di dalam huruf).
   const pickSize = (px: number) => { setSubSize(px); setSubOutline(Math.round(px / 18)); };
 
-  const fileName = path.split(/[\\/]/).pop() || "";
+  const fileName = path ? baseName(path) : "";
   const platformName = PLATFORMS[platform]?.label || platform;
   const okClips = jobClips.filter((c) => c.status !== "failed");
   const summary = [

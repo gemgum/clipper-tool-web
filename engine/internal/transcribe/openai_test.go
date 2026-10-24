@@ -29,7 +29,9 @@ func TestOpenAIAudio(t *testing.T) {
 	defer srv.Close()
 
 	o := &OpenAIAudio{Name: "Custom", Base: srv.URL + "/v1", Key: "k", HTTP: srv.Client(),
-		Encode: func(_ context.Context, _, _ float64, out string) error { return os.WriteFile(out, []byte("ogg"), 0o644) }}
+		Encode: func(_ context.Context, _, _ float64, out string) error {
+			return os.WriteFile(out, []byte("ogg"), 0o644)
+		}}
 	tr, err := o.Transcribe(context.Background(), 700, "id", t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)

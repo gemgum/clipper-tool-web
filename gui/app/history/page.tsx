@@ -20,6 +20,7 @@ import { eng, engineURL, post } from "../engine";
 import { usePlayer } from "../video-player";
 import { useI18n } from "../i18n";
 import type { MessageKey } from "../i18n";
+import { baseName } from "../file-list";
 
 type Clip = { id: string; job_id: string; start: number; end: number; duration: number; score: number; title: string; status: string; error?: string };
 type Job = { id: string; status: string; stage: string; progress: number; error?: string; created_at: string; updated_at?: string; input?: string; source?: string; clips?: Clip[] };
@@ -43,7 +44,6 @@ const STAGE_LABEL: Record<string, MessageKey> = {
   extracting: "stageTranscribe", transcribing: "stageTranscribe", correcting: "stagePick",
   segmenting: "stagePick", scoring: "stagePick", rendering: "stageRender",
 };
-const base = (p = "") => p.split(/[\\/]/).pop() || p;
 const fmtMin = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 const band = (s: number) => (s >= 75 ? "strong" : s >= 60 ? "medium" : "plain");
 
@@ -91,7 +91,7 @@ export default function HistoryPage() {
 
   const entries = useMemo<Entry[]>(() => {
     const out: Entry[] = [];
-    (jobs || []).forEach((j) => out.push({ key: `job/${j.id}`, kind: "clips", status: j.status, created: j.created_at, title: base(j.input || j.source || j.id), job: j }));
+    (jobs || []).forEach((j) => out.push({ key: `job/${j.id}`, kind: "clips", status: j.status, created: j.created_at, title: baseName(j.input || j.source || j.id), job: j }));
     cards.forEach((c) => out.push({ key: `card/${c.id}`, kind: "cards", status: "done", created: c.made, title: c.title || c.id, card: c }));
     posts.forEach((p) => out.push({ key: `post/${p.id}`, kind: "writer", status: p.status, created: p.created_at, title: p.result?.draft?.title || p.id, post: p }));
     caps.forEach((c) => out.push({ key: `cap/${c.id}`, kind: "captions", status: c.status, created: c.created_at, title: (c.result?.files || []).map((f) => f.name).join(", ") || c.id, cap: c }));

@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pipette } from "lucide-react";
 import { useI18n } from "./i18n";
-import { parseColor } from "./color-panel";
+import { ColorCode, parseColor } from "./color-panel";
 
 type HSL = { h: number; s: number; l: number };
 
@@ -59,22 +59,6 @@ const readRecent = (): string[] => {
 const pushRecent = (hex: string) => {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify([hex, ...readRecent().filter((c) => c !== hex)].slice(0, 5))); } catch {}
 };
-
-// Code = satu kode warna yang bisa diketik; parse → #rrggbb atau null.
-function Code({ value, label, parse, onPick }: { value: string; label: string; parse: (v: string) => string | null; onPick: (hex: string) => void }) {
-  const [text, setText] = useState(value);
-  const [wrong, setWrong] = useState(false);
-  useEffect(() => { setText(value); setWrong(false); }, [value]);
-  const commit = () => {
-    const c = parse(text.trim());
-    setWrong(!c);
-    if (c) onPick(c);
-  };
-  return (
-    <input className={"cw-code" + (wrong ? " bad" : "")} value={text} spellCheck={false} aria-label={label} aria-invalid={wrong}
-      onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") commit(); }} />
-  );
-}
 
 export default function ColorWheel({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
   const { t } = useI18n();
@@ -142,9 +126,9 @@ export default function ColorWheel({ value, onChange }: { value: string; onChang
             onChange={(e) => set({ ...hsl, l: Number(e.target.value) })} />
           {/* Semua kode bisa diketik (Enter / keluar kolom = dipakai); yang salah ditandai. */}
           <dl className="cw-codes">
-            <dt>HEX</dt><dd><Code value={hex.toUpperCase()} label="HEX" parse={(v) => parseColor(v)} onPick={pick} /></dd>
-            <dt>RGB</dt><dd><Code value={`${r},${g},${b}`} label="RGB" parse={(v) => parseColor(`rgb(${v})`)} onPick={pick} /></dd>
-            <dt>CMYK</dt><dd><Code value={cmyk(hex).join(",")} label="CMYK" parse={(v) => parseColor(`cmyk(${v})`)} onPick={pick} /></dd>
+            <dt>HEX</dt><dd><ColorCode className="cw-code" value={hex} label="HEX" onPick={pick} /></dd>
+            <dt>RGB</dt><dd><ColorCode className="cw-code" value={`${r},${g},${b}`} label="RGB" parse={(v) => parseColor(`rgb(${v})`)} onPick={pick} /></dd>
+            <dt>CMYK</dt><dd><ColorCode className="cw-code" value={cmyk(hex).join(",")} label="CMYK" parse={(v) => parseColor(`cmyk(${v})`)} onPick={pick} /></dd>
             <dt>HSL</dt>
             <dd className="cw-hsl">
               {(["h", "s", "l"] as const).map((k) => (

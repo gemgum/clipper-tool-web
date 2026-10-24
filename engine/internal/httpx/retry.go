@@ -10,6 +10,9 @@
 package httpx
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"strconv"
@@ -82,4 +85,32 @@ func backoff(attempt int, retryAfter string) time.Duration {
 		return min(time.Duration(n)*time.Second, maxWait)
 	}
 	return min(baseWait*time.Duration(math.Pow(2, float64(attempt))), maxWait)
+}
+
+// imageClient = SATU klien unduhan foto (hasil peninjauan redundansi 25
+// Oktober 2026): dulu ada empat, dengan batas waktu, User-Agent, dan Accept
+// berbeda — foto yang sama bisa terunduh di satu jalur dan gagal di jalur lain.
+var imageClient = &http.Client{Timeout: 30 * time.Second, Transport: Retry(nil)}
+
+// GetImage mengunduh gambar (paling banyak limit byte) dan mengembalikan isi
+// serta Content-Type-nya. Accept meminta JPEG/PNG terang-terangan: CDN "format
+// otomatis" (Cloudinary f_auto) mengirim WebP bila diminta apa saja, dan Go
+// tidak bisa membaca WebP tanpa dependency luar.
+func GetImage(ctx context.Context, url string, limit int64) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Accept", "image/jpeg,image/png;q=0.9,*/*;q=0.5")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Clipper)")
+	res, err := imageClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("HTTP %d", res.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, limit))
+	return raw, res.Header.Get("Content-Type"), err
 }

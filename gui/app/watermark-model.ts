@@ -93,6 +93,11 @@ export const watermarkOn = (b: Watermark) =>
 // dihitung engine untuk font itu (lihat fontScale di preview-panel). Pemilih
 // font kedua berarti pengukuran kedua, dan pratinjau yang meleset dari hasil
 // render adalah persis kegagalan yang sudah pernah terjadi (notes/29).
+// Warna garis tepi judul: pilihan pengguna, selain itu lawan warna teks.
+// SATU tempat untuk Clips, Mark, News, dan engine (dulu tersalin empat kali).
+export const outlineColor = (w: { hlOutlineColor?: string; hlColor: string }) =>
+  w.hlOutlineColor || (w.hlColor === "black" ? "white" : "black");
+
 export const watermarkToAPI = (b: Watermark, font: string) => ({
   image: b.image,
   x: Math.round(b.x), y: Math.round(b.y),
@@ -114,7 +119,7 @@ export const watermarkToAPI = (b: Watermark, font: string) => ({
     bold: true,
     outline: Math.round(b.hlOutline),
     // Teks hitam butuh tepi terang; warna lain tepi hitam.
-    outline_color: b.hlOutlineColor || (b.hlColor === "black" ? "white" : "black"),
+    outline_color: outlineColor(b),
     free: !!b.hlFree,
     box: !!b.hlBox,
     credit: b.hlBox ? (b.hlCredit || "") : "",

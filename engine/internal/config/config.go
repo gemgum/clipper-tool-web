@@ -669,6 +669,15 @@ const MaxLogos = 8
 
 // FrameSize = ruang koordinat untuk satu format. Lebarnya selalu PlayResX;
 // tingginya mengikuti rasio, jadi angka di pratinjau tetap = angka di hasil.
+// Kotak judul berita (subtitle.NewsBox) DAN kotak teks halaman lanjutan
+// carousel gaya box (card/pages.go), ruang PlayRes (lebar 1080). Satu sumber:
+// dulu angkanya diketik di dua paket dan hanya disambung komentar.
+const (
+	NewsBoxMargin = 40 // jarak kotak ke tepi kiri & kanan bingkai
+	NewsBoxPad    = 32 // ruang napas di dalam kotak
+	NewsBoxRadius = 20 // sudut bulat; 0 bila Headline.Sharp
+)
+
 // CardPhotoPct = tinggi area gambar (persen tinggi bingkai) pada Headline.Card,
 // dan pada tampilan jadi kartu berita (card.themePhotoPct memanggil ini) — supaya
 // kartu berita & Watermark sebangun.

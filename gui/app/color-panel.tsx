@@ -60,18 +60,22 @@ export function parseColor(input: string): string | null {
 }
 
 // Kolom kode warna: diketik bebas, dipakai saat Enter atau keluar kolom.
-function ColorCode({ value, onPick, label, bad }: { value: string; onPick: (c: string) => void; label: string; bad: string }) {
+// SATU komponen untuk panel warna dan roda warna (HEX/RGB/CMYK); parse =
+// pembaca kodenya (bawaan parseColor), className = rupa kolomnya.
+export function ColorCode({ value, onPick, label, bad, parse = parseColor, className = "cp-code" }: {
+  value: string; onPick: (c: string) => void; label: string; bad?: string; parse?: (v: string) => string | null; className?: string;
+}) {
   const [text, setText] = useState(value.toUpperCase());
   const [wrong, setWrong] = useState(false);
   useEffect(() => { setText(value.toUpperCase()); setWrong(false); }, [value]);
   const commit = () => {
-    const c = parseColor(text);
+    const c = parse(text.trim());
     setWrong(!c);
     if (c) onPick(c);
   };
   return (
-    <input className={"cp-code" + (wrong ? " bad" : "")} value={text} spellCheck={false} aria-label={label}
-      title={wrong ? bad : label} aria-invalid={wrong}
+    <input className={className + (wrong ? " bad" : "")} value={text} spellCheck={false} aria-label={label}
+      title={wrong ? bad || label : label} aria-invalid={wrong}
       onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") commit(); }} />
   );
 }

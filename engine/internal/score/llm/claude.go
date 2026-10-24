@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gemgum/clipper/engine/internal/textx"
 	"io"
 	"net/http"
 	"strings"
@@ -122,7 +123,7 @@ func (c *Client) Complete(ctx context.Context, system, user string, maxTokens in
 
 	var parsed msgResp
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("the Claude response could not be read (status %d): %s", resp.StatusCode, truncate(string(raw), 200))
+		return "", fmt.Errorf("the Claude response could not be read (status %d): %s", resp.StatusCode, textx.Snip(string(raw), 200))
 	}
 	if parsed.Error != nil {
 		return "", claudeError(resp.StatusCode, parsed.Error.Message)
@@ -149,24 +150,6 @@ func claudeError(status int, msg string) error {
 	return fmt.Errorf("Claude rejected the request (status %d): %s", status, msg)
 }
 
-// extractBlock mengambil blok pertama..terakhir di antara pembuka & penutup.
-func extractBlock(s string, open, close byte) string {
-	i := strings.IndexByte(s, open)
-	j := strings.LastIndexByte(s, close)
-	if i >= 0 && j > i {
-		return s[i : j+1]
-	}
-	return ""
-}
-
-func truncate(s string, n int) string {
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
-}
-
 // PickMoments meminta Claude MEMILIH dari kandidat bernomor, bukan mengarang
 // batas waktu. Lihat pick.go untuk alasannya.
 func (c *Client) PickMoments(ctx context.Context, cands []types.Candidate, offset, maxClips int, contentLang string) ([]Pick, error) {
@@ -178,9 +161,9 @@ func (c *Client) PickMoments(ctx context.Context, cands []types.Candidate, offse
 		return nil, err
 	}
 	var wrap PickResponse
-	if err := json.Unmarshal([]byte(extractBlock(text, '{', '}')), &wrap); err != nil {
+	if err := json.Unmarshal([]byte(textx.ExtractJSON(text)), &wrap); err != nil {
 		return nil, fmt.Errorf("Claude (%s) returned JSON that could not be read: %w; reply: %s",
-			c.Model, err, truncate(text, 300))
+			c.Model, err, textx.Snip(text, 300))
 	}
 	return wrap.Picks, nil
 }

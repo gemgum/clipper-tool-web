@@ -355,7 +355,7 @@ func taken(path string, used map[string]bool) bool {
 
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
-		if v != "" {
+		if v = strings.TrimSpace(v); v != "" {
 			return v
 		}
 	}
