@@ -10,19 +10,21 @@
 // yang tidak ada di artikel ditandai). notes/13 diperbarui.
 //
 // Ikon: lucide-react (ISC) — alasannya di gui/app/page.tsx.
-import { ChevronLeft, ChevronRight, Copy, Download, ImagePlus, Plus, Sparkles } from "lucide-react";
+import { copyText } from "../copy-link";
+import { ChevronLeft, ChevronRight, Copy, Download, ImageIcon, ImagePlus, MessageSquare, Palette, Plus, Sparkles, Type } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "../page-header";
 import { useI18n } from "../i18n";
-import { eng, engineURL } from "../engine";
+import { eng, engineURL, post } from "../engine";
 import { useKeep, useRestore } from "../persist";
 import Stepper from "../stepper";
-import Select from "../select";
 import Alerts from "../alerts";
 import EmptyState from "../empty-state";
 import { useAI } from "../ai";
 import { Segmented } from "../clip-steps";
+import TabCard, { Group, Pad, Row, Split } from "../tab-card";
+import Stage, { StageFrame } from "../stage";
 import { Newspaper, LayoutGrid } from "lucide-react";
 
 // Harus sama dengan card.FontSteps / HeaderMax / CardTopMax di engine.
@@ -70,6 +72,7 @@ export default function News() {
   const { lang, t } = useI18n();
   const router = useRouter();
   const [screen, setScreen] = useState<"pick" | "compose" | "done">("pick");
+  const [tab, setTab] = useState<"text" | "photo" | "look" | "caption">("text");
   const [config, setConfig] = useState<Config | null>(null);
   const [error, setError] = useState("");
 
@@ -151,12 +154,7 @@ export default function News() {
   }, []);
 
   const readArticle = useCallback(async (url: string, fallback?: Article) => {
-    const res = await fetch(eng(`/api/news/article`), {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, lang }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || t("errReadArticle"));
+    const data = await post(`/api/news/article`, { url, lang }, t("errReadArticle"));
     // Yang sudah diketahui dari daftar tidak dibuang bila halamannya lebih miskin.
     return { ...data, image: data.image || fallback?.image || "", source: data.source || fallback?.source || "",
       date: data.date || fallback?.date || "", published: data.published || fallback?.published || "" } as Article;
@@ -192,12 +190,7 @@ export default function News() {
     if (!article.url) return;
     setWriting(kind); setWriteError("");
     try {
-      const res = await fetch(eng(`/api/news/write`), {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: article.url, engine, model, lang, kind }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "write failed");
+      const d = await post(`/api/news/write`, { url: article.url, engine, model, lang, kind }, "write failed");
       if (kind === "summary") setArticle((a) => ({ ...a, summary: d.text }));
       else { setCaption(d.text); setHashtags((d.hashtags || []).map((h: string) => "#" + h.replace(/^#/, "")).join(" ")); }
       setChecks((c) => ({ ...c, [kind]: d.violations || [] }));
@@ -239,9 +232,7 @@ export default function News() {
     const id = setTimeout(async () => {
       setPreviewBusy(true);
       try {
-        const res = await fetch(eng(`/api/card`), { method: "POST", headers: { "Content-Type": "application/json" }, body: fingerprint });
-        const d = await res.json();
-        if (!res.ok) throw new Error(d.error || t("errBuildCard"));
+        const d = await post(`/api/card`, fingerprint, t("errBuildCard"));
         setPreview(eng(`${d.file}?v=${Date.now()}`));
       } catch (e: any) { setError(e.message); }
       finally { setPreviewBusy(false); }
@@ -252,9 +243,7 @@ export default function News() {
   const save = useCallback(async () => {
     setSaving(true); setRenderError("");
     try {
-      const res = await fetch(eng(`/api/card`), { method: "POST", headers: { "Content-Type": "application/json" }, body: cardBody(ratio, false) });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || t("errBuildCard"));
+      const d = await post(`/api/card`, cardBody(ratio, false), t("errBuildCard"));
       let bytes = 0;
       try { bytes = Number((await fetch(eng(d.file), { method: "HEAD" })).headers.get("content-length")) || 0; } catch {}
       setSaved({ id: d.id, file: eng(d.file), zip: eng(d.zip), width: d.width, height: d.height, bytes });
@@ -272,9 +261,7 @@ export default function News() {
   const otherRatio = ratio === "4:5" ? "9:16" : "4:5";
   const renderAlt = useCallback(async () => {
     try {
-      const res = await fetch(eng(`/api/card`), { method: "POST", headers: { "Content-Type": "application/json" }, body: cardBody(otherRatio, false) });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || t("errBuildCard"));
+      const d = await post(`/api/card`, cardBody(otherRatio, false), t("errBuildCard"));
       setCards(null);
       const a = document.createElement("a"); a.href = eng(d.file); a.download = `card-${otherRatio.replace(":", "x")}.png`; a.click();
     } catch (e: any) { setError(e.message); }
@@ -286,7 +273,7 @@ export default function News() {
     t("ncSourceLine", { source: article.source || article.domain, date: article.date ? `, ${article.date}` : "" })]
     .filter(Boolean).join("\n\n");
   const copyCaption = async () => {
-    try { await navigator.clipboard.writeText(fullCaption); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+    try { await copyText(fullCaption); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
   };
 
   const newCard = () => { setScreen("pick"); setPicked(""); useArticle(EMPTY); setRenderError(""); };
@@ -422,180 +409,217 @@ export default function News() {
       )}
 
       {screen === "compose" && (
-        <div className="nc-compose">
-          <div className="nc-preview-col">
-            <Segmented label={t("ratio")} value={ratio} onChange={setRatio}
-              options={RATIOS.map((r) => ({ value: r.id, name: t(r.key) }))} />
-            <div className="nc-card" style={{ aspectRatio: ratio.replace(":", " / ") }}>
-              {preview ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={preview} alt="" /> : <span className="meta">{t("ncPreviewWait")}</span>}
-              {previewBusy && <span className="nc-busy">{t("rendering")}</span>}
-              {band === "long" && <span className="nc-warn">{t("ncTooLongOnCard")}</span>}
-            </div>
-            <p className="meta">{t("ncActualSize", { w: ratioDef.w, h: ratioDef.h })}</p>
+        // Tata letak baku (halaman klip): kiri = kartu setelan bertab, kanan =
+        // kolom pratinjau yang menempel (stage.tsx).
+        <div className="setup-grid">
+          <div className="setup-main">
+            <TabCard label={t("ncLook")} open={tab} setOpen={setTab} tabs={[
+              { key: "text", icon: Type, label: t("ncTabText") },
+              { key: "photo", icon: ImageIcon, label: t("ncPhoto") },
+              { key: "look", icon: Palette, label: t("ncLook") },
+              { key: "caption", icon: MessageSquare, label: t("ncTabCaption") },
+            ]}>
+              {tab === "text" && (
+                // Sejajar: kiri = ringkasan di kartu, kanan = data artikel.
+                <Group title={t("ncCardText")}>
+                  <Split side={<>
+                    <span className="mc-r-l">{t("articleTitle")}</span>
+                    <input value={article.title} aria-label={t("articleTitle")} onChange={(e) => setArticle((a) => ({ ...a, title: e.target.value }))} />
+                    <span className="mc-r-l">{t("sourceBadge")}</span>
+                    <input value={article.source} aria-label={t("sourceBadge")} onChange={(e) => setArticle((a) => ({ ...a, source: e.target.value }))} />
+                    <span className="mc-r-l">{t("date")}</span>
+                    <input value={article.date} aria-label={t("date")} onChange={(e) => setArticle((a) => ({ ...a, date: e.target.value }))} />
+                  </>}>
+                      <Pad>
+                        <div className="nc-pad-head">
+                          <label className="mc-r-l" htmlFor="nc-sum">{t("ncSummaryLabel")}</label>
+                          <button type="button" className="ai-btn" onClick={() => write("summary")} disabled={!!writing || !article.url}>
+                            <Sparkles className="ico" aria-hidden="true" /> {writing === "summary" ? t("analyzing") : t("ncSummarise")}
+                          </button>
+                        </div>
+                        <textarea id="nc-sum" rows={3} value={article.summary} onChange={(e) => { setArticle((a) => ({ ...a, summary: e.target.value })); setChecks((c) => ({ ...c, summary: [] })); }} />
+                        <div className="nc-count">
+                          <span className={"count-" + band}>{t(band === "ok" ? "ncCharsOk" : band === "dense" ? "ncCharsDense" : "ncCharsLong", { n })}</span>
+                          <span className="meta">{t("ncSafeLimit")}</span>
+                        </div>
+                        <Checks list={checks.summary} />
+                        {writeError && <p className="nc-note-err">{writeError}</p>}
+                      </Pad>
+                  </Split>
+                </Group>
+              )}
+
+              {tab === "photo" && (
+                // Sejajar: kiri = pilihan foto, kanan = cara memasangnya.
+                <Group title={t("ncPhoto")}>
+                  <Split side={<>
+                    <span className="mc-r-l">{t("photoFitLabel")}</span>
+                    <Segmented label={t("photoFitLabel")} value={photoFit} onChange={(v) => { setPhotoFit(v); setZoom(1); }}
+                      options={[{ value: "cover", name: t("photoFitCover") }, { value: "whole", name: t("photoFitWhole") }]} />
+                    {/* Selalu ada; hanya berarti saat seluruh foto dimuat. */}
+                    <span className="mc-r-l">{t("photoFill")}</span>
+                    <fieldset className="cp-plain" disabled={photoFit !== "whole"}>
+                      <Segmented label={t("photoFill")} value={photoFill} onChange={setPhotoFill}
+                        options={[{ value: "blur", name: t("photoFillBlur") }, { value: "solid", name: t("photoFillSolid") }]} />
+                    </fieldset>
+                    <span className="mc-r-l">{t("photoZoom")}</span>
+                    <Stepper value={Math.round(zoom * 100)} onChange={(v) => setZoom(v / 100)} min={100} max={400} step={5} suffix="%" />
+                  </>}>
+                      <Pad>
+                        <span className="mc-note">{article.images?.length ? t("ncPhotoHint") : t("ncPhotoNone")}</span>
+                        <div className="nc-photos">
+                          {(article.images || []).map((src, i) => (
+                            <button key={src} type="button" className={"photo-btn" + (article.image === src ? " on" : "")}
+                              aria-pressed={article.image === src} aria-label={t("ncPhotoN", { n: i + 1 })}
+                              onClick={() => setArticle((a) => ({ ...a, image: src }))}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img alt="" src={src.startsWith("http") ? src : eng(`/api/image?path=${encodeURIComponent(src)}`)} />
+                            </button>
+                          ))}
+                          <label className="photo-btn upload">
+                            <input type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={uploading}
+                              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }} />
+                            <ImagePlus className="ico" aria-hidden="true" />
+                            <span>{uploading ? "…" : t("ncUpload")}</span>
+                          </label>
+                        </div>
+                      </Pad>
+                      <Row label={t("imageURL")}><input value={article.image} aria-label={t("imageURL")} onChange={(e) => setArticle((a) => ({ ...a, image: e.target.value }))} /></Row>
+                  </Split>
+                </Group>
+              )}
+
+              {tab === "look" && (
+                // Sejajar: kiri = tema & perataan, kanan = huruf dan jarak.
+                <Group title={t("ncLook")}>
+                  <Split side={<>
+                    <span className="mc-r-l">{t("fontTitle")}</span>
+                    <Stepper value={titleStep} onChange={setTitleStep} min={-FONT_STEPS} max={FONT_STEPS} />
+                    <span className="mc-r-l">{t("fontParagraph")}</span>
+                    <Stepper value={paragraphStep} onChange={setParagraphStep} min={-FONT_STEPS} max={FONT_STEPS} />
+                    <span className="mc-r-l">{t("headerSpace")}</span>
+                    <Stepper value={header} onChange={setHeader} min={0} max={HEADER_MAX} step={10} suffix="px" />
+                    <span className="mc-r-l">{t("cardDown")}</span>
+                    <Stepper value={cardTop} onChange={setCardTop} min={0} max={CARD_TOP_MAX} step={10} suffix="px" />
+                    <button type="button" className="ghost" onClick={() => { setTitleStep(0); setParagraphStep(0); setHeader(0); setCardTop(0); setZoom(1); }}
+                      disabled={titleStep === 0 && paragraphStep === 0 && header === 0 && cardTop === 0 && zoom === 1}>{t("fontReset")}</button>
+                  </>}>
+                      <Pad>
+                        <div className="theme-grid" role="group" aria-label={t("ncLook")}>
+                          {THEMES.map((x) => (
+                            <button key={x.id} type="button" className={"theme-tile" + (theme === x.id ? " on" : "")}
+                              aria-pressed={theme === x.id} onClick={() => setTheme(x.id)}>
+                              <span className="theme-swatch" style={{ background: x.swatch }} />
+                              <span>{t(x.key)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </Pad>
+                      <Row label={t("ncAlign")}>
+                        <Segmented label={t("ncAlign")} value={align} onChange={setAlign}
+                          options={[{ value: "left", name: t("ncAlignLeft") }, { value: "center", name: t("ncAlignCenter") },
+                            { value: "right", name: t("ncAlignRight") }, { value: "justify", name: t("ncAlignJustify") }]} />
+                      </Row>
+                  </Split>
+                </Group>
+              )}
+
+              {tab === "caption" && (
+                <Group title={t("ncCaptionTitle")}>
+                  <Pad>
+                    <div className="nc-pad-head">
+                      <label className="mc-r-l" htmlFor="nc-cap">{t("ncCaptionLabel")}</label>
+                      <button type="button" className="ai-btn" onClick={() => write("caption")} disabled={!!writing || !article.url}>
+                        <Sparkles className="ico" aria-hidden="true" /> {writing === "caption" ? t("analyzing") : t("ncWriteForMe")}
+                      </button>
+                    </div>
+                    <textarea id="nc-cap" rows={4} value={caption} onChange={(e) => { setCaption(e.target.value); setChecks((c) => ({ ...c, caption: [] })); }} />
+                    <Checks list={checks.caption} />
+                  </Pad>
+                  <Row label={t("ncHashtags")} note={t("ncCreditNote", { source: article.source || article.domain || "…" })}>
+                    <input id="nc-tags" value={hashtags} aria-label={t("ncHashtags")} onChange={(e) => setHashtags(e.target.value)} placeholder="#..." />
+                  </Row>
+                </Group>
+              )}
+            </TabCard>
           </div>
 
-          <div className="nc-panels">
-            <section className="card">
-              <div className="card-head">
-                <h2>{t("ncCardText")}</h2>
-                <button type="button" className="ai-btn" onClick={() => write("summary")} disabled={!!writing || !article.url}>
-                  <Sparkles className="ico" aria-hidden="true" /> {writing === "summary" ? t("analyzing") : t("ncSummarise")}
-                </button>
+          {/* Rasio di bawah bingkai, setara tombol di bawah bingkai Watermark. */}
+          <Stage title={t("previewTitle")} badge={ratio} help={t("ncActualSize", { w: ratioDef.w, h: ratioDef.h })}
+            tools={<Segmented label={t("ratio")} value={ratio} onChange={setRatio} options={RATIOS.map((r) => ({ value: r.id, name: t(r.key) }))} />}>
+            <StageFrame>
+              <div className="nc-card" style={{ aspectRatio: ratio.replace(":", " / ") }}>
+                {preview ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={preview} alt="" /> : <span className="meta">{t("ncPreviewWait")}</span>}
+                {previewBusy && <span className="nc-busy">{t("rendering")}</span>}
+                {band === "long" && <span className="nc-warn">{t("ncTooLongOnCard")}</span>}
               </div>
-              <label className="step-label" htmlFor="nc-sum">{t("ncSummaryLabel")}</label>
-              <textarea id="nc-sum" rows={3} value={article.summary} onChange={(e) => { setArticle((a) => ({ ...a, summary: e.target.value })); setChecks((c) => ({ ...c, summary: [] })); }} />
-              <div className="nc-count">
-                <span className={"count-" + band}>{t(band === "ok" ? "ncCharsOk" : band === "dense" ? "ncCharsDense" : "ncCharsLong", { n })}</span>
-                <span className="meta">{t("ncSafeLimit")}</span>
-              </div>
-              <Checks list={checks.summary} />
-              {writeError && <p className="nc-note-err">{writeError}</p>}
-            </section>
-
-            <section className="card">
-              <h2>{t("ncPhoto")}</h2>
-              <p className="step-hint flush">{(article.images?.length ? t("ncPhotoHint") : t("ncPhotoNone"))}</p>
-              <div className="nc-photos">
-                {(article.images || []).map((src, i) => (
-                  <button key={src} type="button" className={"photo-btn" + (article.image === src ? " on" : "")}
-                    aria-pressed={article.image === src} aria-label={t("ncPhotoN", { n: i + 1 })}
-                    onClick={() => setArticle((a) => ({ ...a, image: src }))}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img alt="" src={src.startsWith("http") ? src : eng(`/api/image?path=${encodeURIComponent(src)}`)} />
-                  </button>
-                ))}
-                <label className="photo-btn upload">
-                  <input type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={uploading}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }} />
-                  <ImagePlus className="ico" aria-hidden="true" />
-                  <span>{uploading ? "…" : t("ncUpload")}</span>
-                </label>
-              </div>
-            </section>
-
-            <section className="card">
-              <h2>{t("ncLook")}</h2>
-              <div className="theme-grid" role="group" aria-label={t("ncLook")}>
-                {THEMES.map((x) => (
-                  <button key={x.id} type="button" className={"theme-tile" + (theme === x.id ? " on" : "")}
-                    aria-pressed={theme === x.id} onClick={() => setTheme(x.id)}>
-                    <span className="theme-swatch" style={{ background: x.swatch }} />
-                    <span>{t(x.key)}</span>
-                  </button>
-                ))}
-              </div>
-              <p className="step-label nc-gap">{t("ncAlign")}</p>
-              <div className="nc-align">
-                <Segmented label={t("ncAlign")} value={align} onChange={setAlign}
-                  options={[{ value: "left", name: t("ncAlignLeft") }, { value: "center", name: t("ncAlignCenter") },
-                    { value: "right", name: t("ncAlignRight") }, { value: "justify", name: t("ncAlignJustify") }]} />
-              </div>
-            </section>
-
-            <section className="card">
-              <div className="card-head">
-                <h2>{t("ncCaptionTitle")}</h2>
-                <button type="button" className="ai-btn" onClick={() => write("caption")} disabled={!!writing || !article.url}>
-                  <Sparkles className="ico" aria-hidden="true" /> {writing === "caption" ? t("analyzing") : t("ncWriteForMe")}
-                </button>
-              </div>
-              <label className="step-label" htmlFor="nc-cap">{t("ncCaptionLabel")}</label>
-              <textarea id="nc-cap" rows={3} value={caption} onChange={(e) => { setCaption(e.target.value); setChecks((c) => ({ ...c, caption: [] })); }} />
-              <Checks list={checks.caption} />
-              <label className="step-label nc-gap" htmlFor="nc-tags">{t("ncHashtags")}</label>
-              <input id="nc-tags" value={hashtags} onChange={(e) => setHashtags(e.target.value)} placeholder="#..." />
-              <p className="note">{t("ncCreditNote", { source: article.source || article.domain || "…" })}</p>
-            </section>
-
-            <details className="card adv">
-              <summary>{t("ncAdvanced")}</summary>
-              <p className="meta adv-hint">{t("ncAdvancedHint")}</p>
-              <div className="grid3">
-                <div className="field"><label>{t("articleTitle")}</label><input value={article.title} onChange={(e) => setArticle((a) => ({ ...a, title: e.target.value }))} /></div>
-                <div className="field"><label>{t("sourceBadge")}</label><input value={article.source} onChange={(e) => setArticle((a) => ({ ...a, source: e.target.value }))} /></div>
-                <div className="field"><label>{t("date")}</label><input value={article.date} onChange={(e) => setArticle((a) => ({ ...a, date: e.target.value }))} /></div>
-              </div>
-              <div className="field"><label>{t("imageURL")}</label><input value={article.image} onChange={(e) => setArticle((a) => ({ ...a, image: e.target.value }))} /></div>
-              <div className="grid4">
-                <div className="field"><label>{t("fontTitle")}</label><Stepper value={titleStep} onChange={setTitleStep} min={-FONT_STEPS} max={FONT_STEPS} /></div>
-                <div className="field"><label>{t("fontParagraph")}</label><Stepper value={paragraphStep} onChange={setParagraphStep} min={-FONT_STEPS} max={FONT_STEPS} /></div>
-                <div className="field"><label>{t("headerSpace")}</label><Stepper value={header} onChange={setHeader} min={0} max={HEADER_MAX} step={10} suffix="px" /></div>
-                <div className="field"><label>{t("cardDown")}</label><Stepper value={cardTop} onChange={setCardTop} min={0} max={CARD_TOP_MAX} step={10} suffix="px" /></div>
-              </div>
-              <div className="grid3">
-                <div className="field"><label>{t("photoFitLabel")}</label>
-                  <Select value={photoFit} onChange={(v) => { setPhotoFit(v); setZoom(1); }} options={[
-                    { value: "cover", label: t("photoFitCover") }, { value: "whole", label: t("photoFitWhole") }]} /></div>
-                <div className="field"><label>{t("photoFill")}</label>
-                  <Select value={photoFill} onChange={setPhotoFill} disabled={photoFit !== "whole"} options={[
-                    { value: "blur", label: t("photoFillBlur") }, { value: "solid", label: t("photoFillSolid") }]} /></div>
-                <div className="field"><label>{t("photoZoom")}</label>
-                  <Stepper value={Math.round(zoom * 100)} onChange={(v) => setZoom(v / 100)} min={100} max={400} step={5} suffix="%" /></div>
-              </div>
-              <button type="button" className="ghost" onClick={() => { setTitleStep(0); setParagraphStep(0); setHeader(0); setCardTop(0); setZoom(1); }}
-                disabled={titleStep === 0 && paragraphStep === 0 && header === 0 && cardTop === 0 && zoom === 1}>{t("fontReset")}</button>
-            </details>
-          </div>
+            </StageFrame>
+          </Stage>
         </div>
       )}
 
       {screen === "done" && (
-        <div className="nc-done">
-          <section className="nc-final">
-            <div className="nc-final-card" style={{ aspectRatio: ratio.replace(":", " / ") }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {saved && <img src={saved.file} alt="" />}
-            </div>
-            <div className="nc-final-side">
-              {renderError ? (
-                <div className="banner warn" role="alert">
-                  <p>{t("ncRenderFailed", { error: renderError })}</p>
-                  <button type="button" className="primary" onClick={save} disabled={saving}>{t("ncRetryRender")}</button>
-                </div>
-              ) : saved && (
-                <div className="banner good" role="status">
-                  <span className="banner-ico" aria-hidden="true"><Download className="ico" /></span>
-                  <p><b>{t("ncSaved")}</b> {t("ncSavedMeta", { w: saved.width, h: saved.height, size: sizeText })}</p>
-                </div>
-              )}
-              {saved && (
-                <div className="nc-actions">
-                  <a className="btn-dark" href={saved.file} download={`card-${ratio.replace(":", "x")}.png`}><Download className="ico" aria-hidden="true" /> {t("ncDownloadPng")}</a>
-                  <button type="button" className="ghost" onClick={copyCaption}><Copy className="ico" aria-hidden="true" /> {copied ? t("ncCopied") : t("ncCopyCaption")}</button>
-                  <button type="button" className="ghost" onClick={renderAlt}>{t(otherRatio === "4:5" ? "ncDownload45" : "ncDownload916")}</button>
-                </div>
-              )}
-              <section className="card">
-                <h2>{t("ncCaptionPreview")}</h2>
-                <p className="nc-caption">{fullCaption}</p>
-                <p className="meta">{t("ncCaptionPreviewNote")}</p>
-              </section>
-            </div>
-          </section>
-
-          <section>
-            <div className="result-bar">
-              <h2>{t("ncGalleryTitle")}</h2>
-              {cards && cards.length > 0 && <span className="meta">{t("ncGalleryCount", { n: cards.length })}</span>}
-            </div>
-            {cards && cards.length === 0 ? (
-              <section className="card"><EmptyState icon={Newspaper} title={t("ncGalleryEmpty")} description={t("ncGalleryEmptyHint")}
-                action={<button type="button" className="primary" onClick={newCard}>{t("ncFirstCard")}</button>} /></section>
-            ) : (
-              <div className="nc-gallery">
-                {(cards || []).map((c) => (
-                  <article key={c.id} className="nc-mini">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={eng(c.file)} alt="" loading="lazy" />
-                    <div className="nc-mini-body">
-                      <span className="meta">{[c.source, ago(c.made)].filter(Boolean).join(" · ")}</span>
-                      <a className="btn-ghost" href={eng(c.file)} download={`${c.id}.png`}>{t("downloadClip")}</a>
-                    </div>
-                  </article>
-                ))}
+        // Bentuk acuan (Watermark): kiri = status, caption, galeri; kanan =
+        // kolom pratinjau dengan kartu jadi dan tombol unduhnya.
+        <div className="setup-grid">
+          <div className="setup-main">
+            {renderError ? (
+              <div className="banner warn" role="alert">
+                <p>{t("ncRenderFailed", { error: renderError })}</p>
+                <button type="button" className="primary" onClick={save} disabled={saving}>{t("ncRetryRender")}</button>
+              </div>
+            ) : saved && (
+              <div className="banner good" role="status">
+                <span className="banner-ico" aria-hidden="true"><Download className="ico" /></span>
+                <p><b>{t("ncSaved")}</b> {t("ncSavedMeta", { w: saved.width, h: saved.height, size: sizeText })}</p>
               </div>
             )}
-          </section>
+            <section className="card">
+              <div className="card-head">
+                <h2>{t("ncCaptionPreview")}</h2>
+                <button type="button" className="ghost" onClick={copyCaption}><Copy className="ico" aria-hidden="true" /> {copied ? t("ncCopied") : t("ncCopyCaption")}</button>
+              </div>
+              <p className="nc-caption">{fullCaption}</p>
+              <p className="meta">{t("ncCaptionPreviewNote")}</p>
+            </section>
+            <section>
+              <div className="result-bar">
+                <h2>{t("ncGalleryTitle")}</h2>
+                {cards && cards.length > 0 && <span className="meta">{t("ncGalleryCount", { n: cards.length })}</span>}
+              </div>
+              {cards && cards.length === 0 ? (
+                <section className="card"><EmptyState icon={Newspaper} title={t("ncGalleryEmpty")} description={t("ncGalleryEmptyHint")}
+                  action={<button type="button" className="primary" onClick={newCard}>{t("ncFirstCard")}</button>} /></section>
+              ) : (
+                <div className="nc-gallery">
+                  {(cards || []).map((c) => (
+                    <article key={c.id} className="nc-mini">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={eng(c.file)} alt="" loading="lazy" />
+                      <div className="nc-mini-body">
+                        <span className="meta">{[c.source, ago(c.made)].filter(Boolean).join(" · ")}</span>
+                        <a className="btn-ghost" href={eng(c.file)} download={`${c.id}.png`}>{t("downloadClip")}</a>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <Stage title={t("previewTitle")} badge={ratio} help={t("ncActualSize", { w: ratioDef.w, h: ratioDef.h })}
+            tools={<>
+              <a className={"btn-dark" + (saved ? "" : " off")} href={saved?.file} download={`card-${ratio.replace(":", "x")}.png`} aria-disabled={!saved}>
+                <Download className="ico" aria-hidden="true" /> {t("ncDownloadPng")}</a>
+              <button type="button" className="ghost" onClick={renderAlt} disabled={!saved}>{t(otherRatio === "4:5" ? "ncDownload45" : "ncDownload916")}</button>
+            </>}>
+            <StageFrame>
+              <div className="nc-card" style={{ aspectRatio: ratio.replace(":", " / ") }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {saved && <img src={saved.file} alt="" />}
+              </div>
+            </StageFrame>
+          </Stage>
         </div>
       )}
     </div>

@@ -31,14 +31,20 @@ import (
 // salinan — dan watermark yang sudah terbakar tidak bisa dilepas lagi.
 const Suffix = "_watermarked"
 
-// aspectTolerance = seberapa jauh rasio video boleh meleset dari 9:16.
+// aspectTolerance = seberapa jauh rasio berkas boleh meleset dari rasio format
+// supaya dianggap SAMA dan dibiarkan seukuran aslinya.
 //
-// Koordinat banner & headline hidup di ruang 1080x1920. Pada video 16:9 angka
-// itu menunjuk tempat yang sama sekali lain, dan hasilnya banner melayang di
-// luar gambar. Ditolak dengan pesan yang menyebut ukuran aslinya — bukan
-// diam-diam di-reframe, sebab memotong video orang tanpa diminta adalah
-// perubahan yang jauh lebih besar daripada yang ia minta.
+// Yang meleset lebih jauh DISESUAIKAN ke bingkai format (Fit), bukan ditolak
+// seperti dulu — keputusan pemilik 18 Oktober 2026 (notes/44): "tidak perlu ada
+// salah rasio, tinggal masukkan gambarnya, disesuaikan". Pratinjau memakai
+// penyesuaian yang sama (/api/frame), jadi potongannya terlihat sebelum jalan.
 const aspectTolerance = 0.02
+
+// Cara menyesuaikan berkas yang rasionya beda dengan format.
+const (
+	FitCrop  = "crop"  // penuhi bingkai, sisi yang lebih potong di tengah (bawaan)
+	FitWhole = "whole" // seluruh gambar masuk, sisa bingkai diisi versi blur-nya
+)
 
 // Options satu pekerjaan watermark.
 type Options struct {
@@ -51,6 +57,7 @@ type Options struct {
 	// seperti pembuat caption: di situlah orang mencarinya saat hendak memposting.
 	OutDir  string
 	Quality string // draft | hd | max
+	Fit     string // crop (bawaan) | whole — lihat FitCrop
 }
 
 // FileResult hasil satu video. Galat per berkas TIDAK menghentikan sisanya:
@@ -82,8 +89,9 @@ func Run(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, 
 		return Result{}, fmt.Errorf("pick at least one video")
 	}
 	o.Watermark.Headline.Font = o.Subtitle.Font
+	o.Watermark.Headline.FontsDir = paths.FontsDir
 	headline := strings.TrimSpace(o.Watermark.Headline.Text)
-	if o.Watermark.Image == "" && headline == "" {
+	if o.Watermark.Image == "" && len(o.Watermark.Logos) == 0 && headline == "" {
 		// Halaman ini TIDAK punya pekerjaan lain: tanpa banner dan tanpa teks,
 		// yang dihasilkannya cuma salinan yang dikompresi ulang.
 		return Result{}, fmt.Errorf("nothing to burn: choose a watermark image, type a headline, or both")
@@ -111,7 +119,7 @@ func Run(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, 
 			Message: fmt.Sprintf("Burning watermark into %s (%d/%d)", name, i+1, len(o.Videos)),
 		})
 
-		out, sec, err := one(ctx, o, ff, paths, work, video, crf, preset, i)
+		out, sec, err := one(ctx, o, ff, paths, work, video, crf, preset, i, "")
 		fr := FileResult{Video: video, Name: name, Output: out, Seconds: sec}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -127,21 +135,53 @@ func Run(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, 
 	return res, nil
 }
 
-// one mengerjakan satu video.
+// Preview membakar SATU frame berkas pertama persis seperti hasil akhirnya —
+// jalur, ukuran, logo, dan .ass yang sama dengan Run — dan mengembalikan
+// JPEG-nya. Pratinjau di GUI adalah tiruan HTML; ini jawaban "seperti apa
+// jadinya" yang sebenarnya. Logo & judul selalu tampil di sini (waktu tampil
+// diabaikan): yang dinilai rupanya, bukan jadwalnya.
+func Preview(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, file string) ([]byte, error) {
+	o.Watermark.Headline.Font = o.Subtitle.Font
+	o.Watermark.Headline.FontsDir = paths.FontsDir
+	o.Watermark.At, o.Watermark.For = 0, 0
+	work := filepath.Join(paths.DataDir, "cache", "watermark")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		return nil, err
+	}
+	out := filepath.Join(work, fmt.Sprintf("preview_%d.jpg", time.Now().UnixNano()))
+	defer os.Remove(out)
+	if _, _, err := one(ctx, o, ff, paths, work, file, "", "", 0, out); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(out)
+}
+
+// one mengerjakan satu video. preview != "" = cuma satu frame ke path itu
+// (lihat Preview).
 func one(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths,
-	work, video, crf, preset string, idx int) (string, float64, error) {
+	work, video, crf, preset string, idx int, preview string) (string, float64, error) {
 
 	w, h, err := ff.Dimensions(ctx, video)
 	if err != nil {
 		return "", 0, err
 	}
-	// 9:16, atau ditolak. Lihat aspectTolerance.
-	if want := 9.0 / 16.0; abs(float64(w)/float64(h)-want) > aspectTolerance {
-		return "", 0, fmt.Errorf("this video is %dx%d, not 9:16: watermark is placed in a 1080x1920 space, so cut it to 9:16 first", w, h)
+	// Rasio sama = ukuran asli dibiarkan. Beda = keluarannya bingkai format
+	// (1080 x 1920/1350/1080) dan berkasnya disesuaikan ke sana. Lihat
+	// aspectTolerance.
+	fw, fh := o.Watermark.Frame()
+	if abs(float64(w)/float64(h)-float64(fw)/float64(fh)) > aspectTolerance {
+		w, h = fw, fh
 	}
-	dur, err := ff.Duration(ctx, video)
-	if err != nil {
-		return "", 0, err
+	photo := IsImage(video)
+	dur := 0.0
+	if photo {
+		// Foto tidak punya waktu: logo & judul selalu tampil. o salinan, jadi
+		// berkas berikutnya tidak ikut berubah.
+		o.Watermark.At, o.Watermark.For = 0, 0
+	} else {
+		if dur, err = ff.Duration(ctx, video); err != nil {
+			return "", 0, err
+		}
 	}
 
 	// Headline ditulis sebagai .ass TANPA satu pun segmen ucapan: berkas ini
@@ -157,19 +197,36 @@ func one(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths,
 	}
 
 	out := outputPath(video, o.OutDir)
+	logo := func(img string, x, y, lw, lh int) ffmpeg.Watermark {
+		return ffmpeg.Watermark{Image: img, X: x, Y: y, Width: lw, Height: lh,
+			At: o.Watermark.At, For: o.Watermark.For, RefH: fh}
+	}
+	var logos []ffmpeg.Watermark
+	for _, l := range o.Watermark.Logos {
+		logos = append(logos, logo(l.Image, l.X, l.Y, l.Width, l.Height))
+	}
 	enc := ffmpeg.EncodeOpts{
 		CRF: crf, Preset: preset, FontsDir: paths.FontsDir,
 		AssPath: assPath,
-		// Mode center + zoom 100 pada bingkai seukuran videonya sendiri berarti
-		// "biarkan gambarnya apa adanya" — tidak ada pemotongan, tidak ada
-		// bantalan. Dipakai supaya jalur render tetap SATU, bukan supaya video
-		// diubah.
+		// center + zoom 100 = penuhi bingkai, potong di tengah; fit + zoom 0 =
+		// seluruh gambar masuk di atas latar blur. Pada bingkai seukuran
+		// berkasnya sendiri keduanya berarti "biarkan apa adanya".
 		Mode: string(config.ReframeCenter), Background: config.BackgroundBlack, Zoom: config.ZoomMax,
-		Watermark: ffmpeg.Watermark{
-			Image: o.Watermark.Image, X: o.Watermark.X, Y: o.Watermark.Y,
-			Width: o.Watermark.Width, Height: o.Watermark.Height,
-			At: o.Watermark.At, For: o.Watermark.For,
-		},
+		Watermark: logo(o.Watermark.Image, o.Watermark.X, o.Watermark.Y, o.Watermark.Width, o.Watermark.Height),
+		Logos:     logos,
+		// Kotak judul buram: logo harus di atasnya, sama dengan pratinjau.
+		LogosOverSubs: o.Watermark.Headline.Box,
+	}
+	if o.Fit == FitWhole {
+		enc.Mode, enc.Background, enc.Zoom = string(config.ReframeFit), config.BackgroundBlur, 0
+	}
+	if preview != "" {
+		// Detik ke-1 (atau tengah video yang lebih pendek): frame pembuka
+		// sering hitam.
+		return preview, 0, ff.BurnImage(ctx, video, min(1, dur/2), w, h, enc, preview)
+	}
+	if photo {
+		return out, 0, ff.BurnImage(ctx, video, 0, w, h, enc, out)
 	}
 	if err := ff.ClipReframe(ctx, video, 0, dur, w, h, enc, out); err != nil {
 		return "", 0, err
@@ -185,7 +242,25 @@ func outputPath(video, outDir string) string {
 		dir = outDir
 	}
 	base := strings.TrimSuffix(filepath.Base(video), filepath.Ext(video))
-	return filepath.Join(dir, base+Suffix+".mp4")
+	ext := ".mp4"
+	if IsImage(video) {
+		// PNG tetap PNG (tanpa kompresi rugi); foto lain jadi JPEG.
+		ext = ".jpg"
+		if strings.EqualFold(filepath.Ext(video), ".png") {
+			ext = ".png"
+		}
+	}
+	return filepath.Join(dir, base+Suffix+ext)
+}
+
+// IsImage = berkas ini foto (untuk feed), bukan video. Dari akhirannya: ffprobe
+// melaporkan JPEG sebagai "video" berdurasi 0,04 detik.
+func IsImage(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jpg", ".jpeg", ".png", ".webp":
+		return true
+	}
+	return false
 }
 
 func abs(v float64) float64 {

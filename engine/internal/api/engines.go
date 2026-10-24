@@ -13,6 +13,7 @@ import (
 	"github.com/gemgum/clipper/engine/internal/pipeline"
 	"github.com/gemgum/clipper/engine/internal/score/llm"
 	"github.com/gemgum/clipper/engine/internal/score/ollama"
+	"github.com/gemgum/clipper/engine/internal/transcribe"
 	"github.com/gemgum/clipper/engine/internal/writer"
 )
 
@@ -40,10 +41,9 @@ type engineDef struct {
 	ID   string
 	Name string
 	Kind string
-	// Path = awalan jalur di bawah BaseURL, hanya untuk kindOpenAI. Gemini
-	// memakai "/v1beta/openai", sisanya "/v1".
-	Path string
-	// Base, Model = nilai bawaan pabrik. Keduanya boleh ditimpa pengguna lewat
+	// Base, Model = nilai bawaan pabrik. Base = alamat API UTUH, persis seperti
+	// di dokumentasi penyedia (https://api.openai.com/v1): klien hanya menambah
+	// nama endpoint-nya (/chat/completions, /messages, /audio/transcriptions). Keduanya boleh ditimpa pengguna lewat
 	// env, karena penyedia memindahkan endpoint dan menerbitkan model baru
 	// jauh lebih sering daripada aplikasi ini dirilis ulang.
 	Base  string
@@ -68,25 +68,25 @@ var engineDefs = []engineDef{
 	},
 	{
 		ID: "claude", Name: "Claude", Kind: kindAnthropic,
-		Base: "https://api.anthropic.com", Model: "claude-haiku-4-5",
+		Base: "https://api.anthropic.com/v1", Model: "claude-haiku-4-5",
 		EnvKey: "ANTHROPIC_API_KEY", EnvBase: "ANTHROPIC_BASE_URL", EnvModel: "ANTHROPIC_MODEL",
 		KeysURL: "https://console.anthropic.com/settings/keys",
 	},
 	{
-		ID: "openai", Name: "ChatGPT (OpenAI)", Kind: kindOpenAI, Path: "/v1",
-		Base: "https://api.openai.com", Model: "gpt-5.6",
+		ID: "openai", Name: "ChatGPT (OpenAI)", Kind: kindOpenAI,
+		Base: "https://api.openai.com/v1", Model: "gpt-5.6",
 		EnvKey: "OPENAI_API_KEY", EnvBase: "OPENAI_BASE_URL", EnvModel: "OPENAI_MODEL",
 		KeysURL: "https://platform.openai.com/api-keys",
 	},
 	{
-		ID: "gemini", Name: "Google AI Studio (Gemini)", Kind: kindOpenAI, Path: "/v1beta/openai",
-		Base: "https://generativelanguage.googleapis.com", Model: "gemini-3.7-flash",
+		ID: "gemini", Name: "Google AI Studio (Gemini)", Kind: kindOpenAI,
+		Base: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-3.7-flash",
 		EnvKey: "GEMINI_API_KEY", EnvBase: "GEMINI_BASE_URL", EnvModel: "GEMINI_MODEL",
 		KeysURL: "https://aistudio.google.com/apikey",
 	},
 	{
-		ID: "deepseek", Name: "DeepSeek", Kind: kindOpenAI, Path: "/v1",
-		Base: "https://api.deepseek.com", Model: "deepseek-v4-pro",
+		ID: "deepseek", Name: "DeepSeek", Kind: kindOpenAI,
+		Base: "https://api.deepseek.com/v1", Model: "deepseek-v4-pro",
 		EnvKey: "DEEPSEEK_API_KEY", EnvBase: "DEEPSEEK_BASE_URL", EnvModel: "DEEPSEEK_MODEL",
 		KeysURL: "https://platform.deepseek.com/api_keys",
 	},
@@ -98,7 +98,7 @@ var engineDefs = []engineDef{
 		// dipakai persis seperti yang diterbitkan gateway lewat /v1/models.
 		//
 		// Env-nya sendiri, jadi memasang ini tidak menyentuh kunci penyedia lain.
-		ID: "custom", Name: "Custom (OpenAI-compatible)", Kind: kindOpenAI, Path: "/v1",
+		ID: "custom", Name: "Custom (OpenAI-compatible)", Kind: kindOpenAI,
 		EnvKey: "CUSTOM_API_KEY", EnvBase: "CUSTOM_BASE_URL", EnvModel: "CUSTOM_MODEL",
 	},
 }
@@ -136,7 +136,7 @@ func allEngineDefs() []engineDef {
 		// Semua mesin tambahan bicara /chat/completions: itu satu-satunya
 		// bentuk yang bisa diisi cukup dengan alamat + kunci + model.
 		out = append(out, engineDef{
-			ID: id, Name: firstNonEmpty(os.Getenv(userEnv(id, "NAME")), id), Kind: kindOpenAI, Path: "/v1",
+			ID: id, Name: firstNonEmpty(os.Getenv(userEnv(id, "NAME")), id), Kind: kindOpenAI,
 			EnvKey: userEnv(id, "API_KEY"), EnvBase: userEnv(id, "BASE_URL"), EnvModel: userEnv(id, "MODEL"),
 			User: true,
 		})
@@ -182,21 +182,47 @@ type Engine struct {
 	Ready   bool   `json:"ready"`
 	KeysURL string `json:"keys_url,omitempty"`
 	User    bool   `json:"user,omitempty"`
+	// Use = untuk apa mesin ini dipakai: "chat", "transcribe", atau "" (keduanya).
+	// Menentukan di daftar mana ia muncul dan bagaimana tombol Test mengujinya.
+	Use string `json:"use"`
 }
+
+// Kegunaan mesin. "" = keduanya: nilai lama yang belum pernah dipilih
+// (mis. Groq yang sudah dipakai untuk transkripsi) tetap muncul di dua daftar.
+const (
+	useChat       = "chat"
+	useTranscribe = "transcribe"
+)
+
+// useEnv = nama variabel .env kegunaan mesin, atau "" bila kegunaannya tetap.
+// Hanya mesin OpenAI-compatible yang punya endpoint audio; Gemini transkripsinya
+// lewat AI Studio, Claude dan mesin lokal hanya chat.
+func useEnv(d engineDef) string {
+	if d.Kind != kindOpenAI || d.ID == "gemini" || !strings.HasSuffix(d.EnvKey, "API_KEY") {
+		return ""
+	}
+	return strings.TrimSuffix(d.EnvKey, "API_KEY") + "USE"
+}
+
+func validUse(v string) bool { return v == "" || v == useChat || v == useTranscribe }
 
 // resolve membaca satu mesin beserta timpaan .env-nya.
 func resolve(d engineDef) Engine {
 	e := Engine{ID: d.ID, Name: d.Name, Kind: d.Kind, BaseURL: d.Base, Model: d.Model, KeysURL: d.KeysURL, User: d.User}
 	if v := envOr(d.EnvBase, ""); v != "" {
-		// Dinormalkan saat DIBACA, bukan cuma saat disimpan lewat GUI: .env juga
-		// diisi tangan dan lewat variabel lingkungan, dan alamat berakhiran /v1
-		// dari dokumentasi penyedia adalah salah ketik yang paling sering.
-		e.BaseURL = normalizeBase(v)
+		e.BaseURL = cleanBase(v)
 	}
 	if v := envOr(d.EnvModel, ""); v != "" {
 		e.Model = v
 	}
 	e.HasKey = engineKey(d) != ""
+	e.Use = useChat
+	if name := useEnv(d); name != "" {
+		e.Use = strings.TrimSpace(os.Getenv(name))
+		if !validUse(e.Use) {
+			e.Use = ""
+		}
+	}
 
 	if d.Kind == kindLocal {
 		// Mesin lokal tidak butuh kunci; yang menentukan siap atau tidak adalah
@@ -256,11 +282,18 @@ func EngineFor(id, model string) (writer.Completer, string, error) {
 	if !ok {
 		return nil, "", fmt.Errorf("unknown engine %q: choose one of: %s", id, engineIDs())
 	}
-	e := resolve(d)
+	return engineFor(d, resolve(d), engineKey(d), model)
+}
+
+// engineFor = EngineFor dengan alamat & kunci yang sudah ditentukan pemanggil —
+// tombol Test memakainya untuk isian yang belum disimpan.
+func engineFor(d engineDef, e Engine, key, model string) (writer.Completer, string, error) {
+	if e.Use == useTranscribe {
+		return nil, "", fmt.Errorf("%s is set up for transcription only: pick a chat engine, or change its use on the Requirements page", d.Name)
+	}
 	if model = strings.TrimSpace(model); model == "" {
 		model = e.Model
 	}
-	key := engineKey(d)
 
 	switch d.Kind {
 	case kindAnthropic:
@@ -282,7 +315,7 @@ func EngineFor(id, model string) (writer.Completer, string, error) {
 			return nil, "", fmt.Errorf("%s has no API key yet: add it on the Requirements page", d.Name)
 		}
 		c := ollama.New(e.BaseURL, model)
-		c.Kind, c.Path, c.APIKey = ollama.KindOpenAI, d.Path, key
+		c.Kind, c.APIKey = ollama.KindOpenAI, key
 		return func(ctx context.Context, system, user string, schema any) (string, error) {
 			return c.Complete(ctx, system, user, schema, llmMaxTokens)
 		}, d.Name + " (" + c.Model + ")", nil
@@ -333,7 +366,7 @@ func (s *Server) engineModels(w http.ResponseWriter, r *http.Request) {
 	e := resolve(d)
 	var names []string
 	if d.Kind != kindAnthropic && e.BaseURL != "" {
-		for _, m := range ollama.Models(r.Context(), e.BaseURL, d.Path, engineKey(d)) {
+		for _, m := range ollama.Models(r.Context(), e.BaseURL, engineKey(d)) {
 			names = append(names, m.Name)
 		}
 	}
@@ -352,10 +385,21 @@ func (s *Server) saveEngine(w http.ResponseWriter, r *http.Request) {
 		APIKey  *string `json:"api_key"`
 		BaseURL *string `json:"base_url"`
 		Model   *string `json:"model"`
+		Use     *string `json:"use"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
 		return
+	}
+	if req.Use != nil && !validUse(*req.Use) {
+		writeErr(w, 400, "use must be chat, transcribe, or empty for both")
+		return
+	}
+	if req.BaseURL != nil {
+		if n := endpointInBase(*req.BaseURL); n != "" {
+			writeErr(w, 400, "the address ends with "+n+", which Clipper adds itself: enter it up to the part before "+n+", e.g. https://openrouter.ai/api/v1")
+			return
+		}
 	}
 	if req.ID == "" {
 		// Mesin baru: id diturunkan dari namanya, dan alamatnya wajib — tanpa
@@ -391,7 +435,7 @@ func (s *Server) saveEngine(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.BaseURL != nil {
-		s.setEnv(d.EnvBase, normalizeBase(*req.BaseURL))
+		s.setEnv(d.EnvBase, cleanBase(*req.BaseURL))
 		if d.Kind == kindLocal {
 			// Alamat kosong berarti kembali ke penemuan otomatis, dan itu harus
 			// terasa SEKARANG, bukan setelah aplikasi dijalankan lagi.
@@ -400,6 +444,9 @@ func (s *Server) saveEngine(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Model != nil {
 		s.setEnv(d.EnvModel, strings.TrimSpace(*req.Model))
+	}
+	if name := useEnv(d); req.Use != nil && name != "" {
+		s.setEnv(name, *req.Use)
 	}
 	writeJSON(w, 200, resolve(d))
 }
@@ -469,17 +516,59 @@ func (s *Server) setEnv(name, value string) {
 	_ = writeEnvKey(s.paths.EnvFile, name, value)
 }
 
-func normalizeBase(v string) string {
+// cleanBase merapikan alamat tanpa mengubah jalurnya: spasi & garis miring di
+// ujung dibuang, skema ditambah bila tidak ada (OLLAMA_HOST lazim ditulis
+// "127.0.0.1:11434"). Jalur TIDAK disentuh — alamat dipakai apa adanya, sebab
+// dulu /v1 dipangkas lalu ditambah lagi oleh klien, dan penyedia yang jalurnya
+// bukan /v1 (atau pindah ke /v2) jadi tidak bisa dipakai sama sekali.
+func cleanBase(v string) string {
 	v = strings.TrimRight(strings.TrimSpace(v), "/")
-	// Alamat di dokumentasi penyedia SELALU berakhiran /v1, sedangkan tiap klien
-	// menambahkan jalurnya sendiri (Path, atau /v1/messages untuk Claude). Yang
-	// tersusun jadi .../v1/v1/messages, dan gejalanya cuma "404 Not found".
-	// Ditambal di sini sekali, bukan di tiap klien.
-	v = strings.TrimSuffix(v, "/v1")
 	if v != "" && !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
 		v = "http://" + v
 	}
 	return v
+}
+
+// endpointNames = akhiran yang ditambahkan klien sendiri. Alamat yang sudah
+// memuatnya tersusun dobel (.../audio/transcriptions/audio/transcriptions) dan
+// gejalanya cuma 404 — pernah terjadi 15 Oktober 2026 dengan OpenRouter.
+var endpointNames = []string{"/chat/completions", "/audio/transcriptions", "/messages", "/models"}
+
+func endpointInBase(v string) string {
+	for _, n := range endpointNames {
+		if strings.HasSuffix(cleanBase(v), n) {
+			return n
+		}
+	}
+	return ""
+}
+
+// baseURLsFullEnv menandai .env yang alamatnya sudah UTUH (dengan /v1). Sebelum
+// 15 Oktober 2026 alamat disimpan tanpa jalurnya; migrateBaseURLs menambahkan
+// jalur lama itu sekali, lalu memasang penanda ini.
+const baseURLsFullEnv = "CLIPPER_BASE_URLS"
+
+// oldPath = jalur yang dulu ditambahkan klien untuk mesin ini.
+func oldPath(d engineDef) string {
+	if d.ID == "gemini" {
+		return "/v1beta/openai"
+	}
+	return "/v1"
+}
+
+func (s *Server) migrateBaseURLs() {
+	if os.Getenv(baseURLsFullEnv) == "full" {
+		return
+	}
+	for _, d := range allEngineDefs() {
+		if d.Kind == kindLocal || d.EnvBase == "" {
+			continue
+		}
+		if v := cleanBase(os.Getenv(d.EnvBase)); v != "" && !strings.HasSuffix(v, oldPath(d)) {
+			s.setEnv(d.EnvBase, v+oldPath(d))
+		}
+	}
+	s.setEnv(baseURLsFullEnv, "full")
 }
 
 // EngineTest = hasil uji satu mesin.
@@ -500,22 +589,22 @@ type EngineTest struct {
 	// Strict = servernya benar-benar MEMAKSAKAN bentuk itu. Keduanya dipisah
 	// karena model bisa saja menuruti prompt pada balasan pendek lalu melenceng
 	// pada yang panjang — dan yang panjang itulah tahap menulis.
-	Strict bool   `json:"strict"`
-	Reply  string `json:"reply,omitempty"`
-	Error  string `json:"error,omitempty"`
-}
-
-// schemaProbe = skema balasan sekecil mungkin untuk menguji ketaatan penyedia.
-var schemaProbe = map[string]any{
-	"type":       "object",
-	"properties": map[string]any{"ok": map[string]any{"type": "boolean"}},
-	"required":   []string{"ok"},
+	Strict bool `json:"strict"`
+	// Mode = jenis uji yang dijalankan: "chat" atau "transcribe".
+	Mode string `json:"mode"`
+	// Heard = teks yang didengar mesin transkripsi dari audio contoh;
+	// Expected = kalimat aslinya, untuk dibandingkan di GUI.
+	Heard    string `json:"heard,omitempty"`
+	Expected string `json:"expected,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 func (s *Server) testEngine(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID    string `json:"id"`
 		Model string `json:"model"`
+		// Mode = "chat" atau "transcribe"; kosong = sesuai kegunaan mesin.
+		Mode string `json:"mode"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
@@ -527,66 +616,73 @@ func (s *Server) testEngine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := resolve(d)
+	mode := req.Mode
+	if mode == "" && e.Use == useTranscribe {
+		mode = useTranscribe
+	}
 
-	out := EngineTest{}
+	// Yang diuji adalah yang TERSIMPAN, dirakit lewat jalur job: Options bawaan
+	// → fillEngine/fillTranscriber (Manager.Prepare) → pipeline. Dulu tombol ini
+	// memakai isian form yang belum disimpan dan kliennya sendiri, sehingga Test
+	// bisa hijau sementara job 404 (15 Oktober 2026).
+	o := config.DefaultOptions()
+	paths := s.paths
+	if d.Kind == kindAnthropic {
+		paths.APIKey = engineKey(d)
+	}
+	out := EngineTest{Mode: firstNonEmpty(mode, useChat)}
+	if mode == useTranscribe {
+		if !audioEngine(d.ID) {
+			out.Error = d.Name + " is not set up for transcription: set its use to Transcription or Both and save"
+			writeJSON(w, 200, out)
+			return
+		}
+		o.Transcriber, o.TranscribeModel = d.ID, strings.TrimSpace(req.Model)
+		fillTranscriber(&o)
+		p := pipeline.New(paths, o)
+		out.Engine = p.TranscriberName()
+		heard, err := p.ProbeTranscriber(r.Context())
+		if err != nil {
+			out.Error = err.Error()
+		} else {
+			out.OK, out.Schema, out.Strict = true, true, true
+			out.Heard, out.Expected = heard, transcribe.TestSpeechText
+		}
+		writeJSON(w, 200, out)
+		return
+	}
+	if e.Use == useTranscribe {
+		out.Error = d.Name + " is set up for transcription only: change its use to Chat or Both and save"
+		writeJSON(w, 200, out)
+		return
+	}
 	if d.Kind != kindAnthropic && e.BaseURL != "" {
-		for _, m := range ollama.Models(r.Context(), e.BaseURL, d.Path, engineKey(d)) {
+		for _, m := range ollama.Models(r.Context(), e.BaseURL, engineKey(d)) {
 			out.Models = append(out.Models, m.Name)
 		}
 	}
 
-	// Mesin lokal diuji dengan uji DUA TAHAP yang sama persis dengan yang
-	// dipakai job (koreksi transkrip + pemilihan momen), bukan sapaan "ok".
-	//
-	// Alasannya temuan lama: berkali-kali di komputer baru Ollama jalan, model
-	// terpasang, sapaan berhasil — dan job klip tetap berhenti. Sapaan menguji
-	// bahwa servernya menjawab, bukan bahwa modelnya sanggup.
+	// Uji DUA TAHAP yang sama persis dengan job (koreksi transkrip + pemilihan
+	// momen), untuk SEMUA mesin — bukan sapaan "ok". Sapaan menguji bahwa
+	// servernya menjawab, bukan bahwa modelnya sanggup (temuan lama di Ollama).
+	o.Provider, o.LLMModel = d.ID, strings.TrimSpace(req.Model)
 	if d.Kind == kindLocal {
-		model := strings.TrimSpace(req.Model)
-		if model == "" {
-			model = e.Model
-		}
-		name, steps := pipeline.SelfTest(r.Context(), e.BaseURL, model)
-		out.Engine = name
-		out.OK, out.Strict, out.Schema = true, true, true
-		for _, st := range steps {
-			if !st.OK {
-				out.OK, out.Strict, out.Schema = false, false, false
-				out.Error = st.Name + ": " + st.Error
-				break
-			}
-		}
-		writeJSON(w, 200, out)
-		return
+		o.OllamaURL, o.OllamaModel = e.BaseURL, firstNonEmpty(o.LLMModel, e.Model)
+	} else {
+		fillEngine(&o)
 	}
-
-	complete, name, err := EngineFor(req.ID, req.Model)
-	if err != nil {
-		out.Error = err.Error()
-		writeJSON(w, 200, out)
-		return
-	}
+	name, steps := pipeline.New(paths, o).SelfTest(r.Context())
 	out.Engine = name
-
-	reply, err := complete(r.Context(), `Reply with JSON only: {"ok": true}`, "ping", schemaProbe)
-	if err != nil {
-		out.Error = err.Error()
-		writeJSON(w, 200, out)
-		return
+	out.OK, out.Schema = true, true
+	for _, st := range steps {
+		if !st.OK {
+			out.OK, out.Schema = false, false
+			out.Error = st.Name + ": " + st.Error
+			break
+		}
 	}
-	out.OK = true
-	out.Reply = truncateReply(reply)
-	out.Schema = strings.Contains(strings.ReplaceAll(reply, " ", ""), `"ok":true`)
-	out.Strict = d.Kind != kindOpenAI || ollama.SchemaEnforced(e.BaseURL)
+	out.Strict = out.OK && (d.Kind != kindOpenAI || ollama.SchemaEnforced(e.BaseURL))
 	writeJSON(w, 200, out)
-}
-
-func truncateReply(s string) string {
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	if len(s) > 120 {
-		return s[:120] + "…"
-	}
-	return s
 }
 
 // llmEngine merakit pemanggil untuk tab kartu berita, dengan skema pemilihan
@@ -613,7 +709,7 @@ func fillEngine(o *config.Options) {
 	}
 	e := resolve(d)
 	o.EngineName = d.Name + " (" + firstNonEmpty(o.LLMModel, e.Model) + ")"
-	o.LLMBase, o.LLMPath, o.LLMKeyEnv = e.BaseURL, d.Path, d.EnvKey
+	o.LLMBase, o.LLMKeyEnv = e.BaseURL, d.EnvKey
 	if o.LLMModel == "" {
 		o.LLMModel = e.Model
 	}

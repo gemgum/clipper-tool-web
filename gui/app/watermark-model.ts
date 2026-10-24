@@ -35,7 +35,31 @@ export type Watermark = {
   // Judul berdiri sendiri di bingkai, tidak dikurung kotak gambar. Hanya
   // halaman watermark yang menyalakannya (config.Headline.Free di engine).
   hlFree?: boolean;
+  // Kotak kartu berita + baris kredit di bawah judul (config.Headline.Box).
+  hlBox?: boolean;
+  hlCredit?: string;
+  // Sudut kotak judul lancip (true) atau melingkar.
+  hlSharp?: boolean;
+  // Warna isi kotak judul (nama atau #rrggbb); kosong = putih.
+  hlBoxColor?: string;
+  // Perataan teks di dalam kotak judul.
+  hlAlign?: "left" | "center" | "right";
+  // Warna garis tepi: huruf (judul biasa) atau KOTAK (kotak judul). Kosong =
+  // otomatis (hitam, putih untuk teks hitam).
+  hlOutlineColor?: string;
+  // Logo TAMBAHAN di samping image (config.Watermark.Logos).
+  logos?: Logo[];
+  // Bingkai halaman watermark. Halaman klip selalu "short".
+  format?: Format;
 };
+
+export type Logo = { image: string; x: number; y: number; width: number; height: number };
+export type Format = "short" | "feed45" | "feed11";
+
+// Ruang koordinat per format. Harus sama dengan config.FrameSize di engine.
+export function frameSize(f: Format | undefined) {
+  return { w: 1080, h: f === "feed45" ? 1350 : f === "feed11" ? 1080 : 1920 };
+}
 
 // Harus sama dengan config.DefaultWatermark() di engine.
 export const DEFAULT_WATERMARK: Watermark = {
@@ -47,7 +71,7 @@ export const DEFAULT_WATERMARK: Watermark = {
 // watermarkOn = ada yang akan tergambar. Headline tanpa banner sah: teks tetap di
 // atas video adalah bentuk watermark yang paling murah.
 export const watermarkOn = (b: Watermark) =>
-  !!b.image || !!b.hlText.trim() || b.hlSource === "llm";
+  !!b.image || !!b.logos?.length || !!b.hlText.trim() || b.hlSource === "llm";
 
 // watermarkToAPI menerjemahkan ke bentuk yang dibaca config.Watermark di engine.
 //
@@ -63,6 +87,11 @@ export const watermarkToAPI = (b: Watermark, font: string) => ({
   height: Math.round(b.height),
   at: Number(b.at) || 0,
   for: Number(b.dur) || 0,
+  format: b.format || "short",
+  logos: (b.logos || []).map((l) => ({
+    image: l.image, x: Math.round(l.x), y: Math.round(l.y),
+    width: Math.round(l.width), height: Math.round(l.height),
+  })),
   headline: {
     source: b.hlSource,
     font,
@@ -72,8 +101,13 @@ export const watermarkToAPI = (b: Watermark, font: string) => ({
     bold: true,
     outline: Math.round(b.hlOutline),
     // Teks hitam butuh tepi terang; warna lain tepi hitam.
-    outline_color: b.hlColor === "black" ? "white" : "black",
+    outline_color: b.hlOutlineColor || (b.hlColor === "black" ? "white" : "black"),
     free: !!b.hlFree,
+    box: !!b.hlBox,
+    credit: b.hlBox ? (b.hlCredit || "") : "",
+    sharp: !!b.hlSharp,
+    box_color: b.hlBoxColor || "",
+    align: b.hlAlign || "left",
     dx: Math.round(b.hlDX), dy: Math.round(b.hlDY),
   },
 });
@@ -92,9 +126,19 @@ const HL_PAD = 16;
 // headlineBox = kotak yang MENGURUNG teks: kotak gambar bila ada gambarnya,
 // seluruh bingkai bila tidak. Harus sama dengan config.Watermark.HeadlineBox.
 export function headlineBox(b: Watermark) {
-  if (!b.image || b.hlFree) return { cx: 540, cy: 960, w: 1080, h: 1920 };
-  return { cx: b.x, cy: b.y, w: (1080 * b.width) / 100, h: (1920 * b.height) / 100 };
+  const f = frameSize(b.format);
+  if (!b.image || b.hlFree || b.hlBox) return { cx: f.w / 2, cy: f.h / 2, w: f.w, h: f.h };
+  return { cx: b.x, cy: b.y, w: (f.w * b.width) / 100, h: (f.h * b.height) / 100 };
 }
+
+// Tata letak kotak kartu berita DARI ENGINE (POST /api/watermark/layout →
+// subtitle.NewsBox). Tidak dihitung ulang di sini: engine mengukur dengan
+// berkas font asli, dan tebakan kedua di GUI adalah cara pratinjau berbeda
+// dari hasil render.
+export type NewsLayout = {
+  left: number; top: number; w: number; h: number;
+  lines: string[]; credit: number; pad: number; radius: number;
+};
 
 export function wrapHeadline(text: string, size: number, boxW: number): string[] {
   const usable = boxW - 2 * HL_PAD;

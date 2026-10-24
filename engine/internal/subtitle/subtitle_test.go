@@ -84,7 +84,7 @@ func TestColorIsNotForcedToYellow(t *testing.T) {
 	sub := config.DefaultSubtitle()
 	sub.Color = "white"
 	sub.Mode = config.SubKaraoke
-	head := assHeader(sub, config.Headline{}, false)
+	head := assHeader(sub, config.Headline{}, false, 1920)
 	// PrimaryColour (kolom ke-4 baris Style) harus tetap putih.
 	for _, line := range strings.Split(head, "\n") {
 		if !strings.HasPrefix(line, "Style: Default,") {

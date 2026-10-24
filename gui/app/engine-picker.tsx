@@ -28,7 +28,16 @@ export type EngineInfo = {
   keys_url?: string;
   // Mesin yang ditambahkan pengguna sendiri; hanya ini yang bisa dihapus.
   user?: boolean;
+  // Kegunaan: "chat", "transcribe", atau "" (keduanya).
+  use?: string;
 };
+
+/** Boleh dipilih untuk chat (koreksi, pemilihan klip, berita, caption). */
+export const canChat = (e: EngineInfo) => e.use !== "transcribe";
+/** Boleh dipilih untuk transkripsi: OpenAI-compatible yang tidak khusus chat.
+ *  Gemini lewat pilihan AI Studio, sebab jalur OpenAI-nya tanpa endpoint audio. */
+export const hasAudioUse = (e: EngineInfo) => e.kind === "openai" && e.id !== "gemini";
+export const canTranscribe = (e: EngineInfo) => hasAudioUse(e) && e.use !== "chat";
 
 /** Nilai khusus: bukan mesin, melainkan pintu ke setelan. */
 export const ADD_ENGINE = "__add";
@@ -75,7 +84,7 @@ export default function EnginePicker({
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<Result>(null);
 
-  const ready = engines.filter((e) => e.ready);
+  const ready = engines.filter((e) => e.ready && canChat(e));
   const current = engines.find((e) => e.id === engine);
   const isExtra = extra.some((x) => x.id === engine);
 

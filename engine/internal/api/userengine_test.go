@@ -42,7 +42,7 @@ func TestUserEngines(t *testing.T) {
 	if !ok || !d.User || d.Name != "My gateway!" {
 		t.Fatalf("created engine: %+v ok=%v", d, ok)
 	}
-	if e := resolve(d); !e.Ready || e.BaseURL != "https://gw.example.com" || e.Model != "glm-5.3" {
+	if e := resolve(d); !e.Ready || e.BaseURL != "https://gw.example.com/v1" || e.Model != "glm-5.3" {
 		t.Fatalf("resolved: %+v", e)
 	}
 	if rec := call(del, `{"id":"claude"}`); rec.Code != 400 {

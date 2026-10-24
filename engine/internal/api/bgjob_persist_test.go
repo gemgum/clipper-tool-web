@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -54,5 +55,31 @@ func TestBGStoreRemove(t *testing.T) {
 	b.persistTo(dir)
 	if _, ok := b.get(done.ID); ok {
 		t.Fatal("job yang dihapus muncul lagi dari disk")
+	}
+}
+
+// Membatalkan: 404 bila tidak ada, 200 + context benar-benar dibatalkan bila
+// berjalan, 409 bila sudah berhenti — dulu job yang sudah selesai pun dijawab
+// "canceled", seolah pembatalannya berhasil.
+func TestBGStoreCancelHandler(t *testing.T) {
+	var p bgStore[string]
+	ctx, cancel := context.WithCancel(context.Background())
+	j := p.create("caption", cancel)
+	call := func(id string) int {
+		r := httptest.NewRequest("POST", "/api/captions/"+id+"/cancel", nil)
+		r.SetPathValue("id", id)
+		w := httptest.NewRecorder()
+		p.cancelHandler(w, r)
+		return w.Code
+	}
+	if c := call("caption_9999"); c != 404 {
+		t.Fatalf("job tak dikenal: %d, mau 404", c)
+	}
+	if c := call(j.ID); c != 200 || ctx.Err() == nil {
+		t.Fatalf("job berjalan: %d, ctx=%v — mau 200 dan context dibatalkan", c, ctx.Err())
+	}
+	p.finish(j.ID, ctx, "", errors.New("dihentikan"))
+	if c := call(j.ID); c != 409 {
+		t.Fatalf("job yang sudah berhenti: %d, mau 409", c)
 	}
 }

@@ -7,9 +7,9 @@
 // sini — tidak ada tempat kedua. AI engine hanya ditampilkan: mesin dipilih
 // sekali di Settings (notes/39).
 
-import { Ban, Camera, CaseSensitive, Cpu, Download, Highlighter, Mic, Monitor, Move, Music, Smartphone, SquarePlay, Type } from "lucide-react";
+import { Ban, Camera, CaseSensitive, Cpu, Download, Droplet, Highlighter, Mic, Monitor, Move, Music, Smartphone, SquarePlay, Type } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
 import type { MessageKey } from "./i18n";
 import { eng } from "./engine";
@@ -20,7 +20,9 @@ import { Segmented, Toggle } from "./clip-steps";
 import { useEngines } from "./engine-picker";
 import { sameModel, useOllama } from "./ollama";
 import type { Font, FontCheck } from "./preview-panel";
-import WatermarkPanel from "./watermark-panel";
+import WatermarkPanel, { watermarkColors } from "./watermark-panel";
+import TabCard, { Group as Box, Split } from "./tab-card";
+import ColorPanel from "./color-panel";
 import type { Watermark } from "./watermark-model";
 
 export type WhisperModel = { name: string; size: string; downloaded: boolean };
@@ -35,34 +37,22 @@ const ZOOM_BOUNDS: Record<string, { min: number; natural: number }> = {
 };
 export const zoomBounds = (mode: string) => ZOOM_BOUNDS[mode] ?? ZOOM_BOUNDS.center;
 
-type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "type"
-  | "platform" | "zoom" | "watermark";
-// Judul tiap bagian di dalam panel tab. Posisi, kisi, dan panduan tinggal di kartu Preview.
-const PARTS: Record<Key, MessageKey> = {
-  transcription: "mcSecTranscript", ai: "mcAI",
-  clips: "mcSecClips", quality: "mcSecVideo",
-  style: "mcSecStyle", type: "mcSecType",
-  platform: "mcSecPlatform", zoom: "mcFraming", watermark: "groupWatermark",
-};
-// Semua setelan halaman: empat tab, satu panel selalu terbuka.
-export type Group = "ai" | "output" | "text" | "layout";
-const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; parts: Key[] }[] = [
-  { key: "ai", icon: Cpu, label: "mcGroupAI", parts: ["transcription", "ai"] },
-  { key: "output", icon: Monitor, label: "mcGroupOutput", parts: ["clips", "quality"] },
-  { key: "text", icon: Type, label: "mcGroupText", parts: ["style", "type"] },
-  { key: "layout", icon: Move, label: "mcGroupLayout", parts: ["platform", "zoom", "watermark"] },
+type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "type" | "color"
+  | "platform" | "zoom" | "watermark" | "wmcolor";
+// Semua setelan halaman: lima tab, satu panel selalu terbuka — bentuk halaman
+// Watermark (acuan): tiap tab SATU grup <Split>, kiri = left (baris), kanan =
+// side (panel rincian). row()/sw() yang sama dipakai di kedua sisi; CSS
+// memindah labelnya ke atas di panel kanan.
+export type Group = "ai" | "output" | "text" | "layout" | "watermark";
+const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; title: MessageKey; left: Key[]; side: Key }[] = [
+  { key: "ai", icon: Cpu, label: "mcGroupAI", title: "mcSecTranscript", left: ["transcription"], side: "ai" },
+  { key: "output", icon: Monitor, label: "mcGroupOutput", title: "mcSecVideo", left: ["quality"], side: "clips" },
+  { key: "text", icon: Type, label: "mcSecType", title: "mcSecType", left: ["style", "type"], side: "color" },
+  { key: "layout", icon: Move, label: "mcGroupLayout", title: "mcFraming", left: ["zoom"], side: "platform" },
+  { key: "watermark", icon: Droplet, label: "wmLogoTitle", title: "groupWatermark", left: ["watermark"], side: "wmcolor" },
 ];
 // Tebal garis tepi sebagai tiga pilihan; angka lain = Custom (angka persisnya di panel Text).
 const OUTLINES = [{ v: 3, k: "mcThin" }, { v: 5, k: "mcMedium" }, { v: 8, k: "mcThick" }] as const;
-// Palet warna teks & sorotan (engine menerima #RRGGBB untuk keduanya).
-const PALETTE = [
-  { hex: "#FFFFFF", k: "colorWhite" }, { hex: "#FFD400", k: "colorYellow" }, { hex: "#F2874B", k: "colorOrange" },
-  { hex: "#E5484D", k: "colorRed" }, { hex: "#FF7AB6", k: "colorPink" }, { hex: "#9B7BFF", k: "colorPurple" },
-  { hex: "#4F8BFF", k: "colorBlue" }, { hex: "#3AD1D9", k: "colorCyan" }, { hex: "#38C976", k: "colorGreen" },
-  { hex: "#111111", k: "colorBlack" },
-] as const;
-// Nilai lama "white"/"yellow" (preset tersimpan) dibaca sebagai hex palet.
-const colHex = (c: string) => (c === "white" ? "#ffffff" : c === "yellow" ? "#ffd400" : c.toLowerCase());
 const SIZES = [{ v: 72, k: "sizeS" }, { v: 94, k: "sizeM" }, { v: 120, k: "sizeL" }] as const;
 
 export default function MoreControls(p: {
@@ -106,7 +96,6 @@ export default function MoreControls(p: {
   const { t } = useI18n();
   const { engines } = useEngines();
   const [open, setOpen] = useState<Group>("ai");
-  const [colMode, setColMode] = useState<"text" | "hl">("text");
   const item = GROUPS.find((g) => g.key === open)!;
   const bounds = zoomBounds(p.reframe);
   const engineName = p.engine === "heuristic" ? t("offlineHeuristic") : (engines.find((e) => e.id === p.engine)?.name || p.engine);
@@ -187,8 +176,6 @@ export default function MoreControls(p: {
   const sw = (toggle: React.ReactNode, note?: React.ReactNode) => (
     <div className="mc-r mc-r-sw">{toggle}{note && <span className="mc-note">{note}</span>}</div>
   );
-  const isHl = colMode === "hl";
-  const colValue = isHl ? p.subHighlight : p.subColor;
 
   const body = (part: Key) => {
     switch (part) {
@@ -209,9 +196,10 @@ export default function MoreControls(p: {
         return <>
           {row("mcEngineRow", <>
             <span className="mc-val">{engineName}{engine !== "heuristic" && llmModel && <> · {llmModel}</>}</span>
+            {/* Warn cuma lambang + popup: menempel di baris mesinnya, bukan baris sendiri. */}
+            {ollamaWarn}
             <a className="mc-link" href="/requirements">{t("aiChangeInSettings")} →</a>
           </>)}
-          {ollamaWarn && <div className="mc-r mc-r-sw">{ollamaWarn}</div>}
         </>;
       case "clips":
         return <>
@@ -255,8 +243,7 @@ export default function MoreControls(p: {
           {sw(<Toggle checked={p.subMode === "word"} onChange={(v) => p.setSubMode(v ? "word" : "highlight")} label={t("subWord")} />)}
         </>;
       case "type":
-        return <div className="mc-split">
-          <div className="mc-split-l">
+        return <>
             {row("font", <>
               <Select value={p.fontManual ? "__manual__" : p.subFont} ariaLabel={t("font")}
                 onChange={(v) => { if (v === "__manual__") { p.setFontManual(true); return; } p.setFontManual(false); p.setSubFont(v); }}
@@ -281,29 +268,13 @@ export default function MoreControls(p: {
               ...(OUTLINES.some((o) => o.v === p.subOutline) ? [] : [{ value: p.subOutline, name: t("mcCustom", { n: p.subOutline }) }]),
             ]} />)}
             {sw(<Toggle checked={p.subBox} onChange={p.setSubBox} label={t("mcBox")} />)}
-          </div>
-          {/* Satu palet untuk dua sasaran: warna teks atau warna sorotan. */}
-          <div className="mc-split-r">
-            <span className="mc-r-l">{t("color")}</span>
-            <div className="segmented" role="group" aria-label={t("color")}>
-              {(["text", "hl"] as const).map((m) => (
-                <button key={m} type="button" className={colMode === m ? "on" : ""} aria-pressed={colMode === m} onClick={() => setColMode(m)}>
-                  <span className="mc-cdot" style={{ background: colHex(m === "hl" ? p.subHighlight : p.subColor) }} />
-                  {t(m === "hl" ? "mcColHl" : "mcColText")}
-                </button>
-              ))}
-            </div>
-            <div className="mc-cdots" role="group" aria-label={t(isHl ? "highlightColour" : "color")}>
-              {PALETTE.map((c) => {
-                const on = colHex(colValue) === c.hex.toLowerCase();
-                return <button key={c.hex} type="button" className={"mc-cswatch" + (on ? " on" : "")} aria-pressed={on}
-                  aria-label={t(c.k)} title={t(c.k)} onClick={() => (isHl ? p.setSubHighlight : p.setSubColor)(c.hex)}>
-                  <span style={{ background: c.hex }} />
-                </button>;
-              })}
-            </div>
-          </div>
-        </div>;
+        </>;
+      case "color":
+        // Satu palet untuk dua sasaran: warna teks atau warna sorotan.
+        return <ColorPanel targets={[
+          { key: "text", name: t("mcColText"), value: p.subColor, set: p.setSubColor },
+          { key: "hl", name: t("mcColHl"), value: p.subHighlight, set: p.setSubHighlight },
+        ]} />;
       case "platform":
         return row("postTo", <Segmented label={t("mcSecPlatform")} value={p.platform} onChange={p.setPlatform} options={[
           { value: "tiktok", name: "TikTok", icon: Music },
@@ -324,37 +295,23 @@ export default function MoreControls(p: {
           ]} />)}
         </>;
       case "watermark":
-        return <div className="mc-r mc-r-pad">
-          <WatermarkPanel bare watermark={p.watermark} setWatermark={p.setWatermark}
-            onPickImage={p.onPickImage} open setOpen={() => {}} />
-        </div>;
+        return <WatermarkPanel watermark={p.watermark} setWatermark={p.setWatermark} onPickImage={p.onPickImage} />;
+      case "wmcolor":
+        return <ColorPanel targets={watermarkColors(p.watermark, p.setWatermark, t)} />;
     }
     return null;
   };
 
   return (
-    <section className={"step-card mc" + (p.disabled ? " off" : "")} aria-disabled={p.disabled || undefined}>
-      <fieldset className="step-body" disabled={p.disabled}>
-        <div className="mc-tabs" role="tablist" aria-label={t("mcTitle")}>
-          {GROUPS.map(({ key, icon: Icon, label }) => (
-            <button key={key} type="button" role="tab" className={"mc-tab" + (open === key ? " on" : "")}
-              aria-selected={open === key} aria-controls="mc-panel" onClick={() => setOpen(key)}>
-              <span className="mc-tab-ic" aria-hidden="true"><Icon className="ico" /></span>
-              <span className="mc-tab-lb">{t(label)}</span>
-              {/* Peringatan Ollama terlihat walau tab AI tidak dipilih. */}
-              {key === "ai" && ollamaWarn && open !== "ai" && <span className="mc-alert" aria-label={t("mcAIAlert")} />}
-            </button>
-          ))}
-        </div>
-        <div className="mc-panel" id="mc-panel" role="tabpanel">
-          {item.parts.map((part) => (
-            <section key={part} className="mc-group">
-              <h3 className="mc-group-t">{t(PARTS[part])}</h3>
-              <div className="mc-rows">{body(part)}</div>
-            </section>
-          ))}
-        </div>
-      </fieldset>
-    </section>
+    <TabCard label={t("mcTitle")} disabled={p.disabled} open={open} setOpen={setOpen}
+      tabs={GROUPS.map(({ key, icon, label }) => ({ key, icon, label: t(label),
+        // Peringatan Ollama terlihat walau tab AI tidak dipilih.
+        alert: key === "ai" && ollamaWarn ? t("mcAIAlert") : undefined }))}>
+      <Box title={t(item.title)}>
+        <Split side={body(item.side)}>
+          {item.left.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}
+        </Split>
+      </Box>
+    </TabCard>
   );
 }

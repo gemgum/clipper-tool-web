@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gemgum/clipper/engine/internal/config"
+	"github.com/gemgum/clipper/engine/internal/fontmetrics"
 	"github.com/gemgum/clipper/engine/internal/types"
 )
 
@@ -109,5 +110,63 @@ func TestWriteASSHeadlineWindow(t *testing.T) {
 	out, _ := os.ReadFile(path)
 	if !strings.Contains(string(out), "Dialogue: 1,0:00:02.00,0:00:07.00,Headline") {
 		t.Fatalf("jendela waktu headline salah:\n%s", out)
+	}
+}
+
+// Kotak judul: Enter pengguna = baris baru, dan TIDAK ADA baris yang lebih
+// lebar dari kotaknya — diukur dengan metrik font asli, termasuk kata tunggal
+// yang lebih panjang dari kotak (dipenggal per huruf). notes/44.
+func TestNewsBoxKeepsEnterAndStaysInside(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", "assets", "fonts")
+	if _, err := os.Stat(filepath.Join(dir, "Montserrat-Bold.ttf")); err != nil {
+		t.Skip("font belum diunduh (fetch-fonts.sh)")
+	}
+	w := config.DefaultWatermark()
+	w.Format = config.FormatFeed45
+	w.Headline.Box, w.Headline.Size, w.Headline.FontsDir = true, 88, dir
+	text := "Gambar orang sedang memiliki ide tapi tidak melakukan apapun\nINFORMASI " +
+		strings.Repeat("m", 40)
+	bx := NewsBox(w, text)
+
+	f := fontmetrics.ForFamily(dir, "Montserrat", true)
+	limit := float64(bx.W - 2*bx.Pad)
+	enter := -1
+	for i, ln := range bx.Lines {
+		if px := f.Width(ln) * 88; px > limit {
+			t.Fatalf("baris %q selebar %.0f px, kotaknya %.0f px", ln, px, limit)
+		}
+		if strings.HasPrefix(ln, "INFORMASI") {
+			enter = i
+		}
+	}
+	if enter <= 0 || !strings.HasSuffix(bx.Lines[enter-1], "apapun") {
+		t.Fatalf("Enter tidak dihormati: %q", bx.Lines)
+	}
+}
+
+// Kredit selalu terbaca: gelap di kotak terang, terang di kotak gelap.
+func TestCreditColorFollowsBox(t *testing.T) {
+	for box, want := range map[string]string{"": "&H222222&", "white": "&H222222&", "yellow": "&H222222&",
+		"black": "&HEEEEEE&", "red": "&HEEEEEE&", "#1d4ed8": "&HEEEEEE&"} {
+		if got := creditColor(box); got != want {
+			t.Errorf("creditColor(%q) = %s, mau %s", box, got, want)
+		}
+	}
+}
+
+// Perataan kotak judul: jangkar \an7/8/9 di tepi kiri isi, tengah kotak, atau
+// tepi kanan isi — judul DAN kreditnya.
+func TestNewsBoxAlign(t *testing.T) {
+	w := config.DefaultWatermark()
+	w.Headline.Box, w.Headline.Credit = true, "Foto: X"
+	for align, want := range map[string]string{
+		config.AlignLeft: `\an7\pos(72,`, config.AlignCenter: `\an8\pos(540,`, config.AlignRight: `\an9\pos(1008,`,
+	} {
+		w.Headline.Align = align
+		var b strings.Builder
+		writeNewsBox(&b, w, "HALO", "0:00:00.00", "0:00:05.00")
+		if strings.Count(b.String(), want) != 2 {
+			t.Errorf("%s: mau 2x %q (judul + kredit) di\n%s", align, want, b.String())
+		}
 	}
 }

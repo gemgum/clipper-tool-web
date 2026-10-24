@@ -160,3 +160,17 @@ export function upload(file: File, onProgress?: (fraction: number) => void): Pro
     xhr.send(form);
   });
 }
+
+// post = SATU cara memanggil engine dengan JSON (guard.go menolak POST tanpa
+// application/json). Galat engine ({error}) dilempar sebagai Error; fallback =
+// pesan bila engine tidak menulis satu pun. Dulu fungsi lokal di
+// requirements/engines.tsx, sementara 30-an tempat lain menulis ulang isinya.
+export async function post<T = any>(path: string, body: unknown = {}, fallback?: string): Promise<T> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const r = await fetch(eng(path), {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || fallback || `HTTP ${r.status}`);
+  return d;
+}

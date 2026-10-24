@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gemgum/clipper/engine/internal/config"
 	"github.com/gemgum/clipper/engine/internal/correct"
+	"github.com/gemgum/clipper/engine/internal/score/llm"
 	"github.com/gemgum/clipper/engine/internal/types"
 )
 
@@ -63,8 +65,15 @@ var selfTestCandidates = []types.Candidate{
 // resolveOllama yang sama pula — dulu tombol ujinya memakai klien lain, tanpa
 // Kind dan tanpa NumCtx model, dan itulah kenapa hasilnya bisa berbeda dari job.
 func SelfTest(ctx context.Context, url, model string) (string, []SelfTestStep) {
+	return New(config.Paths{}, config.Options{Provider: "ollama", OllamaURL: url, OllamaModel: model}).SelfTest(ctx)
+}
+
+// SelfTest (method) = uji dua tahap untuk mesin APA PUN yang dipilih job ini:
+// lokal, Claude, atau cloud OpenAI-compatible. Kliennya dirakit corrector dan
+// selector — fungsi yang sama dengan Run — jadi hasil uji = hasil job.
+func (p *Pipeline) SelfTest(ctx context.Context) (string, []SelfTestStep) {
 	start := time.Now()
-	c, name, err := resolveOllama(ctx, url, model)
+	complete, name, err := p.corrector(ctx)
 	steps := []SelfTestStep{{Name: "connect", MS: time.Since(start).Milliseconds()}}
 	if err != nil {
 		steps[0].Error = err.Error()
@@ -73,12 +82,8 @@ func SelfTest(ctx context.Context, url, model string) (string, []SelfTestStep) {
 	steps[0].OK, steps[0].Detail = true, name
 
 	// --- tahap 1: koreksi transkrip ---
-	c.Temperature = correctionTemperature
 	start = time.Now()
-	_, report, err := correct.Correct(ctx, selfTestTranscript, selfTestTerms,
-		func(ctx context.Context, system, user string, schema any) (string, error) {
-			return c.Complete(ctx, system, user, schema, 4096)
-		}, name, nil)
+	_, report, err := correct.Correct(ctx, selfTestTranscript, selfTestTerms, complete, name, nil)
 	step := SelfTestStep{Name: "transcript correction", MS: time.Since(start).Milliseconds()}
 	switch {
 	case err != nil:
@@ -96,9 +101,15 @@ func SelfTest(ctx context.Context, url, model string) (string, []SelfTestStep) {
 	steps = append(steps, step)
 
 	// --- tahap 2: pemilihan momen ---
-	c.Temperature = 0 // kembali ke suhu bawaan, sama seperti job
 	start = time.Now()
-	picks, err := c.PickMoments(ctx, selfTestCandidates, 0, 2, "id")
+	sel, _, err := p.selector(ctx)
+	if err == nil && sel == nil {
+		err = fmt.Errorf("the heuristic engine has no LLM to test")
+	}
+	var picks []llm.Pick
+	if err == nil {
+		picks, err = sel.PickMoments(ctx, selfTestCandidates, 0, 2, "id")
+	}
 	step = SelfTestStep{Name: "moment selection", MS: time.Since(start).Milliseconds()}
 	switch {
 	case err != nil:

@@ -1,11 +1,12 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { Group, Row } from "../tab-card";
 import { useI18n } from "../i18n";
 import { eng } from "../engine";
 import { saveAI, useAISettings } from "../ai";
 import type { AISettings, AITool } from "../ai";
-import { useEngines } from "../engine-picker";
+import { canChat, canTranscribe, useEngines } from "../engine-picker";
 import type { EngineInfo } from "../engine-picker";
 
 // Tab "Mesin AI" (DESIGN-Clipper-Lanjutan §7): mesin yang dipakai SEMUA alat,
@@ -91,6 +92,10 @@ export default function AISettingsPanel() {
   );
 }
 
+// modelOf = model bawaan mesin yang disimpan di Engines & keys. Diisikan saat
+// mesin dipilih supaya model tidak perlu diketik ulang di sini.
+const modelOf = (engines: EngineInfo[], id: string) => engines.find((e) => e.id === id)?.model || "";
+
 // Pemilih mesin + model. Model boleh kosong = model bawaan mesin itu.
 function Chooser({ engines, initial, allowHeuristic, onSave, onCancel }: {
   engines: EngineInfo[]; initial: { engine: string; model: string }; allowHeuristic: boolean;
@@ -106,24 +111,24 @@ function Chooser({ engines, initial, allowHeuristic, onSave, onCancel }: {
     if (!engine || engine === "heuristic") { setModels([]); return; }
     fetch(eng(`/api/engines/${engine}/models`)).then((r) => r.json()).then((d) => setModels(d.models || [])).catch(() => setModels([]));
   }, [engine]);
-  const ready = engines.filter((e) => e.ready || e.id === engine);
+  const ready = engines.filter((e) => (e.ready && canChat(e)) || e.id === engine);
   const listID = `models-${engine}`;
   return (
     <div className="ai-chooser">
-      <div className="field">
-        <label>{t("setEngineLabel")}</label>
-        <select value={engine} onChange={(e) => { setEngine(e.target.value); setModel(""); }}>
-          {ready.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-          {allowHeuristic && <option value="heuristic">{t("offlineHeuristic")}</option>}
-        </select>
-      </div>
-      {engine !== "heuristic" && (
-        <div className="field">
-          <label>{t("setModelLabel")}</label>
-          <input list={listID} value={model} placeholder={engines.find((e) => e.id === engine)?.model || ""} onChange={(e) => setModel(e.target.value)} />
-          <datalist id={listID}>{models.map((m) => <option key={m} value={m} />)}</datalist>
-        </div>
-      )}
+      <Group>
+        <Row label={t("setEngineLabel")}>
+          <select value={engine} aria-label={t("setEngineLabel")} onChange={(e) => { setEngine(e.target.value); setModel(modelOf(engines, e.target.value)); }}>
+            {ready.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            {allowHeuristic && <option value="heuristic">{t("offlineHeuristic")}</option>}
+          </select>
+        </Row>
+        {engine !== "heuristic" && (
+          <Row label={t("setModelLabel")}>
+            <input list={listID} value={model} aria-label={t("setModelLabel")} placeholder={engines.find((e) => e.id === engine)?.model || ""} onChange={(e) => setModel(e.target.value)} />
+            <datalist id={listID}>{models.map((m) => <option key={m} value={m} />)}</datalist>
+          </Row>
+        )}
+      </Group>
       <div className="ai-chooser-actions">
         <button type="button" className="primary" disabled={saving || !engine} onClick={async () => {
           setSaving(true); setError("");
@@ -152,7 +157,7 @@ function ExceptionRow({ name, engines, current, allowHeuristic, onSave }: {
         <p className="set-name">{name}</p>
         <p className="meta">{label}</p>
         {open && (
-          <Chooser engines={engines} initial={current || { engine: engines.find((e) => e.ready)?.id || "", model: "" }}
+          <Chooser engines={engines} initial={current || { engine: engines.find((e) => e.ready && canChat(e))?.id || "", model: "" }}
             allowHeuristic={allowHeuristic} onCancel={() => setOpen(false)}
             onSave={async (c) => { await onSave(c); setOpen(false); }} />
         )}
@@ -202,9 +207,9 @@ function ClipsRow({ name, engines, current, transcriber, onSave }: {
     fetchModels(tEngine === "aistudio" ? "gemini" : tEngine, setTModels);
   }, [open, tEngine]);
 
-  const ready = engines.filter((e) => e.ready || e.id === engine);
+  const ready = engines.filter((e) => (e.ready && canChat(e)) || e.id === engine);
   // Gemini lewat pilihan AI Studio, sebab jalur OpenAI-nya tanpa endpoint audio.
-  const audio = engines.filter((e) => e.kind === "openai" && e.id !== "gemini" && (e.ready || e.id === tEngine));
+  const audio = engines.filter((e) => (e.ready && canTranscribe(e)) || e.id === tEngine);
   const nameOf = (id: string) => engines.find((e) => e.id === id)?.name || id;
   const tName = (id: string) => id === "whisper" ? t("transcriberWhisper") : id === "aistudio" ? t("transcriberAIStudio") : nameOf(id);
   const engineLabel = current
@@ -235,38 +240,34 @@ function ClipsRow({ name, engines, current, transcriber, onSave }: {
         {open && (
           <>
             <div className="ai-chooser">
-              <div className="field">
-                <label>{t("setEngineLabel")}</label>
-                <select value={engine} onChange={(e) => { setEngine(e.target.value); setModel(""); }}>
-                  <option value="">{t("setFollowMain")}</option>
-                  {ready.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                  <option value="heuristic">{t("offlineHeuristic")}</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>{t("setModelLabel")}</label>
-                <input list="models-clips" value={model} disabled={!engine || engine === "heuristic"}
-                  placeholder={engines.find((e) => e.id === engine)?.model || ""} onChange={(e) => setModel(e.target.value)} />
-                <datalist id="models-clips">{models.map((m) => <option key={m} value={m} />)}</datalist>
-              </div>
-            </div>
-            <div className="ai-chooser">
-              <div className="field">
-                <label title={t("transcriberTip")}>{t("transcriber")}</label>
-                <select value={tEngine} onChange={(e) => { setTEngine(e.target.value); setTModel(""); }}>
-                  <option value="whisper">{t("transcriberWhisper")}</option>
-                  <option value="aistudio">{t("transcriberAIStudio")}</option>
-                  {audio.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label>{t("setModelLabel")}</label>
-                <input list="models-transcribe" value={tModel} disabled={tEngine === "whisper"}
-                  placeholder={tEngine === "aistudio" ? "gemini-3.5-flash" : tEngine === "whisper" ? "" : "whisper-1"}
-                  title={tEngine === "aistudio" || tEngine === "whisper" ? undefined : t("transcribeModelTip")}
-                  onChange={(e) => setTModel(e.target.value)} />
-                <datalist id="models-transcribe">{tModels.map((m) => <option key={m} value={m} />)}</datalist>
-              </div>
+              <Group>
+                <Row label={t("setEngineLabel")}>
+                  <select value={engine} aria-label={t("setEngineLabel")} onChange={(e) => { setEngine(e.target.value); setModel(modelOf(engines, e.target.value)); }}>
+                    <option value="">{t("setFollowMain")}</option>
+                    {ready.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                    <option value="heuristic">{t("offlineHeuristic")}</option>
+                  </select>
+                </Row>
+                <Row label={t("setModelLabel")}>
+                  <input list="models-clips" value={model} aria-label={t("setModelLabel")} disabled={!engine || engine === "heuristic"}
+                    placeholder={engines.find((e) => e.id === engine)?.model || ""} onChange={(e) => setModel(e.target.value)} />
+                  <datalist id="models-clips">{models.map((m) => <option key={m} value={m} />)}</datalist>
+                </Row>
+                <Row label={t("transcriber")} title={t("transcriberTip")}>
+                  <select value={tEngine} aria-label={t("transcriber")} onChange={(e) => { setTEngine(e.target.value); setTModel(modelOf(engines, e.target.value)); }}>
+                    <option value="whisper">{t("transcriberWhisper")}</option>
+                    <option value="aistudio">{t("transcriberAIStudio")}</option>
+                    {audio.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </Row>
+                <Row label={t("setModelLabel")}>
+                  <input list="models-transcribe" value={tModel} aria-label={t("setModelLabel")} disabled={tEngine === "whisper"}
+                    placeholder={tEngine === "aistudio" ? "gemini-3.5-flash" : tEngine === "whisper" ? "" : modelOf(engines, tEngine) || "whisper-1"}
+                    title={tEngine === "aistudio" || tEngine === "whisper" ? undefined : t("transcribeModelTip")}
+                    onChange={(e) => setTModel(e.target.value)} />
+                  <datalist id="models-transcribe">{tModels.map((m) => <option key={m} value={m} />)}</datalist>
+                </Row>
+              </Group>
             </div>
             <div className="ai-chooser-actions end">
               <button type="button" className="primary" disabled={saving} onClick={save}>{t("save")}</button>

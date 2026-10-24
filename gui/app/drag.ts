@@ -31,7 +31,8 @@ export type Point = { x: number; y: number };
  * gerakan. Dulu posisi langsung disamakan dengan kursor, jadi yang digeser
  * melompat ke bawah kursor begitu disentuh — itu yang terasa "kurang stabil".
  */
-export function useLayerDrag(boxRef: React.RefObject<HTMLDivElement | null>, grid: number) {
+// playH = tinggi ruang koordinat; bingkai feed (watermark) lebih pendek dari 1920.
+export function useLayerDrag(boxRef: React.RefObject<HTMLDivElement | null>, grid: number, playH: number = PLAY_H) {
   const [dragAt, setDragAt] = useState<Point | null>(null);
   const grab = useRef({ dx: 0, dy: 0 });
   const dragging = useRef(false);
@@ -40,9 +41,9 @@ export function useLayerDrag(boxRef: React.RefObject<HTMLDivElement | null>, gri
     const rect = boxRef.current!.getBoundingClientRect();
     return {
       x: ((e.clientX - rect.left) / rect.width) * PLAY_W,
-      y: ((e.clientY - rect.top) / rect.height) * PLAY_H,
+      y: ((e.clientY - rect.top) / rect.height) * playH,
     };
-  }, [boxRef]);
+  }, [boxRef, playH]);
 
   const end = useCallback(() => {
     dragging.current = false;

@@ -15,7 +15,7 @@ export default function PageHeader({
   return (
     <header className="page-header">
       <div className="ph-text">
-        <h1>{title}</h1>
+        <h1 title={title}>{title}</h1>
         {subtitle && <p title={subtitle}>{subtitle}</p>}
       </div>
       {children && <div className="ph-actions">{children}</div>}

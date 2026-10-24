@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { eng } from "./engine";
+import { eng, post } from "./engine";
 
 // Mesin AI GLOBAL (DESIGN-Clipper-Lanjutan.md §1): satu mesin & model untuk
 // semua alat, pengecualian per alat diatur di halaman Pengaturan. Halaman alat
@@ -31,12 +31,7 @@ export function loadAISettings(fresh = false): Promise<AISettings> {
 }
 
 export async function saveAI(tool: AITool | "transcribe" | "", engine: string, model: string): Promise<AISettings> {
-  const res = await fetch(eng("/api/settings/ai"), {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ tool, engine, model }),
-  });
-  const d = await res.json();
-  if (!res.ok) throw new Error(d.error || "save failed");
+  const d = await post("/api/settings/ai", { tool, engine, model }, "save failed");
   cache = Promise.resolve(d);
   // Semua yang menampilkan pilihan ini (status rail, halaman alat) ikut
   // berubah seketika, bukan menunggu jendela difokus ulang.

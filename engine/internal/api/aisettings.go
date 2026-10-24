@@ -84,7 +84,7 @@ func aiSettingsView() map[string]any {
 		tr["model"], tr["key_set"] = as.Model, as.Key != ""
 	default:
 		d, _ := engineByID(v)
-		tr["model"] = strings.TrimSpace(os.Getenv(transcribeModelEnv))
+		tr["model"] = firstNonEmpty(strings.TrimSpace(os.Getenv(transcribeModelEnv)), resolve(d).Model)
 		tr["key_set"] = resolve(d).Ready
 	}
 	return map[string]any{"global": global, "overrides": overrides, "effective": effective, "tools": aiTools, "transcriber": tr}
@@ -111,7 +111,7 @@ func savedTranscriber() string {
 // native), sebab jalur OpenAI-nya tidak punya endpoint audio.
 func audioEngine(id string) bool {
 	d, ok := engineByID(id)
-	return ok && d.Kind == kindOpenAI && d.ID != "gemini"
+	return ok && useEnv(d) != "" && resolve(d).Use != useChat
 }
 
 // fillTranscriber menerjemahkan pilihan transkripsi job (id mesin) menjadi
@@ -127,9 +127,11 @@ func fillTranscriber(o *config.Options) {
 	d, _ := engineByID(id)
 	e := resolve(d)
 	o.Transcriber, o.TranscribeEngine = config.TranscriberAPI, id
-	o.TranscribeName, o.TranscribeBase, o.TranscribePath, o.TranscribeKeyEnv = d.Name, e.BaseURL, d.Path, d.EnvKey
+	o.TranscribeName, o.TranscribeBase, o.TranscribeKeyEnv = d.Name, e.BaseURL, d.EnvKey
+	// Model kosong = model bawaan mesin itu di Engines & keys, sama seperti
+	// tombol Test transcription — tanpa itu job jatuh ke whisper-1.
 	if o.TranscribeModel == "" {
-		o.TranscribeModel = strings.TrimSpace(os.Getenv(transcribeModelEnv))
+		o.TranscribeModel = firstNonEmpty(strings.TrimSpace(os.Getenv(transcribeModelEnv)), e.Model)
 	}
 }
 

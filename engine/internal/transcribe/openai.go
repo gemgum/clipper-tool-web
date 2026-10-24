@@ -16,7 +16,7 @@ import (
 )
 
 // Transkripsi lewat mesin OpenAI-compatible dari halaman Engines & Keys:
-// POST {Base}{Path}/audio/transcriptions (OpenAI, gateway pengguna, Groq, …).
+// POST {Base}/audio/transcriptions (OpenAI, gateway pengguna, Groq, …).
 //
 // Seperti AI Studio: dipilih, bukan cadangan whisper — bila gagal, job berhenti
 // dengan pesan sebabnya (notes/12). Model WAJIB mengembalikan segmen
@@ -30,8 +30,7 @@ const OpenAIDefaultModel = "whisper-1"
 // OpenAIAudio memanggil endpoint transkripsi OpenAI-compatible.
 type OpenAIAudio struct {
 	Name  string // untuk pesan galat, mis. "Custom (OpenAI-compatible)"
-	Base  string // tanpa /v1 (lihat normalizeBase di paket api)
-	Path  string // "/v1"
+	Base  string // alamat API utuh, mis. https://openrouter.ai/api/v1
 	Key   string
 	Model string
 	HTTP  *http.Client
@@ -87,7 +86,7 @@ func (o *OpenAIAudio) chunk(ctx context.Context, audio []byte, language string) 
 	}
 	mw.Close()
 
-	url := strings.TrimRight(o.Base, "/") + o.Path + "/audio/transcriptions"
+	url := strings.TrimRight(o.Base, "/") + "/audio/transcriptions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &body)
 	if err != nil {
 		return nil, err

@@ -20,7 +20,8 @@ browser --HTTPS--> Caddy/nginx --> engine/ (Go)  --exec-->  whisper.cpp, ffmpeg
   `/writer` pembuat berita (sampai 5 artikel sumber → satu artikel baru +
   pagar fakta, lihat `notes/38`), `/captions` pembuat caption (satu video atau
   sekaligus banyak → satu `.txt` per video, lihat `notes/40`), `/watermark`
-  gambar + headline dibakar ke video yang SUDAH 9:16 (lihat `notes/41`), dan
+  logo (bisa banyak) + headline dibakar ke Shorts 9:16 atau feed Instagram
+  4:5/1:1, foto juga, plus kotak judul gaya kartu berita (`notes/41`, `notes/44`), dan
   `/requirements` status & pemasangan komponen. Ada pemilih bahasa antarmuka
   EN/ID di bilah navigasi (default EN, disimpan di localStorage). Dibangun jadi
   berkas statis (`gui/out`) yang disajikan engine.
@@ -57,8 +58,10 @@ browser --HTTPS--> Caddy/nginx --> engine/ (Go)  --exec-->  whisper.cpp, ffmpeg
                                 -watermark-at -watermark-for \
                                 -headline "..." -headline-x -headline-y \
                                 -headline-size -font -quality -out]
-                                 # tiap video 9:16 → <nama>_watermarked.mp4
-                                 # yang bukan 9:16 DITOLAK per berkas, tidak dipotong
+                                 # [-format short|feed45|feed11 -fit crop|whole \
+                                 #  -logo img@x,y,w,h -headline-box -credit]
+                                 # tiap video/foto → <nama>_watermarked.mp4|.jpg
+                                 # rasio lain DISESUAIKAN ke format (-fit), tidak ditolak
 ./bin/clipper serve              # API + GUI di 127.0.0.1:8787 (port acak bila terpasang)
                                  # banner mencetak satu alamat "open:" — tinggal dibuka
 ./bin/clipper serve -token on    # + kunci sesi (otomatis menyala saat terpasang)
@@ -192,9 +195,13 @@ Satu daftar mesin untuk SELURUH aplikasi (`internal/api/engines.go`, notes/39):
 Ollama lokal, Claude, ChatGPT, Gemini, DeepSeek, **Custom (OpenAI-compatible)**
 — plus `heuristic` (tanpa LLM) khusus halaman klip. `custom` adalah gateway
 milik pengguna: satu-satunya mesin tanpa alamat & model bawaan, sebab keduanya
-memang cuma dia yang tahu. Alamat yang disimpan SELALU dipangkas akhiran `/v1`
-(`normalizeBase`) — dokumentasi penyedia menuliskannya, klien menambahkannya
-sendiri, dan gabungannya jadi `/v1/v1/messages`. Kunci API diisi sekali di
+memang cuma dia yang tahu. Alamat disimpan **apa adanya**, utuh dengan jalurnya
+persis seperti dokumentasi penyedia (`https://openrouter.ai/api/v1`); klien hanya
+menambah nama endpoint (`/chat/completions`, `/messages`, `/audio/transcriptions`).
+Dulu `/v1` dipangkas lalu ditambah lagi oleh klien — penyedia yang jalurnya bukan
+`/v1` jadi mustahil dipakai (diganti 15 Oktober 2026; `.env` lama dimigrasi sekali
+oleh `migrateBaseURLs`, penandanya `CLIPPER_BASE_URLS=full`). Alamat yang memuat
+nama endpoint ditolak saat disimpan. Pengecualian: server LOKAL tetap host:port. Kunci API diisi sekali di
 halaman Requirements; mesin & model dipilih tiap kali bekerja lewat
 `<EnginePicker>` yang sama di semua tab.
 
@@ -308,12 +315,12 @@ MUAT. Kalau tidak muat, yang dibuang isinya, bukan syaratnya.
 node scripts/measure-ui.mjs http://127.0.0.1:8787 /tmp/shots
 ```
 
-Ia mencetak `scrollHeight` vs `clientHeight` tiap kolom di 900×600 dan
-1240×860, tema terang dan gelap, sekaligus memotret tiap halaman. Angka `over`
-
-> 0 berarti kotak itu bergulir. **Baseline 17 Agustus 2026: klip, kartu berita,
-> dan pembuat berita `0/0` di 1240×860.** Kalau angkanya naik lagi, perubahanmu
-> yang menaikkannya.
+Ia mencetak, per halaman, di 900×600 dan 1240×860, tema terang dan gelap:
+apakah halaman berkolom bergulir (harus 0), posisi kartu pratinjau sebelum dan
+sesudah kolom kiri digulir ke dasar (harus sama), dan apakah kartunya muat.
+**Baseline 24 Oktober 2026: 1240×860 lulus semua; 900×600 kartu pratinjau Clips
+lebih 202 px dan Watermark 107 px (kolomnya bergulir sendiri).** Halaman daftar
+tanpa pratinjau (News pilih artikel, Settings, History) bergulir utuh — diizinkan.
 
 Potretnya juga wajib dilihat, bukan cuma angkanya: kotak kosong, teks terpotong,
 dan lambang yang tidak ada di font hanya ketahuan dari gambar. `ⓘ` (U+24D8)
@@ -330,10 +337,15 @@ Sebelum menyerahkan perubahan tampilan apa pun, periksa:
   terlihat — SELAIN satu judul + satu baris subjudul di `.page-header`
   (keputusan pemilik 9 Oktober 2026, `DESIGN.md` §5.2).
 
-### 2. Halaman `/` (Video clips) adalah STANDAR. Salin, jangan mengarang.
+### 2. Halaman `/watermark` (Mark) adalah ACUAN. Salin, jangan mengarang.
 
-Halaman lain mengikuti bentuknya; jangan menemukan tata letak baru tiap halaman.
-Bentuk bakunya:
+Keputusan pemilik 24 Oktober 2026 (menggantikan "halaman `/` adalah standar"):
+Watermark satu-satunya halaman yang memakai SEMUA komponen bersama sekaligus —
+`Stage`, `TabCard` + `Split`, `ColorPanel`, `FileCard`, `TechNotes`, `useJob`,
+`post` — jadi halaman lain dicocokkan ke sana. Clips dan News sudah mengikuti
+bentuknya (tiap tab satu grup `Split`, kolom pratinjau `Stage`).
+
+Jangan menemukan tata letak baru tiap halaman. Bentuk bakunya:
 
 **Tidak ada bilah ikon di atas.** Navigasi kiri = SATU rail 84px di semua
 lebar jendela (rancangan 14 Oktober 2026): ikon + label pendek di bawahnya
@@ -351,25 +363,92 @@ responsifnya (§7) DIBUANG, acuan tetap 900×600 dan 1240×860.
 
 ```
 .screen
-├── .page-header          <h1> + subjudul + status job + aksi utama
-├── .screen-head          hanya bila ada galat/peringatan
-└── .screen-body.two
-    ├── .screen-main      KIRI: yang dilihat
-    │   └── .panel > .sub-layout
-    │        ├── .sub-preview    bingkai pratinjau
-    │        └── .sub-settings   setelan yang MENGUBAH pratinjau itu
-    │                            (kelompok bernama, tiap kelompok .grid3)
-    └── .screen-col       KANAN: yang diisi & dipilih
-        └── .panel        kelompok bernama, dibaca atas ke bawah
+├── .page-header            <h1> + subjudul + status job + aksi utama
+├── halaman BERPRATINJAU (Clips, Watermark, News → Susun kartu)
+│   └── .setup-grid
+│       ├── .setup-main     KIRI: yang diisi — kartu sumber/berkas, lalu kartu setelan
+│       └── <Stage>         KANAN: pratinjau (stage.tsx), lebar tetap, sticky
+│            ├── <StageFrame>  slot TETAP setinggi bingkai 9:16
+│            ├── tools        tombol di bawah bingkai (Preview, Grid, alat posisi)
+│            └── help         satu baris bantuan, tingginya dicadangkan
+└── halaman TANPA pratinjau (Captions, Writer)
+    └── .io-grid
+        ├── .io-in          KIRI: yang diisi (400 px)
+        └── .io-out         KANAN: hasilnya (melebar)
 ```
 
-Aturan pembagian kolomnya satu kalimat: **kiri = pratinjau + apa pun yang
-mengubah rupanya; kanan = masukan dan pilihan; tombol jalan di `.page-header`.** Setelan rupa
-TIDAK pernah ditaruh di kolom kanan, dan isian sumber TIDAK pernah ditempel ke
-panel pratinjau.
+Aturan pembagian kolomnya satu kalimat (keputusan pemilik 24 Oktober 2026,
+menggantikan "kiri = pratinjau"): **kiri = yang diisi (sumber + setelan);
+kanan = yang dilihat (pratinjau atau hasil); tombol jalan di `.page-header`.**
+
+**Pratinjau TIDAK BOLEH bergerak atau bergetar.** Caranya BUKAN `sticky`
+(ia hanya menempel selama induknya punya ruang — kolom kiri yang pendek atau
+gulir sampai dasar membuat pratinjau ikut terbawa; itu yang dilaporkan
+"goyang"). Halaman berkolom (`.setup-grid`, `.io-grid`) TIDAK bergulir; yang
+bergulir hanya kolom kiri/hasil, dengan `scrollbar-gutter: stable`.
+`stage.tsx` menjaga sisanya: lebar kolom tetap (340 px, 280 px di jendela
+<= 1100), bingkai duduk di ATAS slot setinggi 9:16, area tombol dan baris
+bantuan setinggi tetap (News = Watermark), judul `.page-header` satu baris.
+Diukur 24 Oktober 2026 di 1240x860: halaman tidak bergulir, kartu pratinjau
+Clips/Watermark/News di y=121 sebelum DAN sesudah kolom kiri digulir sampai
+dasar; berganti format/tab tidak menggeser tombol satu piksel pun. Halaman
+yang menghitung ukuran huruf dari bingkai memakai `useStageWidth()` — rumusnya
+sama dengan `--stage-in` di CSS. Kartu di kolom terbatas wajib
+`flex-shrink: 0` (sudah di CSS) — tanpa itu kartu tergencet.
+
+**Komponen bersama — pakai, jangan salin:**
+
+| Kebutuhan | Komponen |
+| --- | --- |
+| kolom pratinjau | `stage.tsx` (`Stage`, `StageFrame`, `useStageWidth`) |
+| kartu setelan | `tab-card.tsx` (`TabCard`, `Group`, `Row`, `Pad`) |
+| warna | `color-panel.tsx` (`ColorPanel`, `toHex`, `isDark`, `parseColor`) |
+| daftar berkas | `file-list.tsx` (`FileCard`, `useFiles`) |
+| log job | `log-panel.tsx` (`TechNotes`) |
+| siklus job latar (SSE, start, cancel) | `use-job.ts` (`useJob(api, event, setError, onDone)`) |
+| dua bagian sejajar | `tab-card.tsx` (`Split side={…} sideOff`) — jangan menulis `.mc-split` sendiri |
+| sasaran warna headline | `watermark-panel.tsx` (`watermarkColors`) — klip DAN Watermark |
+| POST JSON ke engine | `engine.ts` (`post(path, body, fallback?)`) — jangan menulis `fetch(eng(..), {method:"POST"…})` sendiri |
+| salin ke clipboard | `copy-link.tsx` (`copyText`) — `navigator.clipboard` TIDAK ADA lewat alamat IP |
+| nama berkas dari path | `file-list.tsx` (`baseName`) |
+
+Nama warna (`white`, `yellow`, `black`, `red`) diterjemahkan HANYA oleh
+`toHex`, dengan angka yang sama persis dengan `subtitle.assColor` di engine.
+Dulu ada tiga peta berbeda (kuning `#ffdd00`/`#ffd400` vs engine `#ffff00`) —
+pratinjau tidak sama dengan hasil render.
 
 Label = NAMA (satu-dua kata). Penjelasan pindah ke `title` atau ke teks
 pilihannya. Rinciannya di `notes/29`.
+
+### Resep kartu setelan (berlaku di SEMUA halaman)
+
+Komponennya `gui/app/tab-card.tsx`; contoh hidupnya tab Subtitle text di klip
+dan tab Headline di Watermark. Jangan menyusun markup setelan sendiri.
+
+1. **Satu kartu setelan per halaman.** Lebih dari ~6 baris → `TabCard`, 3–4
+   tab bernama satu kata. Sedikit → `.card` + `Group` tanpa tab (Captions).
+   Jangan menumpuk satu kartu per setelan.
+2. **Tab → `Group` (judul kecil huruf kapital) → `Row`.** Tiap setelan = satu
+   `Row`: label di kolom kiri, kendali di kolom kanan. Semua kendali mulai di
+   garis tegak yang SAMA — tidak ada radio/teks yang menempel ke tepi kiri.
+3. **Jenis kendali tetap:** pilihan 2–4 → `Segmented`; satu angka →
+   `Stepper`; nyala/mati → `Toggle` di `Pad`; daftar panjang → `Select`;
+   teks → `input`. Radio TIDAK dipakai — pilihan = `Segmented`, isian
+   tambahannya muncul di bawahnya hanya saat dipilih (lihat "When it shows").
+4. **Warna = `<ColorPanel>` di kanan `.mc-split`.** Baris di `.mc-split-l`,
+   SATU palet di kanan dengan sasaran (Text / Highlight, Text / Box /
+   Outline), palet bulat bersama, warna bebas, dan kolom kode (HEX, rgb, hsl,
+   cmyk, nama). Tidak ada baris palet per warna, tidak ada `<Select>` warna.
+5. **Sejajar, bukan atas-bawah** (keputusan pemilik 24 Oktober 2026). Dua
+   grup dalam satu tab = SATU `Group` berisi `.mc-split`: kiri = daftar/isian
+   utama, kanan = panel rincian (label di atas kendali). Di klip: `side` pada
+   `GROUPS` di more-controls.tsx, memakai `row()`/`sw()` yang sama. Panel kanan
+   SELALU ada — dimatikan (`<fieldset disabled>`), tidak disembunyikan — supaya
+   memilih/menambah sesuatu tidak menggeser isi. Contoh: tab Logo (daftar |
+   penempatan), Format (format | keluaran), Template (tersimpan | simpan).
+6. **Penjelasan** = `note` di bawah kendali atau `desc` Toggle, satu kalimat.
+7. **Berkas/sumber** = kartu sendiri DI ATAS kartu setelan (Source di klip,
+   Files di Watermark/Captions).
 
 ## Konvensi
 

@@ -206,7 +206,7 @@ func (c *Client) postChat(ctx context.Context, system, user string, schema any, 
 		}
 	}
 	body, _ := json.Marshal(req)
-	url := c.URL + c.path() + "/chat/completions"
+	url := c.URL + c.Path + "/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
@@ -303,19 +303,16 @@ func openAIModels(ctx context.Context, url string) []ModelInfo {
 	return openAIModelsAt(ctx, url, "/v1", "", probeTimeout)
 }
 
-// Models membaca daftar model satu server OpenAI-compatible, dengan jalur dan
-// kunci yang ditentukan pemanggil. Diekspor karena halaman setelan memakainya
+// Models membaca daftar model satu server OpenAI-compatible; url = alamat API
+// utuh (https://api.openai.com/v1), kunci ditentukan pemanggil. Diekspor karena halaman setelan memakainya
 // untuk mengisi sendiri pilihan model tiap penyedia — supaya nama model tidak
 // perlu diketik dari ingatan (notes/39).
-func Models(ctx context.Context, url, path, key string) []ModelInfo {
-	if path == "" {
-		path = "/v1"
-	}
+func Models(ctx context.Context, url, key string) []ModelInfo {
 	// Bukan probeTimeout: 1,2 detik itu jatah untuk MEMINDAI port di komputer
 	// sendiri, dan dipakai pada penyedia cloud ia mengembalikan daftar kosong
 	// setiap kali jaringannya sedang lambat — terbaca sebagai "gateway tidak
 	// punya model", bukan sebagai kehabisan waktu.
-	return openAIModelsAt(ctx, url, path, key, 10*time.Second)
+	return openAIModelsAt(ctx, url, "", key, 10*time.Second)
 }
 
 // openAIModelsAt sama, dengan jalur dan kunci yang ditentukan pemanggil —

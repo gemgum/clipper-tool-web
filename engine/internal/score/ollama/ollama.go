@@ -52,12 +52,9 @@ type Client struct {
 	// yang bicara /v1/chat/completions — llama.cpp, LocalAI, llamafile, vLLM,
 	// Aphrodite, LiteLLM, Exo. Lihat openai.go.
 	Kind string
-	// Path = awalan jalur di bawah URL, tanpa garis miring di ujung. Kosong
-	// berarti "/v1", yang benar untuk hampir semua server.
-	//
-	// Ada karena endpoint OpenAI-compatible milik Gemini bukan "/v1" melainkan
-	// "/v1beta/openai" — dan tanpa field ini, satu-satunya jalan memakainya
-	// adalah klien kedua yang isinya sama persis.
+	// Path = jalur yang ditambahkan ke URL, hanya untuk server LOKAL yang
+	// ditemukan lewat host:port ("/v1"). Penyedia cloud membawa URL utuh
+	// (https://api.openai.com/v1) dan Path-nya kosong.
 	Path string
 	// APIKey = kunci untuk server INI. Kosong berarti pakai LLM_API_KEY.
 	//
@@ -65,14 +62,6 @@ type Client struct {
 	// isinya cuma server lokal di belakang gateway. Dengan beberapa penyedia
 	// cloud sekaligus, tiap klien harus membawa kuncinya sendiri.
 	APIKey string
-}
-
-// path mengembalikan awalan jalur API yang berlaku untuk klien ini.
-func (c *Client) path() string {
-	if p := strings.TrimRight(strings.TrimSpace(c.Path), "/"); p != "" {
-		return p
-	}
-	return "/v1"
 }
 
 // key mengembalikan kunci yang berlaku untuk klien ini.

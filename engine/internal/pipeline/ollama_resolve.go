@@ -73,6 +73,10 @@ func resolveOllama(ctx context.Context, url, model string) (*ollama.Client, stri
 
 	c := ollama.New(st.URL, name)
 	c.Kind = st.Kind
+	// Server lokal ditemukan lewat host:port saja, jadi jalurnya ditambah di sini.
+	if c.Kind == ollama.KindOpenAI {
+		c.Path = "/v1"
+	}
 	// Konteks model dipakai apa adanya: meminta 8192 pada model yang hanya
 	// mendukung 4096 membuat Ollama membalas kosong tanpa pesan galat, dan
 	// itulah kegagalan yang paling sering terlihat di model kecil.
@@ -112,6 +116,6 @@ func (p *Pipeline) cloudClient() (*ollama.Client, string, error) {
 		return nil, "", fmt.Errorf("%s has no API key yet: add it on the Requirements page", name)
 	}
 	c := ollama.New(p.Opts.LLMBase, p.Opts.LLMModel)
-	c.Kind, c.Path, c.APIKey = ollama.KindOpenAI, p.Opts.LLMPath, key
+	c.Kind, c.APIKey = ollama.KindOpenAI, key
 	return c, name, nil
 }

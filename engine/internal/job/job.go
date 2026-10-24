@@ -432,22 +432,25 @@ func (m *Manager) List() []*Job {
 	return out
 }
 
-// Cancel membatalkan job.
-func (m *Manager) Cancel(id string) bool {
+// Cancel membatalkan job yang sedang jalan maupun yang masih mengantri.
+// os.ErrNotExist = tidak ada; galat lain = job sudah berhenti. Dulu job yang
+// sudah selesai pun dijawab "canceled", jadi pemanggil tidak bisa membedakan
+// "berhasil dihentikan" dari "sudah selesai dari tadi" (sama dengan bgStore.stop).
+func (m *Manager) Cancel(id string) error {
 	j, ok := m.Get(id)
 	if !ok {
-		return false
+		return os.ErrNotExist
 	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	// Bisa membatalkan job yang sedang jalan maupun yang masih mengantri.
-	if j.Status == StatusQueued || j.Status == StatusRunning {
-		if j.cancel != nil {
-			j.cancel()
-		}
-		j.Status = StatusCanceled
+	if j.Status != StatusQueued && j.Status != StatusRunning {
+		return fmt.Errorf("this job has already stopped (%s)", j.Status)
 	}
-	return true
+	if j.cancel != nil {
+		j.cancel()
+	}
+	j.Status = StatusCanceled
+	return nil
 }
 
 // Subscribe mendaftarkan channel untuk menerima event; kembalikan fungsi unsubscribe.

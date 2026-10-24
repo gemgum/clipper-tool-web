@@ -2,7 +2,7 @@
 
 import { User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { eng, useMe } from "./engine";
+import { useMe, post } from "./engine";
 import { LANGUAGES, useI18n } from "./i18n";
 import Popover from "./popover";
 import ThemeToggle from "./theme-toggle";
@@ -31,8 +31,7 @@ export default function AccountButton() {
   }, []);
 
   const signOut = async () => {
-    const r = await fetch(eng("/auth/logout"), { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    const d = await r.json().catch(() => ({}));
+    const d = await post("/auth/logout").catch(() => ({ url: "" }));
     window.location.href = d.url || "/";
   };
 

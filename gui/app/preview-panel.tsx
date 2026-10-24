@@ -6,12 +6,14 @@ import { Eye, RotateCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
-import { PLAY_H, PLAY_W, CENTER_X, CENTER_Y, snap, useLayerDrag } from "./drag";
+import { PLAY_H, PLAY_W, CENTER_X, CENTER_Y, useLayerDrag } from "./drag";
 import Guides from "./guides";
 import { headlineAnchor, headlineBox, wrapHeadline } from "./watermark-model";
 import type { Watermark } from "./watermark-model";
 import Warn from "./warn";
 import Filmstrip from "./filmstrip";
+import { StageFrame } from "./stage";
+import { toHex } from "./color-panel";
 
 // Ruang koordinat, titik tengah, dan mesin seret tinggal di ./drag — dipakai
 // bersama halaman watermark. Diekspor ulang dari sini supaya pemanggil lama
@@ -49,8 +51,6 @@ export type FontCheck = { valid: boolean; name: string; family: string; source: 
 // (~22 karakter pada ukuran font bawaan).
 const SAMPLE_LINES = ["sampleLine1", "sampleLine2", "sampleLine3"] as const;
 
-// Nama warna lama ATAU hex (#rrggbb, swatch DESIGN.md §7.1) — engine menerima keduanya.
-const hex = (c: string) => (c.startsWith("#") ? c : c === "yellow" ? "#ffdd00" : c === "green" ? "#4ade80" : c === "cyan" ? "#38bdf8" : "#ffffff");
 
 // Berapa baris yang mungkin muncul sekaligus — harus sama dengan Pacing() di
 // engine (lambat/normal 2, padat 3; mode word selalu 1 kata per layar).
@@ -199,12 +199,13 @@ export default function PreviewPanel({
   // dipakai 1, yang berarti pratinjau menggambar seperti sebelumnya.
   const fontScale =
     (fontManual ? fontCheck?.scale : fonts.find((f) => f.name === subFont)?.scale) || 1;
-  const colorHex = hex(subColor);
-  const highlightHex = hex(subHighlight);
+  const colorHex = toHex(subColor);
+  const highlightHex = toHex(subHighlight);
 
   return (
       <div className="sub-layout pv-only">
       <div className="sub-preview">
+        <StageFrame>
         <div className="preview9x16" ref={boxRef}>
           {previewOn ? (
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -277,7 +278,7 @@ export default function PreviewPanel({
                   fontFamily: `"${subFont}", sans-serif`,
                   fontSize: `calc(${(watermark.hlSize * fontScale) / PLAY_H} * var(--pvh))`,
                   lineHeight: 1 / fontScale,
-                  color: hex(watermark.hlColor),
+                  color: toHex(watermark.hlColor),
                   textShadow: watermark.hlOutline > 0
                     ? "-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 0 4px #000"
                     : "none",
@@ -332,6 +333,7 @@ export default function PreviewPanel({
             )}
           </div>
         </div>
+        </StageFrame>
 
       </div>
         <div className="pv-controls">

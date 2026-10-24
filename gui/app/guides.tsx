@@ -5,7 +5,7 @@ import { Crosshair } from "lucide-react";
 
 import { useI18n } from "./i18n";
 import Select from "./select";
-import { CENTER_X, PLAY_H, PLAY_W } from "./drag";
+import { PLAY_H, PLAY_W } from "./drag";
 import type { Point } from "./drag";
 
 // Penanda penempatan di atas bingkai pratinjau: kisi, garis tengah, dan sumbu
@@ -22,10 +22,17 @@ import type { Point } from "./drag";
 // 20 jadi bawaan: 54x96 kotak — cukup kasar untuk membuat penempatan bisa
 // diulang, cukup halus untuk tidak terasa seperti pagar. Yang lain disediakan
 // karena "rasa" kisi hanya bisa dinilai dengan mencoba, bukan dari angka.
-export const GRIDS = [0, 10, 20, 24, 40] as const;
+//
+// 5 & 10 untuk penempatan halus (diminta di halaman watermark); cara
+// menggambarnya lihat mesh di bawah.
+export const GRIDS = [0, 5, 10, 20, 24, 40] as const;
+
+// Jarak garis kisi yang digambar: kisinya sendiri, atau kelipatan pertamanya
+// yang >= 20.
+const meshStep = (grid: number) => grid * Math.ceil(20 / grid);
 
 export default function Guides({
-  grid, visible, atX, atY, dragAt,
+  grid, visible, atX, atY, dragAt, playH = PLAY_H,
 }: {
   grid: number;
   /** Garis tengah & kisi terlihat (sedang digeser, atau dikunci pengguna). */
@@ -34,21 +41,26 @@ export default function Guides({
   atY: boolean;
   /** Titik yang sedang dipegang; null = tidak ada yang digeser. */
   dragAt: Point | null;
+  /** Tinggi ruang koordinat; bingkai feed lebih pendek dari 1920. */
+  playH?: number;
 }) {
   return (
     <>
-      {visible && grid >= 20 && (
-        /* Kotak kisi digambar sebagai latar berulang, bukan puluhan elemen:
-           pada kisi 10 itu 108x192 kotak, dan menggambarnya satu per satu
-           berarti 300 elemen yang harus dihitung ulang tiap seretan.
+      {visible && grid > 0 && (
+        /* Kotak kisi digambar sebagai latar berulang, bukan puluhan elemen.
 
-           Di bawah 20 meshnya TIDAK digambar: pratinjau selebar 270 px berarti
-           kotak kisi 10 hanya 2,5 px di layar, dan yang terlihat bukan kisi
-           melainkan kabut kelabu di atas frame videonya. Yang menempel tetap
-           menempel — cuma gambarnya yang tidak menolong. */
-        <div className="gridmesh" style={{
-          backgroundSize: `${(grid / PLAY_W) * 100}% ${(grid / PLAY_H) * 100}%`,
-        }} />
+           Kisi di bawah 20 digambar DUA lapis: garis tipis tiap 5/10 (kisi
+           sebenarnya, tempat logo menempel) dan garis tegas tiap kelipatan
+           >= 20. Pratinjau 270–340 px berarti kotak 5 cuma 1–2 px di layar;
+           tanpa garis tegas yang terlihat hanya kabut kelabu. */
+        <>
+          {grid < 20 && <div className="gridmesh fine" style={{
+            backgroundSize: `${(grid / PLAY_W) * 100}% ${(grid / playH) * 100}%`,
+          }} />}
+          <div className="gridmesh" style={{
+            backgroundSize: `${(meshStep(grid) / PLAY_W) * 100}% ${(meshStep(grid) / playH) * 100}%`,
+          }} />
+        </>
       )}
       {visible && (
         <>
@@ -62,9 +74,9 @@ export default function Guides({
       {dragAt && (
         <>
           <div className="axis v" style={{ left: `${(dragAt.x / PLAY_W) * 100}%` }} />
-          <div className="axis h" style={{ top: `${(dragAt.y / PLAY_H) * 100}%` }} />
+          <div className="axis h" style={{ top: `${(dragAt.y / playH) * 100}%` }} />
           <div className="axis-read" style={{
-            left: `${(dragAt.x / PLAY_W) * 100}%`, top: `${(dragAt.y / PLAY_H) * 100}%`,
+            left: `${(dragAt.x / PLAY_W) * 100}%`, top: `${(dragAt.y / playH) * 100}%`,
           }}>{dragAt.x} · {dragAt.y}</div>
         </>
       )}
@@ -101,30 +113,17 @@ export function GridPicker({
 // Menyeret memberi rasa; angka memberi hal yang bisa diulang. Keduanya perlu:
 // tanpa angka tidak ada cara menaruh watermark di tempat yang sama persis pada
 // job berikutnya, dan tanpa tombol tengah tidak ada jalan pulang.
-export function PositionField({
-  label, x, y, onReset,
-}: {
-  // ReactNode, bukan string: label posisi subtitle membawa lambang peringatan
-  // "menabrak zona" di sebelahnya.
-  label: React.ReactNode;
-  x: number;
-  y: number;
-  onReset: () => void;
-}) {
+// Position = titik (x·y) + tombol kembali ke tengah; labelnya milik Row.
+export function Position({ x, y, onReset }: { x: number; y: number; onReset: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="field"><label>{label}</label>
-      <div className="position-value" title={`x ${x} · y ${y}`}>
-        {/* Tanpa spasi di sekitar titiknya. Terukur: pada koordinat terjauh
-            ("1080 · 1920") bentuk berspasi meleset 3 px dari selnya dan
-            terpotong jadi "1080 · 19…" — dan angka yang terpotong tidak lebih
-            berguna daripada tidak ada angka sama sekali. */}
-        <span>{x}·{y}</span>
-        <button className="ghost tiny" title={t("resetCentre")} aria-label={t("resetCentre")}
-          onClick={onReset}>
-          <Crosshair className="ico" aria-hidden="true" />
-        </button>
-      </div></div>
+    <div className="position-value" title={`x ${x} · y ${y}`}>
+      {/* Tanpa spasi di sekitar titiknya: "1080 · 1920" berspasi terpotong. */}
+      <span>{x}·{y}</span>
+      <button type="button" className="ghost tiny" title={t("resetCentre")} aria-label={t("resetCentre")} onClick={onReset}>
+        <Crosshair className="ico" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 

@@ -77,6 +77,7 @@ func NewServer(mgr *job.Manager, l config.Layout) *Server {
 	s.posts.persistTo(filepath.Join(runs, "post"))
 	s.captions.persistTo(filepath.Join(runs, "caption"))
 	s.watermarks.persistTo(filepath.Join(runs, "watermark"))
+	s.migrateBaseURLs()
 	if mgr != nil {
 		mgr.Prepare = func(o *config.Options) { fillEngine(o); fillTranscriber(o) }
 	}
@@ -180,7 +181,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/posts/events", s.postEvents)
 	mux.HandleFunc("GET /api/posts/{id}", s.getPost)
 	mux.HandleFunc("GET /api/posts/{id}/file", s.postFile)
-	mux.HandleFunc("POST /api/posts/{id}/cancel", s.cancelPost)
+	mux.HandleFunc("POST /api/posts/{id}/cancel", s.posts.cancelHandler)
 	mux.HandleFunc("DELETE /api/posts/{id}", s.posts.deleteHandler)
 	mux.HandleFunc("GET /api/posts/limits", s.postLimits)
 
@@ -189,15 +190,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/captions/events", s.captionEvents)
 	mux.HandleFunc("GET /api/captions/{id}", s.getCaption)
 	mux.HandleFunc("GET /api/captions/{id}/file", s.captionFile)
-	mux.HandleFunc("POST /api/captions/{id}/cancel", s.cancelCaption)
+	mux.HandleFunc("POST /api/captions/{id}/cancel", s.captions.cancelHandler)
 	mux.HandleFunc("DELETE /api/captions/{id}", s.captions.deleteHandler)
 
 	mux.HandleFunc("POST /api/watermark", s.createWatermark)
 	mux.HandleFunc("GET /api/watermark", s.listWatermarks)
 	mux.HandleFunc("GET /api/watermark/events", s.watermarkEvents)
+	mux.HandleFunc("POST /api/watermark/layout", s.watermarkLayout)
+	mux.HandleFunc("POST /api/watermark/preview", s.watermarkPreview)
+	mux.HandleFunc("GET /api/watermark/templates", s.listTemplates)
+	mux.HandleFunc("POST /api/watermark/templates", s.saveTemplate)
+	mux.HandleFunc("DELETE /api/watermark/templates/{name}", s.deleteTemplate)
 	mux.HandleFunc("GET /api/watermark/{id}", s.getWatermark)
 	mux.HandleFunc("GET /api/watermark/{id}/file", s.watermarkFile)
-	mux.HandleFunc("POST /api/watermark/{id}/cancel", s.cancelWatermark)
+	mux.HandleFunc("POST /api/watermark/{id}/cancel", s.watermarks.cancelHandler)
 	mux.HandleFunc("DELETE /api/watermark/{id}", s.watermarks.deleteHandler)
 	if s.auth != nil {
 		mux.HandleFunc("GET /auth/login", s.authLogin)
@@ -1145,6 +1151,11 @@ func (s *Server) frame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tw, th := opts.Dims()
+	// format = bingkai halaman watermark (feed 4:5 / 1:1); lebarnya tetap tw.
+	if f := q.Get("format"); f != "" {
+		fw, fh := config.FrameSize(f)
+		th = tw * fh / fw / 2 * 2
+	}
 	img, err := s.ff.ExtractFrame(r.Context(), path, t, tw, th, ffmpeg.Layout{
 		Mode: string(opts.Reframe), Background: opts.Background, Zoom: opts.Zoom,
 	})
@@ -1327,9 +1338,15 @@ func (s *Server) clipFile(w http.ResponseWriter, r *http.Request) {
 	writeErr(w, 404, "the clip is not available yet")
 }
 
+// cancelJob: jawaban sama dengan bgStore.cancelHandler — 404 tidak ada, 409
+// sudah berhenti, 200 benar-benar dihentikan.
 func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
-	if !s.mgr.Cancel(r.PathValue("id")) {
-		writeErr(w, 404, "job not found")
+	if err := s.mgr.Cancel(r.PathValue("id")); err != nil {
+		if os.IsNotExist(err) {
+			writeErr(w, 404, "job not found")
+			return
+		}
+		writeErr(w, 409, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "canceled"})

@@ -69,7 +69,7 @@ Usage:
   clipper caption <video>... [flags]  Write scroll-stopping captions for one or
                                 more videos, one .txt next to each video's name
   clipper watermark <video>... [flags]  Burn your watermark + headline into videos
-                                that are already 9:16, one *_watermarked.mp4 each
+                                or photos (9:16 or feed 4:5, 1:1), one *_watermarked each
   clipper fetch <youtube-url> [-out dir]  Download one YouTube video; yt-dlp
                                 first, then the self-hosted Cobalt in
                                 CLIPPER_COBALT_URL if yt-dlp fails
@@ -101,12 +101,22 @@ Usage:
   -headline-dx -headline-dy  nudge the text from the centre of the image; 0,0 is
                the centre, and it is kept inside the image either way
   -headline-size  font size of that text
+  -headline-color  white|yellow|black|red
+  -headline-box  draw the headline as a news card: white rounded box across the
+               frame, text left-aligned, sized to the text. -headline-dy moves it.
+  -credit      small line under the headline in that box ("Photo: ...")
+  -logo        another image, as image@x,y,width,height; repeat for more
+  -format      short (9:16, default) | feed45 (4:5) | feed11 (1:1). Photos
+               (.jpg/.png/.webp) are taken too and come out as photos.
+  -fit         crop (default) | whole — how a file in another ratio is fitted
+               into the format: fill and crop the middle, or the whole picture
+               over a blurred copy of itself
   -font        font family for the headline (default Montserrat)
   -quality     draft|hd|max — encoder effort (default hd)
   -out         one folder for every result. The default writes each next to its
                own video, which is where you go looking for it.
-  Videos that are not 9:16 are refused by name, not silently cropped: the
-  placement space is 1080x1920, so the watermark would land somewhere else.
+  A file already in the -format's ratio keeps its size; any other ratio is
+  fitted into 1080 x (1920|1350|1080) as -fit says.
 
 'caption' flags:
   -engine      ollama|claude|openai|gemini|deepseek (default ollama). Cloud engines
@@ -808,6 +818,7 @@ func cmdWatermark(layout config.Layout, args []string) {
 		"-watermark-at": true, "-watermark-for": true,
 		"-headline": true, "-headline-dx": true, "-headline-dy": true,
 		"-headline-size": true, "-font": true, "-quality": true, "-out": true,
+		"-format": true, "-credit": true, "-logo": true, "-headline-color": true, "-fit": true,
 	})
 
 	fs := flag.NewFlagSet("watermark", flag.ExitOnError)
@@ -826,6 +837,25 @@ func cmdWatermark(layout config.Layout, args []string) {
 	font := fs.String("font", defaults.Subtitle.Font, "")
 	quality := fs.String("quality", defaults.Quality, "")
 	outDir := fs.String("out", "", "")
+	format := fs.String("format", config.FormatShort, "")
+	fit := fs.String("fit", watermark.FitCrop, "")
+	box := fs.Bool("headline-box", false, "")
+	credit := fs.String("credit", "", "")
+	color := fs.String("headline-color", "", "")
+	var logos []config.Logo
+	fs.Func("logo", "", func(v string) error {
+		var l config.Logo
+		i := strings.LastIndex(v, "@")
+		if i < 0 {
+			return fmt.Errorf("-logo wants image@x,y,width,height")
+		}
+		if _, err := fmt.Sscanf(v[i+1:], "%d,%d,%d,%d", &l.X, &l.Y, &l.Width, &l.Height); err != nil {
+			return fmt.Errorf("-logo wants image@x,y,width,height: %w", err)
+		}
+		l.Image = v[:i]
+		logos = append(logos, l)
+		return nil
+	})
 	_ = fs.Parse(flagArgs)
 
 	if len(videos) == 0 {
@@ -842,9 +872,11 @@ func cmdWatermark(layout config.Layout, args []string) {
 	opts.Subtitle.Font = *font
 	opts.Watermark = config.Watermark{
 		Image: *image, X: *x, Y: *y, Width: *width, Height: *height, At: *at, For: *dur,
+		Format: *format, Logos: logos,
 		Headline: config.Headline{
 			Source: config.HeadlineText, Text: *headline,
 			DX: *hlDX, DY: *hlDY, Size: *hlSize,
+			Box: *box, Credit: *credit, Color: *color, Bold: true,
 		},
 	}
 	if err := opts.Validate(); err != nil {
@@ -856,7 +888,7 @@ func cmdWatermark(layout config.Layout, args []string) {
 	res, err := watermark.Run(context.Background(),
 		watermark.Options{
 			Videos: videos, Watermark: opts.Watermark, Subtitle: opts.Subtitle,
-			OutDir: *outDir, Quality: opts.Quality,
+			OutDir: *outDir, Quality: opts.Quality, Fit: *fit,
 		},
 		ffmpeg.New(paths.FFmpeg, paths.FFprobe), paths,
 		func(pr watermark.Progress) {

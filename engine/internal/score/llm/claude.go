@@ -17,7 +17,7 @@ import (
 
 // defaultBase = alamat resmi Claude. Bisa ditimpa lewat Client.BaseURL supaya
 // pengguna bisa menunjuk ke gateway/proxy sendiri tanpa kode baru (notes/39).
-const defaultBase = "https://api.anthropic.com"
+const defaultBase = "https://api.anthropic.com/v1"
 
 // Client Claude API.
 type Client struct {
@@ -31,13 +31,13 @@ type Client struct {
 	BaseURL string
 }
 
-// endpoint menyusun alamat penuh /v1/messages untuk klien ini.
+// endpoint menyusun alamat penuh {BaseURL}/messages untuk klien ini.
 func (c *Client) endpoint() string {
 	base := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
 	if base == "" {
 		base = defaultBase
 	}
-	return base + "/v1/messages"
+	return base + "/messages"
 }
 
 func New(apiKey, model string) *Client {

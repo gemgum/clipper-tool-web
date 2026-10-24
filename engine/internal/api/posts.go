@@ -128,14 +128,6 @@ func (s *Server) postLimits(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) cancelPost(w http.ResponseWriter, r *http.Request) {
-	if !s.posts.stop(r.PathValue("id")) {
-		writeErr(w, 404, "no such post job")
-		return
-	}
-	writeJSON(w, 200, map[string]string{"status": "canceled"})
-}
-
 func (s *Server) listPosts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"posts": s.posts.snapshot()})
 }

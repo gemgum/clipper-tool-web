@@ -159,14 +159,6 @@ func (s *Server) getCaption(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, j)
 }
 
-func (s *Server) cancelCaption(w http.ResponseWriter, r *http.Request) {
-	if !s.captions.stop(r.PathValue("id")) {
-		writeErr(w, 404, "no such caption job")
-		return
-	}
-	writeJSON(w, 200, map[string]string{"status": "canceled"})
-}
-
 // captionFile menyajikan satu berkas .txt hasil job.
 //
 // Berkasnya ditunjuk lewat NOMOR URUT, bukan nama: path yang datang dari luar

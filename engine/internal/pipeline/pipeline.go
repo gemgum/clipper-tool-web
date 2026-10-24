@@ -151,30 +151,9 @@ func (p *Pipeline) Run(ctx context.Context, jobID, input, workDir, outDir string
 	// berhenti di transkripsi — kartu tahap yang salah ikut memerah.
 	emit(onProgress, Progress{Stage: "scoring", Value: 0.55})
 	var selected []types.Clip
-	var sel momentSelector
-	engineName := ""
-	switch p.Opts.Provider {
-	case "claude":
-		sel = llm.New(p.Paths.APIKey, p.Opts.LLMModel)
-		engineName = "Claude (" + p.Opts.LLMModel + ")"
-	case "ollama":
-		// Alamat & model dipastikan dulu — lihat ollama_resolve.go.
-		c, name, err := resolveOllama(ctx, p.Opts.OllamaURL, p.Opts.OllamaModel)
-		if err != nil {
-			return nil, err
-		}
-		sel, engineName = c, name
-	case "heuristic":
-		engineName = "heuristic"
-	default:
-		// Penyedia cloud yang bicara /chat/completions (OpenAI, Gemini,
-		// DeepSeek, …). Koordinatnya diisi server dari daftar mesin — pipeline
-		// tidak menyimpan tabel penyedia sendiri.
-		c, name, err := p.cloudClient()
-		if err != nil {
-			return nil, err
-		}
-		sel, engineName = c, name
+	sel, engineName, err := p.selector(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	tSel := time.Now()
@@ -305,40 +284,9 @@ func correctionNote(o config.Options) string {
 // boleh memaksa transkripsi ulang, dan menyalakannya lagi tidak perlu memanggil
 // LLM dua kali untuk video yang sama.
 func (p *Pipeline) correctTranscript(ctx context.Context, tr types.Transcript, cacheKey string, onProgress ProgressFunc) (types.Transcript, error) {
-	provider := correctionProvider(p.Opts)
-
-	var complete correct.Completer
-	var engineName string
-	switch provider {
-	case "claude":
-		c := llm.New(p.Paths.APIKey, p.Opts.LLMModel)
-		c.BaseURL = p.Opts.LLMBase
-		c.Temperature = correctionTemperature
-		engineName = "Claude (" + c.Model + ")"
-		// Claude tidak punya parameter skema; bentuk balasannya dijaga prompt.
-		complete = func(ctx context.Context, system, user string, _ any) (string, error) {
-			return c.Complete(ctx, system, user, 8192)
-		}
-	case "ollama":
-		c, name, err := resolveOllama(ctx, p.Opts.OllamaURL, p.Opts.OllamaModel)
-		if err != nil {
-			return types.Transcript{}, err
-		}
-		c.Temperature = correctionTemperature
-		engineName = name
-		complete = func(ctx context.Context, system, user string, schema any) (string, error) {
-			return c.Complete(ctx, system, user, schema, 4096)
-		}
-	default:
-		c, name, err := p.cloudClient()
-		if err != nil {
-			return types.Transcript{}, err
-		}
-		c.Temperature = correctionTemperature
-		engineName = name
-		complete = func(ctx context.Context, system, user string, schema any) (string, error) {
-			return c.Complete(ctx, system, user, schema, 4096)
-		}
+	complete, engineName, err := p.corrector(ctx)
+	if err != nil {
+		return types.Transcript{}, err
 	}
 
 	cachePath := ""
@@ -386,6 +334,60 @@ func (p *Pipeline) correctTranscript(ctx context.Context, tr types.Transcript, c
 		_ = saveTranscriptCache(cachePath, fixed)
 	}
 	return fixed, nil
+}
+
+// corrector merakit LLM tahap koreksi transkrip. Dipisah dari correctTranscript
+// supaya tombol Test (SelfTest) memakai klien yang SAMA dengan job.
+func (p *Pipeline) corrector(ctx context.Context) (correct.Completer, string, error) {
+	switch correctionProvider(p.Opts) {
+	case "claude":
+		c := llm.New(p.Paths.APIKey, p.Opts.LLMModel)
+		c.BaseURL = p.Opts.LLMBase
+		c.Temperature = correctionTemperature
+		// Claude tidak punya parameter skema; bentuk balasannya dijaga prompt.
+		return func(ctx context.Context, system, user string, _ any) (string, error) {
+			return c.Complete(ctx, system, user, 8192)
+		}, "Claude (" + c.Model + ")", nil
+	case "ollama":
+		c, name, err := resolveOllama(ctx, p.Opts.OllamaURL, p.Opts.OllamaModel)
+		if err != nil {
+			return nil, "", err
+		}
+		c.Temperature = correctionTemperature
+		return func(ctx context.Context, system, user string, schema any) (string, error) {
+			return c.Complete(ctx, system, user, schema, 4096)
+		}, name, nil
+	default:
+		c, name, err := p.cloudClient()
+		if err != nil {
+			return nil, "", err
+		}
+		c.Temperature = correctionTemperature
+		return func(ctx context.Context, system, user string, schema any) (string, error) {
+			return c.Complete(ctx, system, user, schema, 4096)
+		}, name, nil
+	}
+}
+
+// selector merakit mesin pemilih momen; nil untuk heuristik. Dipakai Run DAN
+// SelfTest, jadi tombol Test menguji klien yang sama persis dengan job.
+func (p *Pipeline) selector(ctx context.Context) (momentSelector, string, error) {
+	switch p.Opts.Provider {
+	case "claude":
+		c := llm.New(p.Paths.APIKey, p.Opts.LLMModel)
+		c.BaseURL = p.Opts.LLMBase
+		return c, "Claude (" + p.Opts.LLMModel + ")", nil
+	case "ollama":
+		// Alamat & model dipastikan dulu — lihat ollama_resolve.go.
+		return resolveOllama(ctx, p.Opts.OllamaURL, p.Opts.OllamaModel)
+	case "heuristic":
+		return nil, "heuristic", nil
+	default:
+		// Penyedia cloud yang bicara /chat/completions (OpenAI, Gemini,
+		// DeepSeek, …). Koordinatnya diisi server dari daftar mesin — pipeline
+		// tidak menyimpan tabel penyedia sendiri.
+		return p.cloudClient()
+	}
 }
 
 // momentSelector adalah mesin yang MEMILIH dari kandidat bernomor (Claude/Ollama).

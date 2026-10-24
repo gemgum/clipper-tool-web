@@ -16,9 +16,15 @@
 // (`npx playwright install chromium`, tanpa root). Biner yang SAMA juga bisa
 // dipakai engine untuk merender kartu berita lewat CLIPPER_CHROME.
 //
-// Yang dicetak: scrollHeight vs clientHeight untuk <html>, .screen-main, dan
-// .screen-col, di dua ukuran jendela dan dua tema. Angka "over" > 0 berarti
-// kotak itu bergulir. Halaman yang bergulir dicap GAGAL.
+// Yang dicetak (tata letak 24 Oktober 2026, acuan halaman Watermark):
+//   scroll = gulir .screen.scroll — HARUS 0 di halaman berkolom (setup-grid /
+//            io-grid): yang bergulir hanya kolom kiri/hasil.
+//   stage  = atas..bawah kartu pratinjau, sebelum DAN sesudah kolom kiri
+//            digulir ke dasar — angka atas yang berubah = pratinjau bergerak.
+//   side   = lebih tinggi kartu pratinjau dari kolomnya (> 0 = tidak muat).
+// GAGAL bila halaman bergulir, pratinjau bergeser, atau kartunya tidak muat di
+// 1240x860. Di 900x600 "side" hanya dilaporkan (jaring pengaman: kolomnya
+// bergulir sendiri).
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const PORT = 9333;
@@ -60,14 +66,19 @@ const open = async (url) => {
   return r.json();
 };
 
-// Yang diukur. scrollHeight > clientHeight berarti kotak itu MENGGULIR.
+// Yang diukur — lihat keterangan di kepala berkas.
 const PROBE = `(() => {
-  const box = (el) => el ? { c: el.clientHeight, s: el.scrollHeight, over: el.scrollHeight - el.clientHeight } : null;
-  const q = (s) => box(document.querySelector(s));
+  const sc = document.querySelector('.screen.scroll');
+  const st = document.querySelector('.stage');
+  const side = document.querySelector('.setup-side');
+  const col = document.querySelector('.setup-main, .io-in');
+  const top = () => st ? Math.round(st.getBoundingClientRect().top) : null;
+  const t0 = top(); if (col) col.scrollTop = 1e6; const t1 = top(); if (col) col.scrollTop = 0;
   return JSON.stringify({
-    body: box(document.body),
-    doc: { c: document.documentElement.clientHeight, s: document.documentElement.scrollHeight },
-    main: q('.screen-main'), col: q('.screen-col'), rail: q('.rail'),
+    scroll: sc ? sc.scrollHeight - sc.clientHeight : 0,
+    grid: !!document.querySelector('.setup-grid, .io-grid'),
+    t0, t1, bottom: st ? Math.round(st.getBoundingClientRect().bottom) : null,
+    side: side ? side.scrollHeight - side.clientHeight : null,
     theme: document.documentElement.dataset.theme || '(none)',
   });
 })()`;
@@ -88,9 +99,9 @@ for (const theme of themes) {
         expression: `localStorage.setItem('clipper.theme','${theme}');document.documentElement.dataset.theme='${theme}'`,
       });
       await send("Page.reload");
-      await new Promise((r) => setTimeout(r, 1400));
+      await new Promise((r) => setTimeout(r, 1800));
       const m = await send("Runtime.evaluate", { expression: PROBE, returnByValue: true });
-      results.push({ theme, page: name, size: label, ...JSON.parse(m.result.value) });
+      results.push({ theme, page: name, size: label, h, ...JSON.parse(m.result.value) });
       if (label === "1240x860") {
         const shot = await send("Page.captureScreenshot", { format: "png" });
         writeFileSync(`${OUT}/${name}-${theme}.png`, Buffer.from(shot.data, "base64"));
@@ -102,15 +113,16 @@ for (const theme of themes) {
 }
 
 const bad = [];
-console.log("halaman      tema    jendela    body(c/s)      main over  col over");
+console.log("halaman      tema    jendela    scroll stage(atas→sesudah gulir, bawah)  side");
 for (const r of results) {
-  const scrolls = r.doc.s > r.doc.c + 1;
-  if (scrolls) bad.push(`${r.page} ${r.theme} ${r.size}`);
+  const moved = r.t0 !== null && r.t0 !== r.t1;
+  const strict = r.size === "1240x860";
+  const fail = (r.grid && r.scroll > 1) || moved || (strict && r.side > 0);
+  if (fail) bad.push(`${r.page} ${r.theme} ${r.size}`);
+  const stage = r.t0 === null ? "-" : `${r.t0}→${r.t1}, ${r.bottom}/${r.h}`;
   console.log(
-    `${r.page.padEnd(13)}${r.theme.padEnd(8)}${r.size.padEnd(11)}` +
-    `${String(r.doc.c + "/" + r.doc.s).padEnd(15)}` +
-    `${String(r.main?.over ?? "-").padEnd(11)}${r.col?.over ?? "-"}` +
-    (scrolls ? "   <-- HALAMAN BERGULIR" : "")
+    `${r.page.padEnd(13)}${r.theme.padEnd(8)}${r.size.padEnd(11)}${String(r.scroll).padEnd(6)}` +
+    `${stage.padEnd(34)}${r.side ?? "-"}` + (fail ? "   <-- GAGAL" : "")
   );
 }
-console.log(bad.length ? `\nGAGAL: ${bad.join(", ")}` : "\nOK: tidak ada halaman yang bergulir.");
+console.log(bad.length ? `\nGAGAL: ${bad.join(", ")}` : "\nOK: halaman tidak bergulir, pratinjau diam dan muat.");

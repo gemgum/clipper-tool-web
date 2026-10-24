@@ -16,7 +16,7 @@ import EmptyState from "../empty-state";
 import { useConfirm } from "../confirm";
 import PageHeader from "../page-header";
 import Alerts from "../alerts";
-import { eng, engineURL } from "../engine";
+import { eng, engineURL, post } from "../engine";
 import { usePlayer } from "../video-player";
 import { useI18n } from "../i18n";
 import type { MessageKey } from "../i18n";
@@ -123,14 +123,12 @@ export default function HistoryPage() {
   const cancel = async (e: Entry) => {
     const url = e.kind === "clips" ? `/api/jobs/${e.job!.id}/cancel` : e.kind === "writer" ? `/api/posts/${e.post!.id}/cancel`
       : e.kind === "captions" ? `/api/captions/${e.cap!.id}/cancel` : `/api/watermark/${e.wm!.id}/cancel`;
-    await fetch(eng(url), { method: "POST", headers: { "content-type": "application/json" } }).catch(() => {});
+    await post(url).catch(() => {});
     load();
   };
   const retry = async (e: Entry) => {
     try {
-      const res = await fetch(eng(`/api/jobs/${e.job!.id}/retry`), { method: "POST", headers: { "content-type": "application/json" } });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error);
+      await post(`/api/jobs/${e.job!.id}/retry`);
       load();
     } catch (err: any) { setError(err.message); }
   };

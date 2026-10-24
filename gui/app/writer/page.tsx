@@ -9,14 +9,16 @@
 // tidak boleh menulis satu kata pun, di sini ia memang menulis. Mencampurnya
 // cepat atau lambat membuat teks karangan keluar sebagai kutipan verbatim.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { copyText } from "../copy-link";
+import { useCallback, useEffect, useState } from "react";
 import EmptyState from "../empty-state";
 import PageHeader from "../page-header";
 import { X, Copy, FileText, Info, PenLine } from "lucide-react";
 import { eng } from "../engine";
 import { useI18n } from "../i18n";
 import Alerts from "../alerts";
-import LogPanel from "../log-panel";
+import { TechNotes } from "../log-panel";
+import { useJob } from "../use-job";
 import { useAI } from "../ai";
 
 // Batas artikel sumber. Angkanya BUKAN tetap: tahap 2 mengirim seluruh fakta
@@ -35,15 +37,6 @@ type Draft = { title: string; lead: string; body: string[]; words: number; tags?
 // keranjang di layar: keranjang masih bisa diubah setelah job jalan, dan kaki
 // artikel harus menyebut yang sama persis dengan yang ditulis ke artikel.md.
 type SourceRef = { title: string; url: string; media: string };
-type PostJob = {
-  id: string;
-  status: string;
-  stage: string;
-  progress: number;
-  log?: string[];
-  error?: string;
-  result?: { post: { dir: string; image?: string }; draft: Draft; sources?: SourceRef[]; basket?: { skipped?: { url: string; reason: string }[] } };
-};
 
 export default function WriterPage() {
   const { t, lang } = useI18n();
@@ -63,14 +56,11 @@ export default function WriterPage() {
   const model = ai?.model || "";
 
   // --- job ---
-  const [jobId, setJobId] = useState("");
-  const [job, setJob] = useState<PostJob | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
   const [error, setError] = useState("");
+  // Siklus job latar (use-job.ts): langganan SSE, start, cancel.
+  const { jobId, job, logs, busy, start: startJob, cancel } = useJob<{ post: { dir: string; image?: string }; draft: Draft; sources?: SourceRef[]; basket?: { skipped?: { url: string; reason: string }[] } }>("/api/posts", "post", setError);
   const [copied, setCopied] = useState("");
-  const esRef = useRef<EventSource | null>(null);
 
-  const busy = job?.status === "running" || (!!jobId && !job);
 
   const loadList = useCallback(async (q: string) => {
     setListBusy(true);
@@ -92,24 +82,6 @@ export default function WriterPage() {
   useEffect(() => { loadList(""); }, [loadList]);
 
 
-  // Satu langganan SSE untuk seluruh halaman, dibuka sekali. Kabar job yang
-  // sedang berjalan datang dari sini, bukan dari polling: satu job memanggil
-  // LLM berkali-kali dan berjalan menit-menitan.
-  useEffect(() => {
-    const es = new EventSource(eng("/api/posts/events"));
-    esRef.current = es;
-    es.addEventListener("post", (ev) => {
-      const j: PostJob = JSON.parse((ev as MessageEvent).data);
-      setJobId((cur) => {
-        if (cur && j.id !== cur) return cur;
-        setJob(j);
-        if (j.log) setLogs(j.log);
-        if (j.error) setError(j.error);
-        return cur || j.id;
-      });
-    });
-    return () => { es.close(); esRef.current = null; };
-  }, []);
 
   const inBasket = (url: string) => basket.some((a) => a.url === url);
 
@@ -161,46 +133,7 @@ export default function WriterPage() {
     setPaste("");
   };
 
-  const start = async () => {
-    setError("");
-    setLogs([]);
-    setJob(null);
-    setJobId("");
-    try {
-      const r = await fetch(eng("/api/posts"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          urls: basket.map((a) => a.url),
-          engine,
-          model,
-          write_engine: "",
-          write_model: "",
-          lang,
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || data?.message || "failed to start");
-      setJobId(data.id);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
-  // Membatalkan job. Satu job memanggil LLM berkali-kali dan berjalan
-  // menit-menitan; tanpa ini satu-satunya cara menghentikan pilihan yang salah
-  // adalah menutup aplikasinya.
-  const cancel = async () => {
-    if (!jobId) return;
-    try {
-      const r = await fetch(eng(`/api/posts/${jobId}/cancel`), {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-      });
-      if (!r.ok) throw new Error(await r.text());
-    } catch (e) {
-      setError(String(e));
-    }
-  };
+  const start = () => startJob({ urls: basket.map((a) => a.url), engine, model, write_engine: "", write_model: "", lang });
 
   const draft = job?.result?.draft;
   const violations = draft?.violations ?? [];
@@ -218,7 +151,7 @@ export default function WriterPage() {
          ...(draft.tags?.length ? ["", draft.tags.join(" ")] : []),
          ...(foot.length ? ["", t("writerSources") + ":", ...foot] : [])].join("\n\n");
     try {
-      await navigator.clipboard.writeText(text);
+      await copyText(text);
       setCopied(what);
       setTimeout(() => setCopied(""), 1500);
     } catch {
@@ -244,8 +177,9 @@ export default function WriterPage() {
       </PageHeader>
       <Alerts items={[error && { kind: "error" as const, text: error }]} />
 
-      <div className="wr-body">
-        <section className="wr-side">
+      {/* Kiri = yang diisi, kanan = hasilnya (aturan kolom CLAUDE.md). */}
+      <div className="io-grid">
+        <section className="io-in">
           <div className="card">
             <div className="card-head">
               <h2>{t("wrPicked")}</h2>
@@ -304,9 +238,10 @@ export default function WriterPage() {
               ))}
             </ul>
           </div>
+          {/* Log di dasar kolom kiri: halaman ini tidak bergulir, kolomnya yang bergulir. */}
+          <TechNotes logs={logs} />
         </section>
-
-        <section className="card wr-article">
+        <section className="card wr-article io-out">
           <div className="card-head">
             <h2>{t("wrResult")}</h2>
             {draft && (
@@ -364,14 +299,9 @@ export default function WriterPage() {
             </>
           )}
         </section>
+
       </div>
 
-      <div className="wr-tech">
-        <details className="card tech">
-          <summary>{t("techNotes")}</summary>
-          <LogPanel logs={logs} />
-        </details>
-      </div>
     </div>
   );
 }

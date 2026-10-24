@@ -429,11 +429,17 @@ body:has(.screen) {
   border-bottom: 1px solid var(--border);
 }
 .ph-text { flex: 1; min-width: 0; }
+/* SATU baris, di semua halaman: judul artikel panjang (News) yang membungkus
+   jadi dua baris membuat kepala lebih tinggi dan seluruh isi di bawahnya —
+   termasuk pratinjau — turun. Judul lengkap ada di title. */
 .page-header h1 {
   font-size: var(--fs-h2);
   line-height: 26px;
   font-weight: 600;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .page-header p {
   margin: 0;
@@ -921,6 +927,11 @@ a.dl, button.dl {
   background-image:
     linear-gradient(to right, rgba(255, 255, 255, 0.09) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+}
+.gridmesh.fine {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
 }
 
 /* Sumbu pada posisi subtitle sekarang — dibedakan dari garis tengah (.guide)
@@ -2436,7 +2447,6 @@ button.tip:hover .hint, button.tip:focus-visible .hint { opacity: 1; }
 }
 .tip-box.up { transform: translateY(-100%); }
 
-
 /* ================= Halaman Video clips — DESIGN.md "Video Clips" =================
    Tiga layar dalam satu .screen yang BOLEH bergulir ke bawah (keputusan pemilik
    9 Oktober 2026; halaman lain tetap tidak bergulir). Kepala halaman menempel
@@ -2474,9 +2484,28 @@ button.link-btn:hover { color: var(--accent-hover); text-decoration: underline; 
 .chip-pill, .clips-v2 .chip { font-size: 13px; font-weight: 600; color: var(--text-2); background: var(--sunken); padding: 5px 10px; border-radius: var(--r-full); border: 0; }
 
 /* Layar 1: dua kolom flex-wrap (§4.1). */
-.setup-grid { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; padding: 32px 32px 0; }
-.setup-main { flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-.setup-side { flex: 0 1 340px; min-width: 280px; position: sticky; top: 104px; }
+/* Tata letak baku semua halaman berpratinjau: kiri = berkas + setelan, kanan =
+   kolom pratinjau (stage.tsx) selebar TETAP yang menempel. */
+.setup-grid { --stage-w: 340px; display: flex; gap: 32px; align-items: flex-start; padding: 32px 32px 0; }
+.setup-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+/* max-height + overflow: jaring pengaman untuk jendela yang lebih pendek dari
+   kartunya (900x600) — di ukuran acuan kartunya muat dan tidak pernah bergulir. */
+.setup-side { flex: 0 0 var(--stage-w); width: var(--stage-w); min-width: 0; max-height: 100%; overflow-y: auto; }
+@media (max-width: 1100px) { .setup-grid { --stage-w: 280px; gap: 24px; padding: 24px 24px 0; } }
+/* Lebar bingkai = lebar kolom − padding & tepi kartu, dibatasi tinggi layar
+   supaya kartu yang menempel muat utuh. RUMUS YANG SAMA ada di useStageWidth. */
+.stage { --stage-extra: 430px; --stage-in: max(120px, min(calc(var(--stage-w) - 50px), calc((100dvh - var(--stage-extra)) * 9 / 16))); }
+/* Kartu klip membawa penggeser waktu + filmstrip di bawah bingkainya. */
+.stage:has(.pv-controls) { --stage-extra: 525px; }
+/* Bingkai duduk di ATAS slot: tepi atasnya tidak pernah melompat saat format berganti. */
+.stage-slot { height: calc(var(--stage-in) * 16 / 9); display: flex; align-items: flex-start; justify-content: center; }
+/* Area tombol setinggi tetap: News dan Watermark sama tingginya, apa pun isinya. */
+.stage-tools { margin-top: 12px; min-height: 134px; }
+.stage-tools:empty { display: none; }
+/* Jendela pendek (900x600): tinggi tetap area tombol & baris bantuan dilepas —
+   di sana setiap piksel dibayar oleh bingkainya. */
+@media (max-height: 700px) { .stage-tools { min-height: 0; } .stage-help { min-height: 0; } }
+.stage-help { min-height: calc(2 * 1.45em); line-height: 1.45; }
 
 .step-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); padding: 24px; }
 .step-card.off { opacity: 0.55; }
@@ -2707,12 +2736,11 @@ button.film-frame:focus-visible { outline: 2px solid var(--accent); outline-offs
 .drop-progress > div { height: 100%; border-radius: var(--r-full); background: var(--accent); }
 .drop-progress span { position: absolute; right: 0; top: 14px; font-size: 13px; color: var(--text-2); }
 
-
 /* Pratinjau (§4.3): 9:16, lebar maks 372 px. */
-.preview-card .sub-layout.pv-only { display: block; --pv-w: min(372px, 100%); }
+.preview-card .sub-layout.pv-only { display: block; --pv-w: var(--stage-in); }
 /* Lebar dibatasi tinggi layar juga, supaya pratinjau yang menempel muat utuh tanpa digulir. */
 .preview-card .preview9x16 {
-  --pv-cap: max(160px, min(372px, 100cqw, calc((100dvh - 430px) * 9 / 16)));
+  --pv-cap: var(--stage-in);
   width: var(--pv-cap); max-width: 100%; height: auto; aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 14px;
   --pvh: calc(var(--pv-cap) * 16 / 9);
 }
@@ -2857,12 +2885,6 @@ button.chip-btn.on { background: var(--text); color: var(--panel); border-color:
 .nc-foot { text-align: center; margin: 0; }
 
 /* Layar 2: pratinjau kiri (maks 432 px), panel kanan. */
-.nc-compose { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; padding: 28px 32px 0; }
-.nc-preview-col {
-  flex: 1 1 380px; min-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 16px;
-  position: sticky; top: 104px;
-}
-.nc-preview-col .segmented { width: 100%; max-width: 432px; }
 .nc-card {
   position: relative; width: 100%; max-width: 432px; max-height: calc(100dvh - 260px);
   border-radius: 16px; overflow: hidden; background: var(--sunken);
@@ -2872,10 +2894,6 @@ button.chip-btn.on { background: var(--text); color: var(--panel); border-color:
 .nc-busy, .nc-warn { position: absolute; left: 10px; font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
 .nc-busy { top: 10px; background: rgb(0 0 0 / 65%); color: #fff; }
 .nc-warn { bottom: 10px; background: var(--bad-text); color: #fff; }
-.nc-panels { flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
-.nc-panels .card { padding: 22px; }
-.nc-panels textarea { width: 100%; font-size: 15px; line-height: 1.5; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--panel); color: var(--text); font-family: inherit; resize: vertical; }
-.nc-panels input { font-size: 15px; }
 button.ai-btn {
   display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 14px;
   background: var(--accent-soft); color: var(--accent-ink); border: 1px solid var(--accent-line);
@@ -2913,14 +2931,6 @@ button.theme-tile.on { border: 2px solid var(--accent); padding: 9px; box-shadow
 .nc-settings { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 
 /* Layar 3. */
-.nc-done { padding: 32px; display: flex; flex-direction: column; gap: 32px; }
-.nc-final { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
-.nc-final-card { width: 300px; flex: none; border-radius: 16px; overflow: hidden; background: var(--sunken); box-shadow: 0 10px 30px rgb(21 24 29 / 14%); }
-.nc-final-card img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.nc-final-side { flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
-.nc-final-side .banner { margin: 0; }
-.nc-actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.nc-actions button { min-height: 48px; padding: 0 20px; font-size: 15px; display: inline-flex; align-items: center; gap: 9px; }
 .nc-caption { margin: 12px 0; padding: 16px; background: var(--panel2); border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 14.5px; line-height: 1.6; white-space: pre-line; }
 .nc-gallery { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
 .nc-mini { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
@@ -2967,9 +2977,9 @@ button.theme-tile.on { border: 2px solid var(--accent); padding: 9px; box-shadow
 .ai-current p { margin: 0; }
 .ai-sub { margin-top: 3px !important; font-size: 13px; color: var(--accent-ink); font-family: var(--font-mono); }
 .ai-current button { min-height: 40px; }
-.ai-chooser { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 12px; }
-.ai-chooser .field { flex: 1 1 200px; margin: 0; }
-.ai-chooser-actions { display: flex; gap: 8px; }
+.ai-chooser { margin-top: 12px; }
+.ai-chooser-actions { display: flex; gap: 8px; margin-top: 12px; }
+.ai-chooser .mc-r-c > select { flex: 1; min-width: 0; width: 100%; }
 /* Baris Video clips: dua baris isian sama lebar, tombol di baris sendiri. */
 .ai-chooser-actions.end { justify-content: flex-end; margin-top: 12px; }
 .ai-chooser-actions button { min-height: 44px; }
@@ -3035,9 +3045,6 @@ dialog.hi-zoom img { display: block; max-height: calc(100vh - 140px); max-width:
 .hi-head > input[type="checkbox"], .hi-pick { width: 20px; height: 20px; min-height: 0; flex: none; margin: 0; padding: 0; accent-color: var(--accent); }
 
 /* ================= Tulis artikel — DESIGN-Clipper-Lanjutan §3 ================= */
-.wr-body { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; padding: 26px 32px 0; }
-.wr-side { flex: 0 1 400px; min-width: 320px; display: flex; flex-direction: column; gap: 16px; }
-.wr-side .card { padding: 20px; }
 .wr-empty { margin: 0; padding: 18px; background: var(--panel2); border: 1px dashed var(--border-strong); border-radius: var(--r-sm); font-size: 13.5px; color: var(--text-2); text-align: center; }
 .wr-sources { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .wr-sources li { display: flex; gap: 11px; padding: 11px; border: 1px solid var(--border); border-radius: var(--r-sm); align-items: flex-start; }
@@ -3055,7 +3062,7 @@ dialog.hi-zoom img { display: block; max-height: calc(100vh - 140px); max-width:
 .wr-suggest button { min-height: 32px; padding: 0 12px; font-size: 13px; flex: none; }
 .wr-thumb { width: 44px; height: 44px; border-radius: 7px; background: var(--sunken); flex: none; overflow: hidden; }
 .wr-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.wr-article { flex: 999 1 460px; min-width: 0; padding: 28px 32px !important; }
+.wr-article { padding: 28px 32px !important; }
 .wr-article .card-head .btn-ghost, .wr-article .card-head button { flex: none; min-height: 36px; padding: 0 14px; font-size: 13.5px; }
 .wr-note { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 22px !important; }
 .wr-h { margin: 18px 0 14px; font-size: 25px; font-weight: 700; line-height: 1.25; }
@@ -3071,11 +3078,7 @@ a.src-chip:hover { background: var(--accent); color: var(--on-accent); }
 .wr-tech { padding: 20px 32px 0; }
 
 /* ================= Caption — DESIGN-Clipper-Lanjutan §5 ================= */
-.cap-body { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; padding: 26px 32px 0; }
-.cap-results { flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
-.cap-results .banner { margin: 0; }
-.cap-side { flex: 0 1 380px; min-width: 320px; display: flex; flex-direction: column; gap: 18px; }
-.cap-side .card { padding: 22px; }
+.io-out .banner { margin: 0; }
 .cap-card { padding: 22px !important; }
 .cap-card-head { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .cap-card-head .meta { margin: 4px 0 0; }
@@ -3095,30 +3098,20 @@ a.src-chip:hover { background: var(--accent); color: var(--on-accent); }
 button.cap-add { flex: 1; min-height: 44px; border-style: dashed; }
 .cap-drop.over { border-color: var(--accent); background: var(--accent-soft); }
 .cap-hint { margin: 8px 0 0; }
-.cap-side .stepper { max-width: 200px; }
+.io-in .stepper { max-width: 200px; }
 
 /* ================= Watermark — DESIGN-Clipper-Lanjutan §4 ================= */
-.wm-stage { flex: 0 0 340px; display: flex; flex-direction: column; align-items: center; gap: 12px; position: sticky; top: 96px; }
 /* Tinggi tetap, sebab ukuran huruf pratinjau dihitung dari --pvh. */
-.wm-stage .wm-frame { height: 604px; --pvh: 604px; border-radius: 14px; }
 .wm-grab { cursor: grab; outline: 1.5px dashed rgba(47, 91, 234, 0.75); outline-offset: 2px; }
 .wm-grab:active { cursor: grabbing; }
-.wm-drag-hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 9px; background: rgba(0, 0, 0, 0.55);
-  color: #fff; font-size: 11px; font-weight: 600; text-align: center; pointer-events: none; }
 .wm-check { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .wm-check input, .wm-radio > input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; flex: none; }
 .wm-logo-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .wm-logo-thumb { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: var(--sunken); border: 1px solid var(--border); flex: none; }
 button.wm-logo-empty { width: 100%; min-height: 72px; }
-.wm-place { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; margin-top: 18px; }
 .wm-anchors { display: grid; grid-template-columns: repeat(3, 40px); gap: 6px; }
 .wm-anchors button { width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 7px; background: var(--panel); border: 1px solid var(--border-strong); }
 .wm-anchors button.on { background: var(--accent); border-color: var(--accent); }
-.wm-row { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 16px; }
-.wm-row > .grow { flex: 1 1 180px; }
-.wm-swatches { display: flex; gap: 10px; }
-.wm-swatches button { width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 9px; border: 1px solid var(--border-strong); }
-.wm-swatches button.on { border: 2px solid var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .wm-radio { display: flex; align-items: center; gap: 11px; margin-top: 12px; font-size: 15px; cursor: pointer; }
 .wm-radio span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .wm-radio span input { width: 64px; min-height: 34px; height: 34px; text-align: center; padding: 0 6px; }
@@ -3129,13 +3122,42 @@ button.wm-logo-empty { width: 100%; min-height: 72px; }
 .wm-tag { font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 5px; flex: none; color: var(--muted); background: var(--sunken); }
 .wm-tag.ok { color: var(--good-text); background: var(--good-soft); }
 .wm-tag.bad { color: var(--bad-text); background: var(--bad-soft); }
-.wm-place .stepper { max-width: 200px; }
+/* notes/44: kotak judul berita. Angka (posisi, ukuran, radius, padding) diisi
+   inline dari newsBox() — sama dengan subtitle.NewsBox di engine. */
+.wm-newsbox { position: absolute; box-sizing: border-box; background: #fff; font-weight: 700; white-space: nowrap; overflow: visible; }
+.wm-credit { color: #222; }
+.wmoverlay.on { outline-color: var(--accent); outline-style: solid; }
+.wm-logos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.wm-logos li { display: flex; gap: 12px; align-items: center; padding: 6px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; }
+.wm-logos li.on { border-color: var(--accent); background: var(--accent-soft); }
+.wm-logos .wm-logo-thumb { width: 52px; height: 52px; }
+.wm-logos .grow { min-width: 0; }
+.wm-logos .meta { margin: 2px 0 0; }
+.wm-pin { margin: 8px 0 0; width: 100%; }
+button.wm-pin.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wm-pin { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+/* Tanda di logo: gembok (terkunci ke kotak judul) / magnet (sedang menempel). */
+.wm-mark { position: absolute; transform: translate(-60%, -40%); width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: #fff; pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+.wm-mark .ico { width: 12px; height: 12px; }
+.wm-mark.stick { background: #16a34a; }
+/* Kotak judul yang sedang ditempeli logo: tepinya menyala. */
+.wm-newsbox.stick { outline: 2px solid #16a34a; outline-offset: 0; }
+.wm-tpls { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+.wm-tpls li { display: flex; align-items: center; gap: 10px; }
+.wm-tpls .grow { flex: 1; min-width: 0; font-weight: 600; }
+button.wm-preview-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; min-height: 44px; }
+button.wm-preview-btn:disabled { opacity: 0.5; }
+/* Pratinjau hasil asli: layar penuh, klik di mana saja / Esc untuk menutup. */
+.wm-shot { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.8); display: grid; place-items: center; padding: 24px; cursor: zoom-out; }
+.wm-shot img { max-width: 100%; max-height: calc(100vh - 48px); border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+.wm-shot-close { position: absolute; top: 16px; right: 16px; color: #fff; border-color: rgba(255, 255, 255, 0.5); }
 
 /* ================= Pengaturan: satu form mesin ================= */
-.engine-form-pick { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-top: 14px; }
-.engine-form-pick .field { flex: 1 1 260px; max-width: 360px; }
-.engine-form-status { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; }
-.engine-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 16px; }
+.engine-form .mc-group { margin-top: 14px; }
+.engine-form-status { display: flex; gap: 8px; align-items: center; flex: none; }
 .engine-form-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
 .engine-form-actions .engine-result { font-size: 13px; overflow-wrap: anywhere; }
 
@@ -3233,3 +3255,90 @@ dialog.player video { display: block; max-width: min(94vw, 1200px); max-height: 
    supaya kotaknya penuh, dan aturan itu ikut terbawa ke layar penuh: klip 9:16
    terpotong jadi 16:9 dan tampak di-zoom (dilaporkan dari lapangan). */
 video:fullscreen { object-fit: contain !important; background: #000; }
+
+/* Watermark di kartu bertab (tab-card.tsx): kendali dipadatkan supaya satu
+   baris label | kendali tidak pecah jadi dua. */
+.wm-videos:empty + .cap-add-row, .wm-videos:empty + .cap-add { margin-top: 0; }
+.mc-r-pad .wm-radio { margin: 0; min-height: 40px; }
+.mc-r-c textarea { flex: 1; width: 100%; min-width: 0; }
+.mc-r-c .wm-pin { width: auto; margin: 0; }
+@media (max-width: 1100px) {
+  /* Jendela sempit (berlaku untuk SEMUA kartu bertab): ikon tab dibuang,
+     kolom label menyempit, tombol segmen boleh dua baris. */
+  .mc-tab-ic { display: none; }
+  .mc-r { grid-template-columns: 120px minmax(0, 1fr); }
+  .mc-rows .segmented button { white-space: normal; line-height: 1.2; }
+  .mc-split { grid-template-columns: minmax(0, 1fr); }
+  .mc-split-r { border-left: 0; border-top: 1px solid var(--border); }
+}
+
+/* Captions: kolom kanan sempit — label di ATAS kendalinya. */
+.cap-set h2 { margin-bottom: 16px; }
+.cap-set .mc-r { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+
+/* Watermark: detik tampil di bawah pilihannya; palet warna di panel kanan. */
+.wm-timed { flex-basis: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13.5px; color: var(--text-2); }
+.wm-timed input { width: 64px; height: 34px; min-height: 34px; text-align: center; padding: 0 6px; }
+
+/* Kartu berita di kartu bertab + kolom pratinjau baku. */
+.nc-pad-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mc-r-pad textarea { width: 100%; font-size: 15px; line-height: 1.5; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--panel); color: var(--text); font-family: inherit; resize: vertical; }
+.stage-slot .nc-card { width: var(--stage-in); max-height: 100%; }
+
+/* Panel warna (color-panel.tsx): warna bebas + kode di bawah palet. */
+.cp-custom { display: flex; gap: 8px; align-items: center; }
+.cp-any { width: 40px; height: 40px; flex: none; border-radius: 50%; overflow: hidden; cursor: pointer; position: relative;
+  border: 2px solid transparent; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
+.cp-any.on { border-color: var(--accent); }
+.cp-any input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; padding: 0; border: 0; }
+.cp-code { flex: 1; min-width: 0; height: 40px; min-height: 40px; font-family: ui-monospace, monospace; font-size: 13px; }
+.cp-code.bad { border-color: var(--bad-text); box-shadow: 0 0 0 3px var(--bad-soft); }
+.cp-targets button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 6px; }
+.stage-tools { display: flex; flex-direction: column; gap: 10px; }
+.stage-tools > .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+
+/* Halaman tanpa pratinjau (Captions, Writer): kiri = yang diisi (sumber +
+   setelan, lebar tetap), kanan = hasil (melebar). Sisi yang sama dengan
+   halaman berpratinjau — kanan selalu yang DILIHAT. */
+.io-grid { display: flex; gap: 32px; align-items: flex-start; padding: 32px 32px 0; }
+.io-in { flex: 0 0 400px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.io-out { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+@media (max-width: 1100px) { .io-grid { gap: 24px; padding: 24px 24px 0; } .io-in { flex-basis: 340px; } }
+
+/* Pratinjau DIAM (24 Oktober 2026). `sticky` hanya menempel selama induknya
+   punya ruang — kolom kiri yang pendek atau gulir sampai dasar halaman membuat
+   pratinjau ikut terbawa. Jadi halaman berkolom TIDAK bergulir; hanya kolom
+   kiri (dan kolom hasil) yang bergulir, kolom pratinjau berdiri tetap.
+   scrollbar-gutter: tempat bilah gulir dicadangkan, jadi isi kolom tidak
+   bergeser saat bilahnya muncul. */
+.screen.scroll:has(> .setup-grid, > .io-grid) { overflow: hidden; padding-bottom: 0; }
+.setup-grid, .io-grid { flex: 1; min-height: 0; padding-bottom: 0; }
+.setup-main, .io-in, .io-out { align-self: stretch; overflow-y: auto; scrollbar-gutter: stable; padding-bottom: 32px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+/* Kartu di kolom yang tingginya terbatas TIDAK boleh menyusut (bawaan flex) —
+   kolomnya yang bergulir. Tanpa ini kartu Files tergencet tinggal kepalanya. */
+.setup-main > *, .io-in > *, .io-out > * { flex-shrink: 0; }
+.setup-main .wr-tech, .io-in .wr-tech { padding: 0; }
+
+/* Sejajar di dalam satu kotak grup: .mc-split di bawah baris lain diberi garis
+   atasnya; panel kanan menampung segmen berlabel panjang dalam dua baris. */
+.mc-rows > * + .mc-split { border-top: 1px solid var(--border); }
+fieldset.mc-split-r { margin: 0; min-width: 0; border: 0; border-left: 1px solid var(--border); padding: 14px 16px; }
+fieldset.mc-split-r:disabled { opacity: .5; }
+.mc-split-r .segmented button { white-space: normal; line-height: 1.2; }
+.mc-split-r .path-row input { flex: 1; min-width: 0; }
+fieldset.cp-plain { margin: 0; padding: 0; border: 0; min-width: 0; }
+fieldset.cp-plain:disabled { opacity: .5; }
+/* row()/sw()/Row di panel kanan: label di ATAS kendali, tanpa garis & padding baris. */
+.mc-split-r > .mc-r { grid-template-columns: minmax(0, 1fr); gap: 8px; min-height: 0; padding: 0; border-top: 0; }
+.mc-split-r > .mc-r-pad { padding: 0; }
+/* Kolom kiri sebuah split lebih sempit: label 110 px supaya segmen tetap muat. */
+.mc-split-l > .mc-r, .mc-split-l > * > .mc-r { grid-template-columns: 110px minmax(0, 1fr); }
+/* Segmen di dalam split: tanpa ikon (lebarnya untuk teks), teks boleh dua
+   baris; di panel kanan pilihan banyak dibungkus jadi beberapa baris. */
+.mc-split .segmented .ico { display: none; }
+.mc-split .segmented button { white-space: normal; line-height: 1.2; min-width: 0; }
+.mc-split-r .segmented { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); }
+.setup-main > .banner { margin: 0; }
+.stage-tools > a.btn-dark { justify-content: center; }
+.stage-tools > a.off { opacity: .5; pointer-events: none; }

@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import PageHeader from "../page-header";
 import { useI18n } from "../i18n";
-import { eng, engineURL, useWeb } from "../engine";
+import { eng, engineURL, useWeb, post } from "../engine";
 import Picker from "../picker";
 import Alerts from "../alerts";
 import EngineSettings from "./engines";
@@ -117,15 +117,7 @@ export default function RequirementsPage() {
     async (c: Component) => {
       setNotes((n) => ({ ...n, [c.id]: "" }));
       try {
-        const res = await fetch(eng(`/api/requirements/install`), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: c.id }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `HTTP ${res.status}`);
-        }
+        await post(`/api/requirements/install`, { id: c.id });
       } catch (e: any) {
         setNotes((n) => ({ ...n, [c.id]: `⚠ ${e.message}` }));
       }
@@ -149,13 +141,7 @@ export default function RequirementsPage() {
   const remove = useCallback(
     async (c: Component) => {
       try {
-        const res = await fetch(eng(`/api/requirements/remove`), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: c.id }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        await post(`/api/requirements/remove`, { id: c.id });
         setNotes((n) => ({ ...n, [c.id]: t("reqRemoved") }));
         load();
       } catch (e: any) {
@@ -176,13 +162,7 @@ export default function RequirementsPage() {
     async (c: Component, path: string) => {
       setPicking(null);
       try {
-        const res = await fetch(eng(`/api/requirements/path`), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: c.id, path }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        await post(`/api/requirements/path`, { id: c.id, path });
         setNotes((n) => ({ ...n, [c.id]: t("reqPathSaved") }));
         load();
       } catch (e: any) {
@@ -197,13 +177,7 @@ export default function RequirementsPage() {
     async (which: "clips" | "cards", dir: string) => {
       setPickingFolder(null);
       try {
-        const res = await fetch(eng(`/api/settings/folders`), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ [which]: dir }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        const data = await post(`/api/settings/folders`, { [which]: dir });
         setFolders(data);
       } catch (e: any) {
         setError(e.message);

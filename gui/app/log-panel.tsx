@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "./copy-link";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Copy } from "lucide-react";
 import { useI18n } from "./i18n";
@@ -32,7 +33,7 @@ export default function LogPanel({ logs }: { logs: string[] }) {
   }, [logs, open]);
 
   const copy = async () => {
-    try { await navigator.clipboard.writeText(logs.join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    try { await copyText(logs.join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); }
     catch { /* papan klip ditolak browser: tombolnya diam, isinya masih bisa diseleksi */ }
   };
   const last = logs[logs.length - 1];
@@ -75,4 +76,18 @@ function kind(text: string): string {
   if (/^⚠|^✕|error|failed|gagal|could not|refused/i.test(text)) return "err";
   if (/^(transcribing|scoring|correcting|rendering|extracting|writing)\b/i.test(text)) return "stage";
   return "";
+}
+
+// TechNotes = kotak log yang terlipat di dasar halaman. Satu bentuk untuk semua
+// halaman yang menjalankan job (Watermark, Captions, Writer).
+export function TechNotes({ logs }: { logs: string[] }) {
+  const { t } = useI18n();
+  return (
+    <div className="wr-tech">
+      <details className="card tech">
+        <summary>{t("techNotes")}</summary>
+        <LogPanel logs={logs} />
+      </details>
+    </div>
+  );
 }

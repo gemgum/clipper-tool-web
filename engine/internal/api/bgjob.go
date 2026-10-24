@@ -173,18 +173,40 @@ func (p *bgStore[T]) update(id string, fn func(*bgJob[T])) {
 // stop menghentikan job yang sedang berjalan. Mengembalikan false bila job-nya
 // tidak ada; job yang sudah selesai dianggap berhasil dibatalkan supaya tombol
 // di GUI tidak melaporkan galat untuk keadaan yang tidak salah.
-func (p *bgStore[T]) stop(id string) bool {
+func (p *bgStore[T]) stop(id string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.init()
 	j, ok := p.jobs[id]
 	if !ok {
-		return false
+		return os.ErrNotExist
 	}
-	if j.Status == "running" && j.cancel != nil {
+	// Job yang sudah berhenti tidak "dibatalkan": dulu tetap dijawab
+	// "canceled", jadi pemanggil tidak bisa membedakan "berhasil dihentikan"
+	// dari "sudah selesai dari tadi" (terukur 24 Oktober 2026 — job caption
+	// yang gagal sendiri lebih dulu tampak seperti pembatalan yang diabaikan).
+	if j.Status != "running" {
+		return fmt.Errorf("this job has already stopped (%s)", j.Status)
+	}
+	if j.cancel != nil {
 		j.cancel()
 	}
-	return true
+	return nil
+}
+
+// cancelHandler = POST /api/<jenis>/{id}/cancel untuk store ini — SATU jawaban
+// untuk Captions, Writer, dan Watermark: 404 tidak ada, 409 sudah berhenti,
+// 200 {"status":"canceled"} benar-benar dihentikan.
+func (p *bgStore[T]) cancelHandler(w http.ResponseWriter, r *http.Request) {
+	if err := p.stop(r.PathValue("id")); err != nil {
+		if os.IsNotExist(err) {
+			writeErr(w, 404, "job not found")
+			return
+		}
+		writeErr(w, 409, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "canceled"})
 }
 
 // remove membuang job yang sudah berhenti dari riwayat (memori + berkasnya).

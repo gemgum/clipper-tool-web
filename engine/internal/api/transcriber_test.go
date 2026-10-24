@@ -15,14 +15,14 @@ func TestFillTranscriber(t *testing.T) {
 
 	o := config.Options{Transcriber: "custom"}
 	fillTranscriber(&o)
-	if o.Transcriber != config.TranscriberAPI || o.TranscribeEngine != "custom" || o.TranscribeBase != "https://gw.example" ||
-		o.TranscribePath != "/v1" || o.TranscribeKeyEnv != "CUSTOM_API_KEY" || o.TranscribeModel != "whisper-large-v3" {
+	if o.Transcriber != config.TranscriberAPI || o.TranscribeEngine != "custom" || o.TranscribeBase != "https://gw.example/v1" ||
+		o.TranscribeKeyEnv != "CUSTOM_API_KEY" || o.TranscribeModel != "whisper-large-v3" {
 		t.Fatalf("koordinat salah: %+v", o)
 	}
 
 	again := config.Options{Transcriber: config.TranscriberAPI, TranscribeEngine: "custom", TranscribeModel: "m"}
 	fillTranscriber(&again)
-	if again.TranscribeBase != "https://gw.example" || again.TranscribeModel != "m" {
+	if again.TranscribeBase != "https://gw.example/v1" || again.TranscribeModel != "m" {
 		t.Fatalf("job ulang tidak terisi: %+v", again)
 	}
 

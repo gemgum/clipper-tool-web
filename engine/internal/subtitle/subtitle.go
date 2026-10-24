@@ -6,8 +6,10 @@ import (
 	"math"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/gemgum/clipper/engine/internal/config"
+	"github.com/gemgum/clipper/engine/internal/fontmetrics"
 	"github.com/gemgum/clipper/engine/internal/types"
 )
 
@@ -30,6 +32,9 @@ func assColor(c string) string {
 		return "&H00FFFFFF"
 	case "black":
 		return "&H00000000"
+	case "red":
+		// Merah kartu berita (#B0121B), dipakai kotak judul (writeNewsBox).
+		return "&H001B12B0"
 	}
 	if strings.HasPrefix(c, "#") && len(c) == 7 {
 		r, g, b := c[1:3], c[3:5], c[5:7]
@@ -59,7 +64,9 @@ func highlightColor(s config.Subtitle) string {
 	return assColor(hl)
 }
 
-func assHeader(s config.Subtitle, hl config.Headline, withHeadline bool) string {
+// resY = tinggi ruang koordinat: 1920 untuk 9:16, lebih pendek untuk bingkai
+// feed (config.FrameSize). Lebarnya selalu playResX.
+func assHeader(s config.Subtitle, hl config.Headline, withHeadline bool, resY int) string {
 	bold := 0
 	if s.Bold {
 		bold = 1
@@ -92,7 +99,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Default,%s,%d,%s,%s,%s,%s,%d,0,0,0,100,100,0,0,%d,%d,%d,5,%d,%d,40,1
 %s
 [Events]
-`, playResX, playResY, font, s.Size, primary, secondary, assColor(s.OutlineColor), back, bold, borderStyle, outline, shadow, margin, margin, headlineStyle(hl, withHeadline)) +
+`, playResX, resY, font, s.Size, primary, secondary, assColor(s.OutlineColor), back, bold, borderStyle, outline, shadow, margin, margin, headlineStyle(hl, withHeadline)) +
 		"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
 }
 
@@ -141,7 +148,11 @@ func headlineLines(text string, size, boxW int) []string {
 		size = 64
 	}
 	usable := boxW - 2*headlinePad
-	maxChars := int(float64(usable) / (float64(size) * 0.6))
+	return wrapWords(text, int(float64(usable)/(float64(size)*0.6)))
+}
+
+// wrapWords memenggal per kata supaya tiap baris paling banyak maxChars huruf.
+func wrapWords(text string, maxChars int) []string {
 	// Di bawah 4 huruf teksnya tidak lagi terbaca sebagai kata. Kotak sesempit
 	// itu berarti fontnya yang harus dikecilkan, dan pratinjau menunjukkannya
 	// meluber — jujur, dan bisa diperbaiki pengguna.
@@ -179,12 +190,9 @@ func writeHeadline(b *strings.Builder, watermark config.Watermark, text string, 
 	// Sisi GUI (wrapHeadline & clampHeadline di gui/app/watermark-model.ts)
 	// menghitung dengan aturan yang sama persis; kalau tidak, pratinjau
 	// memenggal dan mengurung di tempat lain daripada hasil rendernya.
-	cx, cy, boxW, boxH := watermark.HeadlineBox()
-	lines := headlineLines(escapeText(text), watermark.Headline.Size, boxW)
-	if len(lines) == 0 {
+	if strings.TrimSpace(text) == "" {
 		return
 	}
-	x, y := headlineAnchor(lines, watermark.Headline, cx, cy, boxW, boxH)
 	end := watermark.At + watermark.For
 	if watermark.For <= 0 {
 		// Sampai klip habis. Klip tanpa durasi yang diketahui (pemanggil lama,
@@ -196,6 +204,16 @@ func writeHeadline(b *strings.Builder, watermark config.Watermark, text string, 
 			end = 3600
 		}
 	}
+	if watermark.Headline.Box {
+		writeNewsBox(b, watermark, text, tc(watermark.At), tc(end))
+		return
+	}
+	cx, cy, boxW, boxH := watermark.HeadlineBox()
+	lines := headlineLines(escapeText(text), watermark.Headline.Size, boxW)
+	if len(lines) == 0 {
+		return
+	}
+	x, y := headlineAnchor(lines, watermark.Headline, cx, cy, boxW, boxH)
 	// an5 = jangkar di TENGAH blok teks, bukan tepi atasnya (an8 yang dipakai
 	// subtitle). Bedanya berarti di sini: headline dikurung sebuah kotak, dan
 	// "di tengah kotak" hanya bisa tepat kalau titik jangkarnya juga tengah.
@@ -203,6 +221,171 @@ func writeHeadline(b *strings.Builder, watermark config.Watermark, text string, 
 	// headline tidak pernah berubah, jadi alasan itu tidak berlaku.
 	fmt.Fprintf(b, "Dialogue: 1,%s,%s,Headline,,0,0,0,,{\\an5\\pos(%d,%d)}%s\n",
 		tc(watermark.At), tc(end), x, y, strings.Join(lines, "\\N"))
+}
+
+// Kotak judul gaya kartu berita, ruang PlayRes. GUI tidak menghitung ulang
+// angka ini: pratinjau meminta tata letaknya ke engine (/api/watermark/layout),
+// jadi kotak di pratinjau = kotak di hasil.
+const (
+	newsMargin = 40 // jarak kotak ke tepi kiri & kanan bingkai
+	newsPad    = 32 // ruang napas di dalam kotak
+	newsRadius = 20 // sudut bulat; 0 bila Headline.Sharp
+)
+
+// Box = tata letak kotak judul berita, ruang PlayRes.
+type Box struct {
+	Left   int      `json:"left"`
+	Top    int      `json:"top"`
+	W      int      `json:"w"`
+	H      int      `json:"h"`
+	Lines  []string `json:"lines"`
+	Credit int      `json:"credit"` // ukuran huruf kredit; 0 = tanpa kredit
+	Pad    int      `json:"pad"`
+	Radius int      `json:"radius"`
+}
+
+// NewsBox menata kotak judul.
+//
+// Kotaknya selebar bingkai dikurangi newsMargin; tingginya MENGIKUTI isi. Titik
+// tengah tegaknya tengah bingkai + Headline.DY, dijepit supaya utuh di dalam.
+//
+// Enter dari pengguna = baris baru, selalu. Di dalam tiap paragraf teks dipenggal
+// per kata menurut lebar SEBENARNYA dari berkas font (fontmetrics), dan kata
+// yang sendirian pun lebih lebar dari kotak dipenggal per huruf: teks tidak
+// pernah keluar kotak.
+func NewsBox(w config.Watermark, text string) Box {
+	fw, fh := w.Frame()
+	h := w.Headline
+	size := h.Size
+	if size <= 0 {
+		size = 64
+	}
+	bx := Box{Left: newsMargin, W: fw - 2*newsMargin, Pad: newsPad, Radius: newsRadius}
+	if h.Sharp {
+		bx.Radius = 0
+	}
+	width := textWidth
+	if f := fontmetrics.ForFamily(h.FontsDir, h.Font, h.Bold); f != nil {
+		width = f.Width
+	}
+	maxW := float64(bx.W-2*newsPad) / float64(size)
+	for _, para := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
+		bx.Lines = append(bx.Lines, wrapWidth(escapeText(para), maxW, width)...)
+	}
+	bx.H = 2*newsPad + len(bx.Lines)*size
+	if strings.TrimSpace(h.Credit) != "" {
+		bx.Credit = max(24, size*45/100)
+		bx.H += size/4 + bx.Credit
+	}
+	bx.Top = clamp(fh/2+h.DY-bx.H/2, 0, max(0, fh-bx.H))
+	return bx
+}
+
+// textWidth = PERKIRAAN lebar teks (satuan Fontsize) bila berkas fontnya tidak
+// ada (uji, atau font sistem): kapital 0,6, huruf kecil 0,45, spasi 0,2 —
+// dibulatkan ke atas dari Montserrat tebal supaya baris yang dikira muat memang
+// muat.
+func textWidth(s string) float64 {
+	w := 0.0
+	for _, r := range s {
+		switch {
+		case r == ' ':
+			w += 0.2
+		case unicode.IsUpper(r) || unicode.IsDigit(r):
+			w += 0.6
+		case unicode.IsLower(r):
+			w += 0.45
+		default:
+			w += 0.3
+		}
+	}
+	return w
+}
+
+// wrapWidth memenggal per kata supaya tiap baris paling lebar maxW (satuan
+// Fontsize). Kata yang sendirian sudah lebih lebar dipenggal per huruf.
+func wrapWidth(text string, maxW float64, width func(string) float64) []string {
+	var out []string
+	line := ""
+	for _, word := range strings.Fields(text) {
+		if line != "" && width(line+" "+word) > maxW {
+			out = append(out, line)
+			line = ""
+		}
+		if line != "" {
+			line += " " + word
+			continue
+		}
+		for width(word) > maxW {
+			cut := 1
+			rs := []rune(word)
+			for cut < len(rs) && width(string(rs[:cut+1])) <= maxW {
+				cut++
+			}
+			out = append(out, string(rs[:cut]))
+			word = string(rs[cut:])
+		}
+		line = word
+	}
+	if line != "" {
+		out = append(out, line)
+	}
+	return out
+}
+
+// writeNewsBox menulis kotak (gambar vektor ASS, \p1; warnanya BoxColor,
+// bawaan putih) bersudut bulat atau
+// lancip, judul rata kiri di atasnya, dan baris kredit kecil di bawahnya.
+// Headline.Outline > 0 = garis tepi kotak, warnanya Headline.OutlineColor.
+//
+// Kotaknya digambar libass, bukan PNG: ukurannya bergantung pada teks, dan .ass
+// sudah ada di jalur render — tidak ada berkas sementara tambahan.
+func writeNewsBox(b *strings.Builder, w config.Watermark, text, start, end string) {
+	bx := NewsBox(w, text)
+	if len(bx.Lines) == 0 {
+		return
+	}
+	h := w.Headline
+	bw, bh := bx.W, bx.H
+	path := fmt.Sprintf("m 0 0 l %d 0 l %d %d l 0 %d", bw, bw, bh, bh)
+	if r := bx.Radius; r > 0 {
+		// Bezier dengan titik kendali 0,45·r dari sudut (≈ seperempat lingkaran).
+		k := r * 45 / 100
+		path = fmt.Sprintf("m %d 0 l %d 0 b %d 0 %d %d %d %d l %d %d b %d %d %d %d %d %d l %d %d b %d %d 0 %d 0 %d l 0 %d b 0 %d %d 0 %d 0",
+			r, bw-r, bw-k, bw, k, bw, r,
+			bw, bh-r, bw, bh-k, bw-k, bh, bw-r, bh,
+			r, bh, k, bh, bh-k, bh-r,
+			r, k, k, r)
+	}
+	fmt.Fprintf(b, "Dialogue: 1,%s,%s,Headline,,0,0,0,,{\\an7\\pos(%d,%d)\\bord%d\\3c%s\\shad0\\1c%s\\p1}%s\n",
+		start, end, bx.Left, bx.Top, max(0, h.Outline), assColor(h.OutlineColor)+"&", assColor(h.BoxColor)+"&", path)
+	// Perataan: \an7/8/9 = jangkar di tepi atas kiri/tengah/kanan, jadi titik
+	// \pos-nya tepi kiri isi, tengah kotak, atau tepi kanan isi.
+	an, x := 7, bx.Left+bx.Pad
+	switch h.Align {
+	case config.AlignCenter:
+		an, x = 8, bx.Left+bw/2
+	case config.AlignRight:
+		an, x = 9, bx.Left+bw-bx.Pad
+	}
+	fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an%d\\pos(%d,%d)\\bord0\\shad0}%s\n",
+		start, end, an, x, bx.Top+bx.Pad, strings.Join(bx.Lines, "\\N"))
+	if bx.Credit > 0 {
+		fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an%d\\pos(%d,%d)\\bord0\\shad0\\fs%d\\1c%s}%s\n",
+			start, end, an, x, bx.Top+bx.Pad+len(bx.Lines)*h.Size+h.Size/4, bx.Credit, creditColor(h.BoxColor), escapeText(h.Credit))
+	}
+}
+
+// creditColor = warna baris kredit: gelap di kotak terang, terang di kotak
+// gelap — kredit hitam di kotak hitam sama dengan tidak ada kredit. Sisi GUI
+// (creditColor di watermark/page.tsx) memakai ambang yang sama.
+func creditColor(box string) string {
+	var r, g, b int
+	if _, err := fmt.Sscanf(assColor(box), "&H00%02X%02X%02X", &b, &g, &r); err == nil &&
+		0.299*float64(r)+0.587*float64(g)+0.114*float64(b) < 140 {
+		return "&HEEEEEE&"
+	}
+	return "&H222222&"
 }
 
 // headlineAnchor menaruh blok teks di dalam kotaknya: tengah kotak, digeser
@@ -430,7 +613,8 @@ func WriteASS(path string, segs []types.TranscriptSegment, clipStart float64, su
 	words := collectWords(segs, clipStart)
 	var b strings.Builder
 	headlineText = strings.TrimSpace(headlineText)
-	b.WriteString(assHeader(sub, watermark.Headline, headlineText != ""))
+	_, resY := watermark.Frame()
+	b.WriteString(assHeader(sub, watermark.Headline, headlineText != "", resY))
 	writeHeadline(&b, watermark, headlineText, clipDur)
 
 	if sub.Mode == config.SubWord {

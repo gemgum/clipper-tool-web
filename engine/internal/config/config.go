@@ -188,7 +188,6 @@ type Options struct {
 	TranscribeEngine string   `json:"transcribe_engine,omitempty"`
 	TranscribeName   string   `json:"-"`
 	TranscribeBase   string   `json:"-"`
-	TranscribePath   string   `json:"-"`
 	TranscribeKeyEnv string   `json:"-"`
 	TranscribeModel  string   `json:"transcribe_model"`
 	Resolution       string   `json:"resolution"` // 720p | 1080p | 1440p
@@ -220,7 +219,6 @@ type Options struct {
 	// pun lalu mengirim isinya ke alamat yang juga ia pilih (LLMBase).
 	EngineName  string `json:"-"`
 	LLMBase     string `json:"-"`
-	LLMPath     string `json:"-"`
 	LLMKeyEnv   string `json:"-"`            // claude | ollama (mesin scoring)
 	LLMModel    string `json:"llm_model"`    // model Claude (mode hybrid)
 	OllamaModel string `json:"ollama_model"` // model lokal (mode offline)
@@ -575,6 +573,22 @@ type Headline struct {
 	// Dipakai halaman watermark (DESIGN-Clipper-Lanjutan §4): di sana logo dan
 	// judul diseret masing-masing, dan logo kecil di pojok tidak bisa memuat judul.
 	Free bool `json:"free"`
+	// Box = judul gaya kartu berita (notes/44): kotak putih bersudut bulat
+	// selebar bingkai, teks rata kiri di dalamnya, dan Credit kecil di bawahnya
+	// ("Foto: TIMES Indonesia"). Ukuran kotaknya mengikuti teks — itu yang
+	// "otomatis": pengguna cuma mengetik, tidak menggambar kotak.
+	Box    bool   `json:"box"`
+	Credit string `json:"credit"`
+	// Sharp = sudut kotak judul lancip; false = melingkar. Pada kotak judul,
+	// Outline/OutlineColor menjadi garis tepi KOTAK, bukan tepi huruf.
+	Sharp bool `json:"sharp"`
+	// BoxColor = warna isi kotak judul (nama atau #rrggbb); kosong = putih.
+	BoxColor string `json:"box_color"`
+	// Align = perataan teks di dalam kotak judul: left (bawaan) | center | right.
+	Align string `json:"align"`
+	// FontsDir = folder font tempat lebar teks diukur (fontmetrics). Diisi
+	// engine, tidak pernah dari klien; kosong = perkiraan lebar huruf.
+	FontsDir string `json:"-"`
 }
 
 // Watermark = banner PNG milik pengguna yang dibakar ke tiap klip, plus headline
@@ -604,7 +618,55 @@ type Watermark struct {
 	// syarat kontes lazimnya "identitas harus terlihat", bukan "berkedip".
 	For      float64  `json:"for"`
 	Headline Headline `json:"headline"`
+	// Logos = logo TAMBAHAN di samping Image, masing-masing kotak sendiri.
+	// Waktu tampilnya ikut At/For: satu identitas, satu jadwal.
+	Logos []Logo `json:"logos,omitempty"`
+	// Format bingkai, hanya dipakai halaman watermark: short (9:16, bawaan) |
+	// feed45 (4:5) | feed11 (1:1). Halaman klip selalu short.
+	Format string `json:"format,omitempty"`
 }
+
+// Logo satu gambar tambahan. Artinya sama dengan Image/X/Y/Width/Height.
+type Logo struct {
+	Image  string `json:"image"`
+	X      int    `json:"x"`
+	Y      int    `json:"y"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// Perataan teks kotak judul (Headline.Align).
+const (
+	AlignLeft   = "left"
+	AlignCenter = "center"
+	AlignRight  = "right"
+)
+
+// Format bingkai watermark.
+const (
+	FormatShort  = "short"
+	FormatFeed45 = "feed45"
+	FormatFeed11 = "feed11"
+)
+
+// MaxLogos = batas logo tambahan. Penahan salah klik, bukan batas teknis:
+// tiap logo satu sumber movie= lagi di rantai filter.
+const MaxLogos = 8
+
+// FrameSize = ruang koordinat untuk satu format. Lebarnya selalu PlayResX;
+// tingginya mengikuti rasio, jadi angka di pratinjau tetap = angka di hasil.
+func FrameSize(format string) (w, h int) {
+	switch format {
+	case FormatFeed45:
+		return PlayResX, PlayResX * 5 / 4
+	case FormatFeed11:
+		return PlayResX, PlayResX
+	}
+	return PlayResX, PlayResY
+}
+
+// Frame = FrameSize untuk watermark ini.
+func (b Watermark) Frame() (w, h int) { return FrameSize(b.Format) }
 
 // Batas kotak gambar, dalam persen sisi bingkai.
 const (
@@ -624,7 +686,7 @@ const (
 // yang paling murah, dan menolaknya cuma karena tidak ada PNG akan memaksa
 // orang membuat gambar kosong.
 func (b Watermark) On() bool {
-	return b.Image != "" || b.Headline.Text != "" || b.Headline.Source == HeadlineLLM
+	return b.Image != "" || len(b.Logos) > 0 || b.Headline.Text != "" || b.Headline.Source == HeadlineLLM
 }
 
 // DefaultWatermark: mati (tanpa gambar), tapi gaya headline sudah terisi supaya
@@ -652,8 +714,24 @@ func (b *Watermark) validate() {
 	}
 	b.Width = min(WatermarkSizeMax, max(WatermarkSizeMin, b.Width))
 	b.Height = min(WatermarkSizeMax, max(WatermarkSizeMin, b.Height))
-	b.X = clampCoord(b.X, d.X, PlayResX)
-	b.Y = clampCoord(b.Y, d.Y, PlayResY)
+	switch b.Format {
+	case FormatFeed45, FormatFeed11:
+	default:
+		b.Format = FormatShort
+	}
+	fw, fh := b.Frame()
+	b.X = clampCoord(b.X, d.X, fw)
+	b.Y = clampCoord(b.Y, min(d.Y, fh/2), fh)
+	if len(b.Logos) > MaxLogos {
+		b.Logos = b.Logos[:MaxLogos]
+	}
+	for i := range b.Logos {
+		l := &b.Logos[i]
+		l.Width = min(WatermarkSizeMax, max(WatermarkSizeMin, l.Width))
+		l.Height = min(WatermarkSizeMax, max(WatermarkSizeMin, l.Height))
+		l.X = clampCoord(l.X, fw/2, fw)
+		l.Y = clampCoord(l.Y, fh/2, fh)
+	}
 	if b.At < 0 {
 		b.At = 0
 	}
@@ -681,6 +759,11 @@ func (b *Watermark) validate() {
 	if h.OutlineColor == "" {
 		h.OutlineColor = d.Headline.OutlineColor
 	}
+	switch h.Align {
+	case AlignCenter, AlignRight:
+	default:
+		h.Align = AlignLeft
+	}
 }
 
 // HeadlineBox = kotak yang MENGURUNG teks headline: kotak gambarnya bila ada
@@ -690,10 +773,11 @@ func (b *Watermark) validate() {
 // boleh terkurung di kotak tak terlihat, dan teks yang ditulis untuk duduk di
 // dalam kartu tidak boleh meluber keluar kartunya.
 func (b Watermark) HeadlineBox() (cx, cy, w, h int) {
-	if b.Image == "" || b.Headline.Free {
-		return PlayResX / 2, PlayResY / 2, PlayResX, PlayResY
+	fw, fh := b.Frame()
+	if b.Image == "" || b.Headline.Free || b.Headline.Box {
+		return fw / 2, fh / 2, fw, fh
 	}
-	return b.X, b.Y, PlayResX * b.Width / 100, PlayResY * b.Height / 100
+	return b.X, b.Y, fw * b.Width / 100, fh * b.Height / 100
 }
 
 // clampCoord: 0 berarti "belum diisi" (pakai bawaan), sisanya dijepit ke bidang.

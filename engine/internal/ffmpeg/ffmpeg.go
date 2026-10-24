@@ -164,13 +164,18 @@ func (c *Client) EncodeAudioChunk(ctx context.Context, input string, start, dur 
 type EncodeOpts struct {
 	CRF        string
 	Preset     string
-	AssPath    string    // subtitle .ass; kosong = tanpa subtitle
-	FontsDir   string    // dir font untuk libass
-	Mode       string    // center | fit
-	Background string    // blur | black — isi ruang kosong yang tersisa
-	Zoom       int       // 5..100 persen ukuran video dalam bingkai
-	FPS        int       // 0 = ikut sumber
-	Watermark  Watermark // banner watermark; Image kosong = tidak ada
+	AssPath    string      // subtitle .ass; kosong = tanpa subtitle
+	FontsDir   string      // dir font untuk libass
+	Mode       string      // center | fit
+	Background string      // blur | black — isi ruang kosong yang tersisa
+	Zoom       int         // 5..100 persen ukuran video dalam bingkai
+	FPS        int         // 0 = ikut sumber
+	Watermark  Watermark   // banner watermark; Image kosong = tidak ada
+	Logos      []Watermark // logo tambahan, ditumpuk berurutan di atas Watermark
+	// LogosOverSubs = logo ditumpuk SESUDAH subtitle, jadi menindih .ass.
+	// Dipakai kotak judul watermark (notes/44): kotaknya buram, dan logo yang
+	// menempel ke tepinya harus terlihat utuh seperti di pratinjau.
+	LogosOverSubs bool
 }
 
 // Layout menempatkan video ke bingkai target.
@@ -198,10 +203,11 @@ type EncodeOpts struct {
 // Keduanya berhenti di 100: di situ gambar sudah memenuhi bingkai, dan
 // memperbesarnya lagi tidak menambah apa pun selain memotong lebih banyak.
 type Layout struct {
-	Mode       string    // center | fit
-	Background string    // blur | black — mengisi ruang kosong yang tersisa
-	Zoom       int       // persen; artinya bergantung Mode (lihat di atas)
-	Watermark  Watermark // ditumpuk SETELAH video dipasang ke bingkai
+	Mode       string      // center | fit
+	Background string      // blur | black — mengisi ruang kosong yang tersisa
+	Zoom       int         // persen; artinya bergantung Mode (lihat di atas)
+	Watermark  Watermark   // ditumpuk SETELAH video dipasang ke bingkai
+	Logos      []Watermark // logo tambahan, ditumpuk berurutan di atas Watermark
 }
 
 // Watermark = gambar yang ditumpuk di atas video setelah reframe.
@@ -218,6 +224,9 @@ type Watermark struct {
 	Width, Height int
 	At            float64 // detik muncul, relatif AWAL KLIP
 	For           float64 // durasi tampil; 0 = sampai klip habis
+	// RefH = tinggi ruang koordinat; 0 = wmRefH (9:16). Bingkai feed 4:5 & 1:1
+	// memakai lebar 1080 yang sama dengan tinggi 1350 / 1080.
+	RefH int
 }
 
 // Ruang koordinat penempatan. Harus sama dengan config.PlayResX/Y — paket ini
@@ -239,7 +248,10 @@ func ReframeFilter(l Layout, targetW, targetH int) string {
 	if l.Mode == "fit" {
 		chain = wholePictureChain(l, targetW, targetH)
 	}
-	return watermarkChain(chain, l.Watermark, targetW, targetH)
+	for i, b := range append([]Watermark{l.Watermark}, l.Logos...) {
+		chain = watermarkChain(chain, b, targetW, targetH, i)
+	}
+	return chain
 }
 
 // watermarkChain menumpuk banner watermark di atas rantai yang sudah jadi.
@@ -253,14 +265,21 @@ func ReframeFilter(l Layout, targetW, targetH int) string {
 // Waktu tampil dijaga `enable`. `t` di situ relatif terhadap AWAL KELUARAN, dan
 // karena -ss diletakkan sebelum -i di ClipReframe, awal keluaran = awal klip —
 // jadi "muncul detik 1" berarti detik 1 klipnya, bukan detik 1 video sumbernya.
-func watermarkChain(chain string, b Watermark, targetW, targetH int) string {
+//
+// n membedakan label tiap lapis ([bvid0], [blogo1], …) supaya beberapa logo bisa
+// ditumpuk dalam satu -vf.
+func watermarkChain(chain string, b Watermark, targetW, targetH, n int) string {
 	if b.Image == "" || b.Width <= 0 || b.Height <= 0 {
 		return chain
+	}
+	refH := b.RefH
+	if refH <= 0 {
+		refH = wmRefH
 	}
 	w := evenBox(targetW * b.Width / 100)
 	h := evenBox(targetH * b.Height / 100)
 	x := b.X * targetW / wmRefW
-	y := b.Y * targetH / wmRefH
+	y := b.Y * targetH / refH
 
 	enable := ""
 	switch {
@@ -281,9 +300,9 @@ func watermarkChain(chain string, b Watermark, targetW, targetH int) string {
 	// format=rgba dipertahankan supaya PNG beralfa tetap tembus pandang; tanpa
 	// itu gambar berlatar transparan bisa mendarat sebagai kotak hitam.
 	return fmt.Sprintf(
-		"%s[bvid];movie='%s',scale=%d:%d:force_original_aspect_ratio=decrease,format=rgba[blogo];"+
-			"[bvid][blogo]overlay=x='%d-w/2':y='%d-h/2'%s",
-		chain, escapeFilterPath(b.Image), w, h, x, y, enable)
+		"%s[bvid%d];movie='%s',scale=%d:%d:force_original_aspect_ratio=decrease,format=rgba[blogo%d];"+
+			"[bvid%d][blogo%d]overlay=x='%d-w/2':y='%d-h/2'%s",
+		chain, n, escapeFilterPath(b.Image), w, h, n, n, n, x, y, enable)
 }
 
 // wholePictureChain: zoom 0 memasukkan SELURUH video, lalu naik = membesar
@@ -397,23 +416,9 @@ func (c *Client) ClipReframe(ctx context.Context, input string, start, end float
 		}
 	}
 	// Filter subtitle (ditempel di akhir rantai).
-	sub := ""
-	if enc.AssPath != "" {
-		sub = fmt.Sprintf("subtitles='%s'", escapeFilterPath(enc.AssPath))
-		if enc.FontsDir != "" {
-			sub += fmt.Sprintf(":fontsdir='%s'", escapeFilterPath(enc.FontsDir))
-		}
-	}
+	sub := subFilter(enc)
 
-	vf := ReframeFilter(Layout{
-		Mode: enc.Mode, Background: enc.Background, Zoom: enc.Zoom, Watermark: enc.Watermark,
-	}, targetW, targetH)
-	if enc.FPS > 0 {
-		vf += fmt.Sprintf(",fps=%d", enc.FPS)
-	}
-	if sub != "" {
-		vf += "," + sub
-	}
+	vf := burnFilter(enc, targetW, targetH, sub)
 
 	crf := enc.CRF
 	if crf == "" {
@@ -444,22 +449,86 @@ func (c *Client) ClipReframe(ctx context.Context, input string, start, end float
 	return c.run(ctx, "clip+reframe", args)
 }
 
+// burnFilter = reframe + logo + fps + subtitle, urutan yang sama untuk video
+// dan foto. LogosOverSubs memindah logo ke paling akhir.
+func burnFilter(enc EncodeOpts, targetW, targetH int, sub string) string {
+	l := Layout{
+		Mode: enc.Mode, Background: enc.Background, Zoom: enc.Zoom,
+		Watermark: enc.Watermark, Logos: enc.Logos,
+	}
+	top := enc.LogosOverSubs && sub != ""
+	if top {
+		l.Watermark, l.Logos = Watermark{}, nil
+	}
+	vf := ReframeFilter(l, targetW, targetH)
+	if enc.FPS > 0 {
+		vf += fmt.Sprintf(",fps=%d", enc.FPS)
+	}
+	if sub != "" {
+		vf += "," + sub
+	}
+	if top {
+		for i, b := range append([]Watermark{enc.Watermark}, enc.Logos...) {
+			vf = watermarkChain(vf, b, targetW, targetH, i)
+		}
+	}
+	return vf
+}
+
+// subFilter = filter burn subtitle untuk enc.AssPath; kosong bila tidak ada.
+func subFilter(enc EncodeOpts) string {
+	if enc.AssPath == "" {
+		return ""
+	}
+	sub := fmt.Sprintf("subtitles='%s'", escapeFilterPath(enc.AssPath))
+	if enc.FontsDir != "" {
+		sub += fmt.Sprintf(":fontsdir='%s'", escapeFilterPath(enc.FontsDir))
+	}
+	return sub
+}
+
+// BurnImage = ClipReframe untuk SATU FRAME: foto, atau frame detik t sebuah
+// video (pratinjau hasil). Jenis keluarannya dari akhiran out (.jpg/.png).
+// Rantai filternya sama persis dengan video, jadi logo & judul mendarat di
+// tempat yang sama. t = 0 tanpa -ss: -ss di depan foto menghasilkan nol frame.
+func (c *Client) BurnImage(ctx context.Context, input string, t float64, targetW, targetH int, enc EncodeOpts, out string) error {
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		return fmt.Errorf("output folder: %w", err)
+	}
+	args := []string{"-y"}
+	if t > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", t))
+	}
+	args = append(args,
+		"-i", CLIPath(input),
+		"-vf", burnFilter(enc, targetW, targetH, subFilter(enc)),
+		"-frames:v", "1", "-update", "1",
+		"-q:v", "2", // JPEG kualitas tinggi; diabaikan PNG
+		CLIPath(out),
+	)
+	return c.run(ctx, "image burn", args)
+}
+
 // ExtractFrame mengambil 1 frame pada detik t, disesuaikan ke rasio target
 // memakai mode reframe yang sama dengan render, dikembalikan sebagai JPEG
 // (untuk preview subtitle di GUI). Hasilnya = satu frame dari klip jadi,
 // jadi koordinat subtitle yang diatur di preview berlaku apa adanya.
 func (c *Client) ExtractFrame(ctx context.Context, input string, t float64, targetW, targetH int, layout Layout) ([]byte, error) {
 	vf := ReframeFilter(layout, targetW, targetH)
-	args := []string{
-		"-y",
-		"-ss", fmt.Sprintf("%.3f", t),
+	args := []string{"-y"}
+	// -ss 0 di depan FOTO (JPEG/PNG) menghasilkan nol frame, jadi detik 0
+	// dibaca tanpa -ss — hasilnya sama untuk video.
+	if t > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", t))
+	}
+	args = append(args,
 		"-i", CLIPath(input),
 		"-frames:v", "1",
 		"-vf", vf,
 		"-f", "image2pipe",
 		"-vcodec", "mjpeg",
 		"pipe:1",
-	}
+	)
 	cmd := exec.CommandContext(ctx, c.FFmpeg, args...)
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out

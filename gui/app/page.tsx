@@ -22,11 +22,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Crosshair, Eye, Grid3x3, Move, Play, Smartphone } from "lucide-react";
+import Stage from "./stage";
 import PageHeader from "./page-header";
 import { useAI, useAISettings } from "./ai";
 import { useI18n } from "./i18n";
 import Alerts from "./alerts";
-import { eng, engineURL, isWeb, useWeb } from "./engine";
+import { eng, engineURL, isWeb, useWeb, post } from "./engine";
 import Picker from "./picker";
 import { useKeep, useRestore } from "./persist";
 
@@ -120,10 +121,8 @@ export default function Home() {
 
   // Job
   const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState("");
   const [stage, setStage] = useState("");
   const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
@@ -284,7 +283,6 @@ export default function Home() {
         // Log yang tak terbaca tidak boleh menghalangi penyambungan ulang.
       }
       if (newest.status === "running" || newest.status === "queued") {
-        setStatus(newest.status);
         setStage(newest.stage || "");
         setProgress(newest.progress || 0);
         setBusy(true);
@@ -377,18 +375,10 @@ export default function Home() {
   const [fetchTitle, setFetchTitle] = useState("");
   const [fetchWarn, setFetchWarn] = useState("");
   const fetchUrl = useCallback(async (url: string) => {
-    const post = async (api: string) => {
-      const res = await fetch(eng(api), {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      return data;
-    };
     setFetchWarn(""); setFetchTitle(""); setFetchPhase("checking");
     addLog(t("logFetchCheck", { url }));
     try {
-      const info = await post(`/api/fetch/check`);
+      const info = await post(`/api/fetch/check`, { url });
       setFetchTitle(info.title || "");
       addLog(t("logFetchOk", { title: info.title, engine: info.engine }));
     } catch (e: any) {
@@ -398,7 +388,7 @@ export default function Home() {
     }
     setFetchPhase("downloading");
     try {
-      const data = await post(`/api/fetch`);
+      const data = await post(`/api/fetch`, { url });
       setPath(data.path); addLog(t("logFetchDone", { name: data.name }));
     } catch (e: any) {
       setFetchWarn(e.message);
@@ -419,9 +409,7 @@ export default function Home() {
   }, []);
   useEffect(() => {
     if (!sourceReady.current) return;
-    fetch(eng(`/api/source`), {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }),
-    }).catch(() => {});
+    post(`/api/source`, { path }).catch(() => {});
   }, [path]);
 
   // removeSource: kosongkan sumber. Engine menghapus berkasnya di mode web bila
@@ -429,9 +417,7 @@ export default function Home() {
   const removeSource = useCallback(() => {
     const p = path;
     setPath("");
-    fetch(eng(`/api/upload/remove`), {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: p }),
-    }).catch(() => {});
+    post(`/api/upload/remove`, { path: p }).catch(() => {});
   }, [path]);
 
   // useFile menerima berkas dari seret & lepas atau dari pemilih browser.
@@ -445,12 +431,8 @@ export default function Home() {
     if (await isWeb()) { uploadFile(file); return; }
     addLog(t("logLocating", { name: file.name }));
     try {
-      const res = await fetch(eng(`/api/locate`), {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size }),
-      });
-      const data = await res.json();
-      if (res.ok && data.path) {
+      const data = await post(`/api/locate`, { name: file.name, size: file.size });
+      if (data.path) {
         setPath(data.path);
         addLog(t("logLocated", { path: data.path }));
         return;
@@ -469,14 +451,12 @@ export default function Home() {
       addLog(t("logFontInvalid", { font: subFont }) + (fontCheck?.error ? ` (${fontCheck.error})` : ""));
       return;
     }
-    setError(""); setProgress(0); setStage(""); setMessage("");
-    setBusy(true); setStatus("queued"); setJobId(null);
+    setError(""); setProgress(0); setStage("");
+    setBusy(true); setJobId(null);
     setJobClips([]); setFailedStage(-1); setStartedAt(Date.now()); setScreen("run");
     addLog(t("logJobStart", { resolution, quality, duration: durationPreset, font: subFont }));
     try {
-      const res = await fetch(eng(`/api/jobs`), {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      const data = await post(`/api/jobs`, {
           source: { type: "path", value: path },
           options: {
             whisper_model: model, resolution, quality, reframe, background,
@@ -496,12 +476,9 @@ export default function Home() {
             },
             watermark: watermarkToAPI(watermark, subFont),
           },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || t("errCreateJob"));
+      }, t("errCreateJob"));
       setJobId(data.id); addLog(t("logJobCreated", { id: data.id }));
-    } catch (e: any) { setError(e.message); setBusy(false); setStatus("error"); addLog(`⚠ ${e.message}`); }
+    } catch (e: any) { setError(e.message); setBusy(false); addLog(`⚠ ${e.message}`); }
   }, [path, engine, llmModel, model, transcriber, resolution, quality, reframe, background, zoom, fps, engine, llmModel, transcriptFix, terms, durationPreset, maxClips, outputDir, subFont, subSize, subX, subY, subColor, subOutline, subBox, subMode, subHighlight, subSpeed, saveMode, watermark, addLog, fontManual, fontCheck, t]);
 
   const cancel = useCallback(async () => {
@@ -509,10 +486,7 @@ export default function Home() {
     addLog(t("logCancelling"));
     // Tanpa badan, tapi jenisnya tetap disebut: engine menolak POST yang bukan
     // JSON, dan itulah yang memaksa halaman asing melewati preflight lebih dulu.
-    await fetch(eng(`/api/jobs/${jobId}/cancel`), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-    }).catch(() => {});
+    await post(`/api/jobs/${jobId}/cancel`).catch(() => {});
   }, [jobId, addLog, t]);
 
   useEffect(() => {
@@ -520,10 +494,9 @@ export default function Home() {
     const events = new EventSource(eng(`/api/jobs/${jobId}/events`));
     events.addEventListener("progress", (e: MessageEvent) => {
       const d = JSON.parse(e.data);
-      if (d.status) setStatus(d.status);
       if (d.stage) setStage(d.stage);
       if (typeof d.progress === "number") setProgress(d.progress);
-      if (d.message) { setMessage(d.message); addLog(`${d.stage || ""}: ${d.message}`); }
+      if (d.message) { addLog(`${d.stage || ""}: ${d.message}`); }
       // Ringkasan waktu per tahap, hanya ada di peristiwa terakhir. Dicatat
       // tanpa awalan tahap: isinya tabel monospace yang perataannya harus utuh
       // (.logbox sudah pre-wrap + monospace).
@@ -540,7 +513,7 @@ export default function Home() {
       });
     });
     events.addEventListener("done", () => {
-      setStatus("done"); setProgress(1); setBusy(false); addLog(t("logFinished")); events.close();
+      setProgress(1); setBusy(false); addLog(t("logFinished")); events.close();
       setRerendering(false);
       // Daftar akhir dari engine: urutan, status gagal, dan klip yang tidak
       // sempat terkirim lewat SSE.
@@ -553,7 +526,7 @@ export default function Home() {
     events.addEventListener("error", (e: MessageEvent) => {
       let msg = "error";
       try { msg = JSON.parse((e as any).data).message || msg; } catch {}
-      setError(msg); setStatus("error"); setBusy(false); addLog(`⚠ ${msg}`); events.close();
+      setError(msg); setBusy(false); addLog(`⚠ ${msg}`); events.close();
       setRerendering(false);
       // Dibatalkan → kembali ke layar 1 (DESIGN.md §9). Gagal → kartu tahap
       // tempat ia berhenti jadi merah, dengan tombol coba lagi.
@@ -570,10 +543,8 @@ export default function Home() {
     if (!jobId) return;
     setRetrying(true);
     try {
-      const res = await fetch(eng(`/api/jobs/${jobId}/retry`), { method: "POST", headers: { "content-type": "application/json" } });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "retry failed");
-      setError(""); setFailedStage(-1); setProgress(0); setStage(""); setBusy(true); setStatus("queued");
+      const d = await post(`/api/jobs/${jobId}/retry`, {}, "retry failed");
+      setError(""); setFailedStage(-1); setProgress(0); setStage(""); setBusy(true);
       setStartedAt(Date.now()); setJobId(d.id); addLog(t("logJobCreated", { id: d.id }));
     } catch (e: any) { setError(e.message); }
     finally { setRetrying(false); }
@@ -584,10 +555,8 @@ export default function Home() {
     if (!jobId) return;
     setRerendering(true);
     try {
-      const res = await fetch(eng(`/api/jobs/${jobId}/rerender`), { method: "POST", headers: { "content-type": "application/json" } });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "rerender failed");
-      setBusy(true); setStatus("queued"); setProgress(0); setStage("rendering"); setFailedStage(-1);
+      await post(`/api/jobs/${jobId}/rerender`, {}, "rerender failed");
+      setBusy(true); setProgress(0); setStage("rendering"); setFailedStage(-1);
       setStartedAt(Date.now()); setScreen("run"); setSubKey((k) => k + 1);
     } catch (e: any) { setError(e.message); setRerendering(false); }
   }, [jobId]);
@@ -699,7 +668,7 @@ export default function Home() {
     </>
   ) : (
     <>
-      <button type="button" className="ghost" onClick={() => { setScreen("setup"); setStatus(""); setJobClips([]); }}>{t("newBatch")}</button>
+      <button type="button" className="ghost" onClick={() => { setScreen("setup"); setJobClips([]); }}>{t("newBatch")}</button>
       {okClips.length > 0 && (
         <a className="btn-primary big" href={downloadAllURL(jobClips)} download>{t("downloadAll", { n: okClips.length })}</a>
       )}
@@ -786,15 +755,10 @@ export default function Home() {
 
           </div>
 
-          {/* Pratinjau: kolom kanan yang menempel saat halaman digulir (§4.3). */}
-          <aside className="setup-side">
-            <section className="card preview-card">
-              <div className="card-head">
-                <h2>{t("previewTitle")}</h2>
-                <span className="chip">9:16</span>
-              </div>
-              {preview}
-              {/* Alat posisi & bantu-lihat langsung di bawah pratinjau, tempat subtitlenya diseret. */}
+          {/* Pratinjau: kolom baku yang menempel di kanan (stage.tsx). Alat
+              posisi & bantu-lihat di bawahnya, tempat subtitlenya diseret. */}
+          <Stage title={t("previewTitle")} badge="9:16" bad={inUnsafe} help={inUnsafe ? t("unsafeWarning") : t("dragHint")}
+            tools={
               <fieldset className="pv-tools" disabled={!path}>
                 <button type="button" className="pv-tool" onClick={() => { setSubX(CENTER_X); setSubY(centerAnchorY); }}>
                   <Crosshair className="ico" aria-hidden="true" /> {t("mcCentre")}</button>
@@ -807,9 +771,9 @@ export default function Home() {
                 <button type="button" className={"pv-tool" + (showZones ? " on" : "")} aria-pressed={showZones} onClick={() => setShowZones(!showZones)}>
                   <Eye className="ico" aria-hidden="true" /> {t("toolAreas")}</button>
               </fieldset>
-              <p className={"pv-help" + (inUnsafe ? " bad" : "")}>{inUnsafe ? t("unsafeWarning") : t("dragHint")}</p>
-            </section>
-          </aside>
+            }>
+            {preview}
+          </Stage>
         </div>
       )}
 

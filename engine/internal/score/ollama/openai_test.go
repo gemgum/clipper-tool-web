@@ -45,6 +45,7 @@ func TestOpenAIServerDiscoveredAndUsed(t *testing.T) {
 
 	c := New(srv.URL, "Qwen2.5-1.5B-Instruct")
 	c.Kind = KindOpenAI
+	c.Path = "/v1"
 	out, err := c.Complete(context.Background(), "sys", "user", map[string]any{"type": "object"}, 512)
 	if err != nil {
 		t.Fatalf("Complete: %v", err)
@@ -246,6 +247,7 @@ func TestBudgetGrowsUntilTheModelAnswers(t *testing.T) {
 
 	c := New(srv.URL, "reasoner-test")
 	c.Kind = KindOpenAI
+	c.Path = "/v1"
 	out, err := c.Complete(context.Background(), "s", "u", nil, 2048)
 	if err != nil || out != "ok" {
 		t.Fatalf("balasan = %q, err = %v", out, err)
@@ -269,6 +271,7 @@ func TestBudgetGrowsUntilTheModelAnswers(t *testing.T) {
 	asked = nil
 	lain := New(srv.URL, "biasa-test")
 	lain.Kind = KindOpenAI
+	lain.Path = "/v1"
 	lain.Complete(context.Background(), "s", "u", nil, 2048)
 	if len(asked) == 0 || asked[0] != 2048 {
 		t.Fatalf("model lain mulai dari %v, mau 2048", asked)
@@ -293,6 +296,7 @@ func TestStreamedReplyIsAssembled(t *testing.T) {
 	defer srv.Close()
 	c := New(srv.URL, "glm")
 	c.Kind = KindOpenAI
+	c.Path = "/v1"
 
 	reply = ": keep-alive\n\n" +
 		`data: {"choices":[{"delta":{"role":"assistant"}}]}` + "\n\n" +
@@ -341,6 +345,7 @@ func TestPickRetriesUnreadableReply(t *testing.T) {
 	defer srv.Close()
 	c := New(srv.URL, "glm")
 	c.Kind = KindOpenAI
+	c.Path = "/v1"
 
 	picks, err := c.PickMoments(context.Background(), nil, 0, 1, "id")
 	if err != nil || len(picks) != 1 || picks[0].Title != "Judul" || calls != 2 {
@@ -368,6 +373,7 @@ func TestCutStreamIsRetried(t *testing.T) {
 	defer srv.Close()
 	c := New(srv.URL, "glm")
 	c.Kind = KindOpenAI
+	c.Path = "/v1"
 	out, err := c.Complete(context.Background(), "sys", "user", nil, 512)
 	if err != nil || out != "ok" || calls != 3 {
 		t.Fatalf("out=%q err=%v calls=%d", out, err, calls)

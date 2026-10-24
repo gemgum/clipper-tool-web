@@ -23,9 +23,20 @@ func (p *Pipeline) openAIAudio() *transcribe.OpenAIAudio {
 		return nil
 	}
 	return &transcribe.OpenAIAudio{
-		Name: p.Opts.TranscribeName, Base: p.Opts.TranscribeBase, Path: p.Opts.TranscribePath,
+		Name: p.Opts.TranscribeName, Base: p.Opts.TranscribeBase,
 		Key: strings.TrimSpace(os.Getenv(p.Opts.TranscribeKeyEnv)), Model: p.Opts.TranscribeModel,
 	}
+}
+
+// ProbeTranscriber mengirim audio contoh lewat klien transkripsi job ini —
+// dirakit openAIAudio yang sama dengan Transcribe, dengan bahasa job — dan
+// mengembalikan teks yang terdengar. Dipakai tombol Test transcription.
+func (p *Pipeline) ProbeTranscriber(ctx context.Context) (string, error) {
+	o := p.openAIAudio()
+	if o == nil {
+		return "", fmt.Errorf("only OpenAI-compatible transcription engines can be tested here")
+	}
+	return o.Probe(ctx, p.Opts.Language)
 }
 
 // transcribeModel = model transkripsi "api" yang benar-benar dipakai.

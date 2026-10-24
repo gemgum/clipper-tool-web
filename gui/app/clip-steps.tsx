@@ -68,25 +68,6 @@ export function Segmented<T extends string | number>({
   );
 }
 
-/** Kotak warna 44×44; namanya ada di aria-label & title, bukan hanya di warnanya. */
-export function Swatches({
-  value, onChange, options, label,
-}: {
-  value: string; onChange: (v: string) => void; label: string;
-  /** swatch = warna yang digambar bila value bukan warna CSS yang pas ("yellow"). */
-  options: { value: string; name: string; swatch?: string }[];
-}) {
-  return (
-    <div className="swatches" role="group" aria-label={label}>
-      {options.map((o) => (
-        <button key={o.value} type="button" className={"swatch-btn" + (o.value.toLowerCase() === value.toLowerCase() ? " on" : "")}
-          style={{ background: o.swatch ?? o.value }} aria-pressed={o.value.toLowerCase() === value.toLowerCase()}
-          aria-label={o.name} title={o.name} onClick={() => onChange(o.value)} />
-      ))}
-    </div>
-  );
-}
-
 /** Saklar on/off: kotak centang asli yang digambar ulang, jadi papan ketik dan
  *  pembaca layar tetap melihat <input type="checkbox" role="switch">. */
 export function Toggle({

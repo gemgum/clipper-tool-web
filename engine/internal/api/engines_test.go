@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,7 +15,7 @@ import (
 func clearEngineEnv(t *testing.T) {
 	t.Helper()
 	for _, d := range engineDefs {
-		for _, name := range []string{d.EnvKey, d.EnvBase, d.EnvModel} {
+		for _, name := range []string{d.EnvKey, d.EnvBase, d.EnvModel, useEnv(d)} {
 			if name != "" {
 				t.Setenv(name, "")
 			}
@@ -52,22 +54,35 @@ func TestEngineDefsLengkap(t *testing.T) {
 		if d.EnvBase == "" || d.EnvModel == "" {
 			t.Errorf("%s: alamat & model harus bisa ditimpa pengguna (notes/39)", d.ID)
 		}
-		if d.Kind == kindOpenAI && d.Path == "" {
-			t.Errorf("%s: Path wajib diisi untuk mesin OpenAI-compatible", d.ID)
-		}
 	}
 }
 
-// TestGeminiJalurBukanV1 menjaga temuan yang melahirkan field Path: endpoint
-// OpenAI-compatible milik Gemini bukan "/v1" melainkan "/v1beta/openai", dan
-// tanpa itu satu-satunya jalan adalah klien kedua yang isinya sama persis.
-func TestGeminiJalurBukanV1(t *testing.T) {
-	d, ok := engineByID("gemini")
-	if !ok {
-		t.Fatal("gemini hilang dari tabel")
+// TestBaseURLApaAdanya: alamat dipakai persis seperti diketik (jalurnya tidak
+// dipangkas), alamat yang memuat nama endpoint ditolak, dan .env lama yang
+// alamatnya disimpan tanpa jalur dimigrasi SEKALI.
+func TestBaseURLApaAdanya(t *testing.T) {
+	if d, _ := engineByID("gemini"); !strings.HasSuffix(d.Base, "/v1beta/openai") {
+		t.Errorf("Base gemini = %q, jalurnya bukan /v1", d.Base)
 	}
-	if d.Path != "/v1beta/openai" {
-		t.Errorf("Path = %q, mau /v1beta/openai", d.Path)
+	if got := cleanBase(" https://openrouter.ai/api/v2/ "); got != "https://openrouter.ai/api/v2" {
+		t.Errorf("cleanBase = %q", got)
+	}
+	if endpointInBase("https://openrouter.ai/api/v1/audio/transcriptions") == "" || endpointInBase("https://openrouter.ai/api/v1") != "" {
+		t.Error("penjaga nama endpoint salah")
+	}
+
+	clearEngineEnv(t)
+	t.Setenv(baseURLsFullEnv, "")
+	t.Setenv("CUSTOM_BASE_URL", "https://gw.example")
+	t.Setenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com")
+	s := &Server{paths: config.Paths{EnvFile: filepath.Join(t.TempDir(), ".env")}}
+	s.migrateBaseURLs()
+	s.migrateBaseURLs() // kedua kali tidak boleh menambah /v1 lagi
+	if got := os.Getenv("CUSTOM_BASE_URL"); got != "https://gw.example/v1" {
+		t.Errorf("custom = %q", got)
+	}
+	if got := os.Getenv("GEMINI_BASE_URL"); got != "https://generativelanguage.googleapis.com/v1beta/openai" {
+		t.Errorf("gemini = %q", got)
 	}
 }
 
@@ -166,7 +181,7 @@ func TestEngineForClaudeAbaikanSkema(t *testing.T) {
 	}
 	// Tidak ada jaringan di uji ini: yang diperiksa cuma bahwa skema diterima
 	// tanpa membuat panik, dan galatnya berasal dari transport.
-	if _, err := complete(context.Background(), "s", "u", schemaProbe); err == nil {
+	if _, err := complete(context.Background(), "s", "u", map[string]any{"type": "object"}); err == nil {
 		t.Skip("kunci uji ternyata bisa dipakai — lewati")
 	}
 }
@@ -190,7 +205,7 @@ func TestFillEngineKoordinat(t *testing.T) {
 
 	o := config.Options{Provider: "deepseek"}
 	fillEngine(&o)
-	if o.LLMBase == "" || o.LLMPath != "/v1" {
+	if !strings.HasSuffix(o.LLMBase, "/v1") {
 		t.Errorf("koordinat deepseek belum lengkap: %+v", o)
 	}
 	if o.LLMKeyEnv != "DEEPSEEK_API_KEY" {
