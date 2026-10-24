@@ -43,11 +43,15 @@ export function Group({ title, children }: { title?: string; children: React.Rea
 }
 
 // Row = label di kiri, kendali di kanan, catatan opsional di bawah kendali.
-export function Row({ label, title, note, children }: { label: string; title?: string; note?: React.ReactNode; children: React.ReactNode }) {
+// off = baris yang belum berlaku: TETAP tampil tapi dimatikan. Baris yang
+// muncul-hilang mengubah tinggi panel dan menggeser semua di bawahnya.
+export function Row({ label, title, note, off, children }: {
+  label: string; title?: string; note?: React.ReactNode; off?: boolean; children: React.ReactNode;
+}) {
   return (
-    <div className="mc-r">
+    <div className={"mc-r" + (off ? " off" : "")}>
       <span className="mc-r-l" title={title}>{label}</span>
-      <div className="mc-r-c">{children}{note && <span className="mc-note">{note}</span>}</div>
+      <fieldset className="mc-r-c" disabled={off}>{children}{note && <span className="mc-note">{note}</span>}</fieldset>
     </div>
   );
 }

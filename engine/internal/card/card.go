@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/gemgum/clipper/engine/internal/capture"
+	"github.com/gemgum/clipper/engine/internal/config"
 	"github.com/gemgum/clipper/engine/internal/news"
 )
 
@@ -169,10 +170,12 @@ type Request struct {
 	Article news.Article `json:"article"`
 	Style   string       `json:"style"`
 	Ratio   string       `json:"ratio"`
-	Align   string       `json:"align"` // left | center | right | justify
-	Photo   Photo        `json:"photo"`
-	Fonts   Fonts        `json:"fonts"`
-	Colors  Colors       `json:"colors"`
+	Align   string       `json:"align"` // left | center | right | justify — ringkasan & stempel
+	// TitleAlign = perataan judul (dan garis aksen di atasnya); kosong = Align.
+	TitleAlign string `json:"title_align"`
+	Photo      Photo  `json:"photo"`
+	Fonts      Fonts  `json:"fonts"`
+	Colors     Colors `json:"colors"`
 	// Header = ruang tambahan di bawah foto, dalam piksel ruang kartu 1920.
 	//
 	// Menggeser SELURUH isi (judul, guntingan, kaki kartu) turun sebagai satu
@@ -189,8 +192,10 @@ type Request struct {
 	//
 	// Bedanya dengan Header: Header hanya menurunkan blok isi dan menyisakan
 	// ruang di bawah foto; CardTop menurunkan fotonya juga.
-	CardTop int    `json:"card_top"`
-	Lang    string `json:"lang"` // bahasa teks tetap di kartu (en | id)
+	CardTop int `json:"card_top"`
+	// CardY = geseran batas foto–isi dalam piksel kanvas (seret di pratinjau).
+	CardY int    `json:"card_y"`
+	Lang  string `json:"lang"` // bahasa teks tetap di kartu (en | id)
 	// Caption & Hashtags ikut disimpan sebagai berkas pendamping agar satu ZIP
 	// berisi semua yang dibutuhkan saat memposting.
 	Caption  string   `json:"caption"`
@@ -212,39 +217,48 @@ const (
 	ThemeRed    = "red"
 	ThemeForest = "forest"
 	ThemePlum   = "plum"
+	// ThemeAuto = warna yang menyambung dasar foto artikel (AutoLook — rumus
+	// yang sama dengan "Auto from image" di halaman Mark); tanpa foto = Dark.
+	ThemeAuto = "auto"
 )
 
 // themeColors = warna satu tampilan jadi. Panel = latar kartu, Title = judul
-// artikel, Body = teks ringkasan, Badge/OnBadge = lencana sumber & stempel,
-// Footer = kaki kartu.
+// artikel, Body = teks ringkasan, Badge/OnBadge = garis aksen & stempel.
 type themeColors struct {
-	Panel, PanelRGB, Title, Body, Badge, OnBadge, Footer string
-	TitlePx, BodyPx                                      int
+	Panel, PanelRGB, Title, Body, Badge, OnBadge string
+	TitlePx, BodyPx                              int
 }
 
 // themeTable: nilai persis dari DESIGN-NEWSCARD §5.2. "photo" di sini adalah
 // cadangannya saat kartu tidak berfoto (atau ronanya tidak terbaca).
 var themeTable = map[string]themeColors{
-	ThemeDark:  {Panel: "#15181D", Title: "#FFFFFF", Body: "#C8D1DC", Badge: "#FFD400", OnBadge: "#15181D", Footer: "#8A93A1"},
-	ThemeLight: {Panel: "#FFFFFF", Title: "#15181D", Body: "#5A6472", Badge: "#15181D", OnBadge: "#FFFFFF", Footer: "#8A93A1"},
-	ThemePhoto: {Panel: "#3C2A1E", Title: "#FFF6EC", Body: "#DEC9B4", Badge: "#E8A33D", OnBadge: "#2A1C12", Footer: "#B49C84"},
-	ThemePaper: {Panel: "#F2EBDD", Title: "#2A2318", Body: "#5E5444", Badge: "#2A2318", OnBadge: "#F2EBDD", Footer: "#8C8070"},
+	ThemeDark:  {Panel: "#15181D", Title: "#FFFFFF", Body: "#C8D1DC", Badge: "#FFD400", OnBadge: "#15181D"},
+	ThemeLight: {Panel: "#FFFFFF", Title: "#15181D", Body: "#5A6472", Badge: "#15181D", OnBadge: "#FFFFFF"},
+	ThemePhoto: {Panel: "#3C2A1E", Title: "#FFF6EC", Body: "#DEC9B4", Badge: "#E8A33D", OnBadge: "#2A1C12"},
+	ThemePaper: {Panel: "#F2EBDD", Title: "#2A2318", Body: "#5E5444", Badge: "#2A2318", OnBadge: "#F2EBDD"},
 	// Di luar §5.2. Kontras teks isi di atas panel terhitung ≥ 7:1 (WCAG AAA).
-	ThemeNavy:   {Panel: "#0F2747", Title: "#FFFFFF", Body: "#C9D6EA", Badge: "#FFD400", OnBadge: "#0F2747", Footer: "#8FA3C0"},
-	ThemeRed:    {Panel: "#7F1714", Title: "#FFFFFF", Body: "#F3D6D2", Badge: "#FFFFFF", OnBadge: "#7F1714", Footer: "#E0A9A2"},
-	ThemeForest: {Panel: "#163A2D", Title: "#F4FAF6", Body: "#C6DCCF", Badge: "#E8C547", OnBadge: "#163A2D", Footer: "#8FB0A0"},
-	ThemePlum:   {Panel: "#2E1F4A", Title: "#FFFFFF", Body: "#D5CCEA", Badge: "#F5C2E7", OnBadge: "#2E1F4A", Footer: "#A79BC4"},
+	ThemeNavy:   {Panel: "#0F2747", Title: "#FFFFFF", Body: "#C9D6EA", Badge: "#FFD400", OnBadge: "#0F2747"},
+	ThemeRed:    {Panel: "#7F1714", Title: "#FFFFFF", Body: "#F3D6D2", Badge: "#FFFFFF", OnBadge: "#7F1714"},
+	ThemeForest: {Panel: "#163A2D", Title: "#F4FAF6", Body: "#C6DCCF", Badge: "#E8C547", OnBadge: "#163A2D"},
+	ThemePlum:   {Panel: "#2E1F4A", Title: "#FFFFFF", Body: "#D5CCEA", Badge: "#F5C2E7", OnBadge: "#2E1F4A"},
 }
 
-// themePhotoPct: tinggi area foto per rasio saat tampilan jadi dipakai.
+// themePhotoPct: tinggi area foto per rasio saat tampilan jadi dipakai. Angkanya
+// milik config.CardPhotoPct — tampilan kartu di halaman Watermark memakai yang sama.
 func themePhotoPct(ratio string) int {
+	return config.CardPhotoPct(FormatOf(ratio))
+}
+
+// FormatOf = format bingkai Watermark yang seukuran rasio kartu ini (Dims sama
+// dengan config.FrameSize) — dipakai saat Mark dibakar ke kartu News.
+func FormatOf(ratio string) string {
 	switch ratio {
 	case Ratio45:
-		return 42
+		return config.FormatFeed45
 	case Ratio11:
-		return 38
+		return config.FormatFeed11
 	}
-	return 46
+	return config.FormatShort
 }
 
 // imageURL menandai alamat foto sebagai aman bagi html/template, HANYA bila
@@ -286,7 +300,6 @@ func Dims(ratio string) (int, int) {
 // Teks tetap yang ikut tercetak di kartu & berkas pendampingnya. Ditaruh di
 // satu tempat supaya menambah bahasa baru cukup menambah satu entri.
 type phrases struct {
-	readMore   string
 	labelTitle string
 	labelMedia string
 	labelDate  string
@@ -296,7 +309,6 @@ type phrases struct {
 
 var phraseBook = map[string]phrases{
 	"en": {
-		readMore:   "read the full story",
 		labelTitle: "Title ",
 		labelMedia: "Media ",
 		labelDate:  "Date  ",
@@ -304,7 +316,6 @@ var phraseBook = map[string]phrases{
 		notice:     "The photo and text remain the property of the outlet above. Credit the source when posting.",
 	},
 	"id": {
-		readMore:   "baca selengkapnya",
 		labelTitle: "Judul  ",
 		labelMedia: "Media  ",
 		labelDate:  "Tanggal",
@@ -342,6 +353,8 @@ type Builder struct {
 	// tiap kali hanya untuk mendapat warna yang sama.
 	mu    sync.Mutex
 	tones map[string]tone
+	// Warna tema "auto" per alamat foto, dengan alasan yang sama.
+	autos map[string]LookColors
 }
 
 func New(cap *capture.Client, fontsDir string) *Builder {
@@ -361,7 +374,7 @@ func (b *Builder) Build(ctx context.Context, req Request, dir string, preview bo
 	outPNG := filepath.Join(dir, FilePNG)
 	width, height := Dims(req.Ratio)
 
-	htmlBytes, err := b.render(ctx, req, width, height)
+	htmlBytes, _, err := b.render(ctx, req, width, height)
 	if err != nil {
 		return err
 	}
@@ -390,15 +403,38 @@ func (b *Builder) Build(ctx context.Context, req Request, dir string, preview bo
 	if preview {
 		return nil
 	}
-	return writeSidecars(dir, req)
+	return WriteSidecars(dir, req)
 }
 
-// writeSidecars menulis caption & keterangan sumber di sebelah gambar.
+// Geometry = letak bagian kartu yang bisa diseret di pratinjau, piksel kanvas.
+type Geometry struct {
+	Width     int     `json:"width"`
+	Height    int     `json:"height"`
+	PhotoTop  int     `json:"photo_top"`  // tepi atas area foto (= pita CardTop)
+	PhotoH    int     `json:"photo_h"`    // tinggi area foto (sudah digeser CardY)
+	PhotoBase int     `json:"photo_base"` // tinggi area foto tanpa CardY
+	Scale     float64 `json:"scale"`      // piksel kanvas per piksel ruang 1920 (Header, CardTop)
+	OffsetW   int     `json:"offset_w"`   // batas geser foto mendatar (offsetLimit)
+	OffsetH   int     `json:"offset_h"`   // batas geser foto tegak
+}
+
+// HTML = halaman kartu yang SAMA dengan yang difoto Chrome di Build, tanpa
+// Chrome: font & foto unggahan sudah tertanam, jadi GUI bisa menampilkannya
+// langsung sebagai pratinjau seketika (seperti pratinjau Watermark).
+func (b *Builder) HTML(ctx context.Context, req Request) ([]byte, Geometry, error) {
+	if strings.TrimSpace(req.Article.Title) == "" {
+		return nil, Geometry{}, fmt.Errorf("the title is empty: a card needs the article title")
+	}
+	width, height := Dims(req.Ratio)
+	return b.render(ctx, req, width, height)
+}
+
+// WriteSidecars menulis caption & keterangan sumber di sebelah gambar.
 //
 // Sumber selalu ditulis, walau caption kosong: atribusi harus ikut berpindah
 // bersama berkasnya, supaya saat kartu dibuka lagi berminggu-minggu kemudian
 // asal beritanya tidak hilang.
-func writeSidecars(dir string, req Request) error {
+func WriteSidecars(dir string, req Request) error {
 	if c := strings.TrimSpace(req.Caption); c != "" || len(req.Hashtags) > 0 {
 		var sb strings.Builder
 		sb.WriteString(c)
@@ -583,7 +619,6 @@ type templateData struct {
 	Quote         bool
 	HasImage      bool
 	Image         template.URL // sudah diperiksa: http(s) atau data:image/
-	Source        string
 	Domain        string
 	Date          string
 	FontCSS       template.CSS
@@ -591,9 +626,9 @@ type templateData struct {
 	PhotoY        int
 	PhotoZoom     string  // ditulis sebagai teks agar tidak jadi notasi ilmiah
 	Align         string  // nilai text-align
-	RuleMargin    string  // margin blok, ikut perataan
+	RuleMargin    string  // margin garis aksen, ikut perataan judul
+	TitleAlign    string  // nilai text-align judul
 	Lang          string  // atribut lang= pada <html>
-	ReadMore      string  // teks kaki kartu
 	Palette       palette // warna kartu, diturunkan dari foto atau warna pilihan
 	PhotoFit      string  // cover | contain
 	PhotoFill     bool    // isi ruang sisa dengan salinan buram fotonya
@@ -614,7 +649,7 @@ type templateData struct {
 	Theme       *themeColors // nil = tanpa tampilan jadi
 }
 
-func (b *Builder) render(ctx context.Context, req Request, width, height int) ([]byte, error) {
+func (b *Builder) render(ctx context.Context, req Request, width, height int) ([]byte, Geometry, error) {
 	a := req.Article
 	quote := req.Style == StyleQuote
 	// Foto boleh alamat http(s) ATAU data URI — unggahan pengguna ditanam
@@ -650,7 +685,16 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 		if req.Theme == ThemePhoto && hasImage {
 			if t := b.tone(ctx, a.Image); t.ok {
 				p := paletteFor(t, true)
-				tc = themeColors{Panel: p.Ink, Title: p.Paper, Body: p.Muted, Badge: p.Accent, OnBadge: p.OnAccent, Footer: p.Faint}
+				tc = themeColors{Panel: p.Ink, Title: p.Paper, Body: p.Muted, Badge: p.Accent, OnBadge: p.OnAccent}
+			}
+		}
+		tc.PanelRGB = rgbOf(tc.Panel)
+		theme = &tc
+	} else if req.Theme == ThemeAuto {
+		tc := themeTable[ThemeDark]
+		if hasImage {
+			if c, ok := b.autoLook(ctx, a.Image); ok {
+				tc = themeColors{Panel: c.Panel, Title: c.Title, Body: c.Body, Badge: c.Badge, OnBadge: c.OnBadge}
 			}
 		}
 		tc.PanelRGB = rgbOf(tc.Panel)
@@ -671,7 +715,10 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 	// punya isi.
 	hero := strings.TrimSpace(a.Summary)
 	context := strings.TrimSpace(a.Title)
-	if hero == "" {
+	// Tampilan jadi (theme) TIDAK menukar: di sana judul memang yang terbesar
+	// (TitlePx) dan ringkasan berukuran teks isi (BodyPx) — judul yang dinaikkan
+	// jadi hero malah mengecil. Ringkasan kosong = blok ringkasannya tidak ada.
+	if hero == "" && theme == nil {
 		hero, context = context, ""
 	}
 
@@ -701,7 +748,11 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 		photoHeight = themePhotoPct(req.Ratio)
 	}
 	// Ukuran bingkai foto dalam piksel — dipakai untuk membatasi geseran.
-	frameHeight := height * photoHeight / 100
+	// CardY menggeser BATAS foto–isi (seretan pratinjau, sama dengan
+	// config.Headline.CardY di Mark): foto memanjang/memendek, isi ikut, dijepit
+	// 20–85% kanvas supaya foto dan isi sama-sama tetap ada.
+	photoBase := height * photoHeight / 100
+	frameHeight := min(max(photoBase+req.CardY, height/5), height*85/100)
 	zoom := clampZoom(req.Photo.Zoom)
 	whole := req.Photo.Fit == FitWhole
 	// Mode "whole" memakai object-fit:contain — seluruh gambar masuk apa pun
@@ -716,8 +767,8 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 	// bingkai, jadi geseran belum punya ruang sampai zoom melewati 1. Batasnya
 	// dihitung dengan rumus yang sama supaya GUI cukup mencerminkan satu rumus.
 	limitW, limitH := offsetLimit(width, zoom), offsetLimit(frameHeight, zoom)
-	align, ruleMargin := alignCSS(req.Align)
-	p := phrasesFor(req.Lang)
+	align, _ := alignCSS(req.Align)
+	titleAlign, ruleMargin := alignCSS(firstNonEmpty(req.TitleAlign, req.Align))
 
 	d := templateData{
 		Width: width, Height: height,
@@ -727,7 +778,6 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 		Image:     imageURL(a.Image, hasImage),
 		Hero:      hero,
 		Context:   context,
-		Source:    firstNonEmpty(a.Source, a.Domain),
 		Domain:    a.Domain,
 		Date:      a.Date,
 		FontCSS:   b.fonts(),
@@ -745,8 +795,8 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 		PhotoZoom:   strconv.FormatFloat(zoom, 'f', 3, 64),
 		Align:       align,
 		RuleMargin:  ruleMargin,
+		TitleAlign:  titleAlign,
 		Lang:        langAttr(req.Lang),
-		ReadMore:    p.readMore,
 		Palette:     pal,
 		HeroSize:    px(heroSize),
 		ContextSize: px(max(contextMin, scaled(contextSize, req.Fonts.Title))),
@@ -762,9 +812,10 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, d); err != nil {
-		return nil, fmt.Errorf("could not compose the card: %v", err)
+		return nil, Geometry{}, fmt.Errorf("could not compose the card: %v", err)
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), Geometry{Width: width, Height: height, PhotoTop: d.CardTop, PhotoH: frameHeight, PhotoBase: photoBase,
+		Scale: scale, OffsetW: limitW, OffsetH: limitH}, nil
 }
 
 // fonts menanam font bawaan proyek sebagai data URI.
@@ -853,7 +904,9 @@ body{
 /* Tinggi dalam PIKSEL, bukan persen: persen dihitung terhadap kotak yang sudah
    dikurangi pita atas, jadi menurunkan kartu malah memendekkan fotonya —
    padahal yang diminta foto yang sama, turun. */
-.photo{position:relative;height:{{.PhotoPx}}px;flex:none;overflow:hidden;
+/* flex-shrink 1: foto yang diseret memanjang (CardY) MENGALAH bila isi kartu
+   tidak muat lagi — isi tidak pernah terpotong di dasar, sama dengan Mark. */
+.photo{position:relative;height:{{.PhotoPx}}px;flex:0 1 auto;overflow:hidden;
   background:var(--ink)}
 /* object-fit:cover dipakai—bukan min-width/min-height dengan width:auto—karena
    yang terakhir membuat penskalaan bergantung pada ukuran asli gambar relatif
@@ -885,18 +938,6 @@ body{
   background:linear-gradient(180deg,rgba(0,0,0,.4) 0%,rgba(0,0,0,0) 26%,
     {{if .Dark}}rgba({{.Palette.InkRGB}},0) 58%,rgba({{.Palette.InkRGB}},.9) 86%,var(--ink) 100%
     {{else}}rgba({{.Palette.LightBgRGB}},0) 58%,rgba({{.Palette.LightBgRGB}},.92) 86%,{{.Palette.LightBg}} 100%{{end}})}
-.badge{position:absolute;top:{{.Padding}}px;left:{{.Padding}}px;z-index:2;
-  display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-/* Lencana sumber memakai warna kertas, bukan warna media. Kita tidak tahu
-   warna merek mereka yang sebenarnya, dan menebaknya sama saja memalsukan
-   identitas orang. Netral lebih jujur. */
-.badge b{background:var(--paper);color:var(--ink-on-paper);
-  font-family:'Clipper Condensed','Clipper Sans',sans-serif;font-weight:400;
-  font-size:{{.SmallSize}}px;letter-spacing:.16em;
-  padding:10px 20px;border-radius:3px;text-transform:uppercase}
-.badge span{background:rgba(0,0,0,.5);color:var(--paper);font-size:{{.SmallSize}}px;
-  font-family:'Clipper Condensed','Clipper Sans',sans-serif;letter-spacing:.1em;
-  padding:10px 18px;border-radius:4px}
 /* Dengan foto: isi dijangkarkan ke bawah, sisa ruang jatuh ke bagian foto yang
    sudah memudar — tidak ada rongga menganga di bawah guntingan.
    Tanpa foto: dijangkarkan ke bawah justru menyisakan setengah kartu kosong di
@@ -922,7 +963,7 @@ body{
    direnggangkan. Ia menjelaskan kutipan di bawahnya, bukan bersaing dengannya. */
 .context{font-family:'Clipper Condensed','Clipper Sans',sans-serif;
   font-size:{{.ContextSize}}px;line-height:1.12;letter-spacing:.045em;
-  text-transform:uppercase;text-align:{{.Align}};margin-bottom:30px;
+  text-transform:uppercase;text-align:{{.TitleAlign}};margin-bottom:30px;
   /* Judul panjang dipangkas dua baris: perannya menjelaskan, bukan bersaing
      dengan kutipan. Tanpa batas ini judul 15 kata bisa mendorong guntingan
      keluar kartu. */
@@ -963,9 +1004,6 @@ body{
 .stamp span{background:var(--highlight);padding:5px 14px;border-radius:2px;
   color:{{.Palette.OnAccent}};box-decoration-break:clone;-webkit-box-decoration-break:clone}
 
-.footer{padding-top:28px;font-family:'Clipper Condensed','Clipper Sans',sans-serif;
-  font-size:{{.SmallSize}}px;letter-spacing:.12em;text-transform:uppercase;
-  color:{{.Palette.Faint}}}
 {{with .Theme}}
 /* Tampilan jadi (DESIGN-NEWSCARD §5.2): panel polos, judul besar di atas,
    ringkasan di bawahnya, lencana berwarna. Ditaruh terakhir supaya menimpa. */
@@ -973,7 +1011,6 @@ body{background:{{.Panel}};color:{{.Body}}}
 .photo{background:{{.Panel}}}
 .photo::after{background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,rgba(0,0,0,0) 26%,
   rgba({{.PanelRGB}},0) 60%,rgba({{.PanelRGB}},.92) 88%,{{.Panel}} 100%)}
-.badge b{background:{{.Badge}};color:{{.OnBadge}};font-family:'Clipper Sans',sans-serif;font-weight:700}
 .rule{background:{{.Badge}}}
 .context{color:{{.Title}};font-family:'Clipper Sans',sans-serif;font-weight:700;
   font-size:{{.TitlePx}}px;line-height:1.22;letter-spacing:0;text-transform:none;
@@ -981,27 +1018,20 @@ body{background:{{.Panel}};color:{{.Body}}}
 .clipping{background:none;box-shadow:none;text-shadow:none;transform:none;padding:0;color:{{.Body}}}
 .hero{font-size:{{.BodyPx}}px;font-weight:400;line-height:1.5;color:{{.Body}}}
 .stamp span{background:{{.Badge}};color:{{.OnBadge}}}
-.footer{color:{{.Footer}}}
 {{end}}
 </style></head><body>
 {{if .HasImage}}
 <div class="photo">
-  <div class="badge"><b>{{.Source}}</b></div>
   {{if .PhotoFill}}<img class="fill" src="{{.Image}}" alt="">{{end}}
   <img src="{{.Image}}" alt="">
-</div>
-{{else}}
-<div class="badge" style="position:static;margin:{{.Padding}}px {{.Padding}}px 0">
-  <b>{{.Source}}</b>
 </div>
 {{end}}
 <div class="content">
   <div class="rule"></div>
   {{if .Context}}<div class="context">{{.Context}}</div>{{end}}
   <div class="clipping">
-    <div class="hero">{{.Hero}}</div>
+    {{if .Hero}}<div class="hero">{{.Hero}}</div>{{end}}
     <div class="stamp"><span>{{.Domain}}{{if .Date}} &middot; {{.Date}}{{end}}</span></div>
   </div>
-  <div class="footer">{{.ReadMore}}</div>
 </div>
 </body></html>`))

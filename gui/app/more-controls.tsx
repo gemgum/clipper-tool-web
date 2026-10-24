@@ -21,9 +21,10 @@ import { useEngines } from "./engine-picker";
 import { sameModel, useOllama } from "./ollama";
 import type { Font, FontCheck } from "./preview-panel";
 import WatermarkPanel, { watermarkColors } from "./watermark-panel";
-import TabCard, { Group as Box, Split } from "./tab-card";
+import TabCard, { Group as Box, Row, Split } from "./tab-card";
 import ColorPanel from "./color-panel";
 import type { Watermark } from "./watermark-model";
+import { useSticky } from "./persist";
 
 export type WhisperModel = { name: string; size: string; downloaded: boolean };
 
@@ -95,7 +96,7 @@ export default function MoreControls(p: {
 }) {
   const { t } = useI18n();
   const { engines } = useEngines();
-  const [open, setOpen] = useState<Group>("ai");
+  const [open, setOpen] = useSticky<Group>("clips.group", "ai");
   const item = GROUPS.find((g) => g.key === open)!;
   const bounds = zoomBounds(p.reframe);
   const engineName = p.engine === "heuristic" ? t("offlineHeuristic") : (engines.find((e) => e.id === p.engine)?.name || p.engine);
@@ -167,11 +168,8 @@ export default function MoreControls(p: {
     ) : pulling ? <span className="meta">{pullLabel}</span> : null;
 
   // Satu baris: label di kiri, kendali di kanan (rancangan "tidy settings").
-  const row = (label: MessageKey, control: React.ReactNode, note?: React.ReactNode) => (
-    <div className="mc-r">
-      <span className="mc-r-l">{t(label)}</span>
-      <div className="mc-r-c">{control}{note && <span className="mc-note">{note}</span>}</div>
-    </div>
+  const row = (label: MessageKey, control: React.ReactNode, note?: React.ReactNode, off?: boolean) => (
+    <Row label={t(label)} note={note} off={off}>{control}</Row>
   );
   const sw = (toggle: React.ReactNode, note?: React.ReactNode) => (
     <div className="mc-r mc-r-sw">{toggle}{note && <span className="mc-note">{note}</span>}</div>
@@ -188,9 +186,9 @@ export default function MoreControls(p: {
           ))}
           {sw(<Toggle checked={p.transcriptFix} onChange={p.setTranscriptFix} label={t("transcriptFix")} desc={t("transcriptFixTip")} />,
             p.transcriptFix && engine === "heuristic" && t("transcriptFixNeedsLLM"))}
-          {/* Istilah hanya dipakai tahap koreksi; tanpa koreksi isian ini tak berpengaruh. */}
-          {p.transcriptFix && row("terms",
-            <input id="terms" value={p.terms} placeholder={t("termsPlaceholder")} onChange={(e) => p.setTerms(e.target.value)} />)}
+          {/* Istilah hanya dipakai tahap koreksi: tanpa koreksi barisnya mati, tidak hilang. */}
+          {row("terms",
+            <input id="terms" value={p.terms} placeholder={t("termsPlaceholder")} onChange={(e) => p.setTerms(e.target.value)} />, undefined, !p.transcriptFix)}
         </>;
       case "ai":
         return <>
@@ -289,10 +287,10 @@ export default function MoreControls(p: {
             { value: "center", name: t("fitCenter") }, { value: "fit", name: t("fitWhole") },
           ]} />)}
           {row("zoom", <Stepper value={p.zoom} onChange={p.setZoom} min={bounds.min} max={ZOOM_MAX} step={ZOOM_STEP} suffix="%" />)}
-          {/* Latar hanya ada artinya bila gambar tidak memenuhi bingkai (zoom < 100). */}
-          {p.zoom < 100 && row("background", <Segmented label={t("background")} value={p.background} onChange={p.setBackground} options={[
+          {/* Latar hanya berarti bila gambar tidak memenuhi bingkai (zoom < 100): mati, tidak hilang. */}
+          {row("background", <Segmented label={t("background")} value={p.background} onChange={p.setBackground} options={[
             { value: "blur", name: t("backgroundBlur") }, { value: "black", name: t("backgroundBlack") },
-          ]} />)}
+          ]} />, undefined, p.zoom >= 100)}
         </>;
       case "watermark":
         return <WatermarkPanel watermark={p.watermark} setWatermark={p.setWatermark} onPickImage={p.onPickImage} />;

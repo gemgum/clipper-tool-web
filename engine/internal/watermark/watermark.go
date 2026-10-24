@@ -141,19 +141,27 @@ func Run(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, 
 // jadinya" yang sebenarnya. Logo & judul selalu tampil di sini (waktu tampil
 // diabaikan): yang dinilai rupanya, bukan jadwalnya.
 func Preview(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, file string) ([]byte, error) {
+	out := filepath.Join(paths.DataDir, "cache", "watermark", fmt.Sprintf("preview_%d.jpg", time.Now().UnixNano()))
+	defer os.Remove(out)
+	if err := BurnTo(ctx, o, ff, paths, file, out); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(out)
+}
+
+// BurnTo membakar watermark ke SATU bingkai berkas file (foto, atau detik ke-1
+// video) dan menulisnya ke out; ekstensi out menentukan formatnya (.jpg/.png).
+// Dipakai Preview dan kartu News (logo + judul Mark di atas kartu).
+func BurnTo(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, file, out string) error {
 	o.Watermark.Headline.Font = o.Subtitle.Font
 	o.Watermark.Headline.FontsDir = paths.FontsDir
 	o.Watermark.At, o.Watermark.For = 0, 0
 	work := filepath.Join(paths.DataDir, "cache", "watermark")
 	if err := os.MkdirAll(work, 0o755); err != nil {
-		return nil, err
+		return err
 	}
-	out := filepath.Join(work, fmt.Sprintf("preview_%d.jpg", time.Now().UnixNano()))
-	defer os.Remove(out)
-	if _, _, err := one(ctx, o, ff, paths, work, file, "", "", 0, out); err != nil {
-		return nil, err
-	}
-	return os.ReadFile(out)
+	_, _, err := one(ctx, o, ff, paths, work, file, "", "", 0, out)
+	return err
 }
 
 // one mengerjakan satu video. preview != "" = cuma satu frame ke path itu
@@ -219,6 +227,10 @@ func one(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths,
 	}
 	if o.Fit == FitWhole {
 		enc.Mode, enc.Background, enc.Zoom = string(config.ReframeFit), config.BackgroundBlur, 0
+	}
+	// Kartu berita: gambar di bagian atas, panel & teksnya dari .ass.
+	if hl := o.Watermark.Headline; hl.Box && hl.Card && assPath != "" {
+		enc.Photo = float64(config.CardPhotoPx(o.Watermark.Format, hl.CardY)) / float64(fh)
 	}
 	if preview != "" {
 		// Detik ke-1 (atau tengah video yang lebih pendek): frame pembuka

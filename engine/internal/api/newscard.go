@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -10,8 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/gemgum/clipper/engine/internal/card"
+	"github.com/gemgum/clipper/engine/internal/config"
 	"github.com/gemgum/clipper/engine/internal/news"
+	"github.com/gemgum/clipper/engine/internal/watermark"
 	"github.com/gemgum/clipper/engine/internal/writer"
 )
 
@@ -84,6 +89,77 @@ func (s *Server) newsImage(w http.ResponseWriter, r *http.Request) {
 // HANYA bila berada di folder unggahan foto, dan ditanam sebagai data URI —
 // Chrome headless tidak membaca path, dan path di luar folder itu bukan urusan
 // kartu (siapa pun yang memegang halaman bisa saja menyodorkan /etc/…).
+// burnCardMark membakar setelan Mark ke satu gambar kartu: src = PNG kartu
+// (layout card), atau foto artikel (layout box; alamat web diunduh dulu). Format
+// bingkai mengikuti rasio kartu. Mengembalikan kode HTTP bila gagal.
+func (s *Server) burnCardMark(ctx context.Context, mark config.Watermark, font, ratio, src, out string) (int, error) {
+	mark.Format = card.FormatOf(ratio)
+	opts, code, err := s.watermarkSetup(mark, font, "", watermark.FitCrop)
+	if err != nil {
+		return code, err
+	}
+	file, cleanup, err := s.cardPhotoFile(ctx, src)
+	if err != nil {
+		return 400, err
+	}
+	defer cleanup()
+	if err := watermark.BurnTo(ctx, watermark.Options{Watermark: opts.Watermark, Subtitle: opts.Subtitle, Fit: watermark.FitCrop},
+		s.ff, s.paths, file, out); err != nil {
+		return 422, fmt.Errorf("could not put the mark on the card: %v", err)
+	}
+	return 0, nil
+}
+
+// cardPhotoFile = berkas lokal untuk sebuah gambar kartu: alamat web diunduh
+// ke berkas sementara .jpg (dihapus cleanup; ekstensi itulah yang membuat
+// watermark.IsImage membacanya sebagai foto — ffmpeg sendiri membaca isinya);
+// path lokal dipakai apa adanya bila ia PNG kartu kita atau unggahan kartu.
+func (s *Server) cardPhotoFile(ctx context.Context, src string) (string, func(), error) {
+	none := func() {}
+	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
+		abs, err := filepath.Abs(src)
+		if err != nil {
+			return "", none, fmt.Errorf("invalid image path")
+		}
+		for _, root := range []string{s.cardImageDir(), s.layout.CardsRoot()} {
+			r, _ := filepath.Abs(root)
+			if rel, err := filepath.Rel(r, abs); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+				return abs, none, nil
+			}
+		}
+		return "", none, fmt.Errorf("the card image must be a web address or an image uploaded for cards")
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", src, nil)
+	if err != nil {
+		return "", none, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Clipper)")
+	res, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return "", none, fmt.Errorf("could not download the article photo: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", none, fmt.Errorf("could not download the article photo: HTTP %d", res.StatusCode)
+	}
+	f, err := os.CreateTemp(filepath.Join(s.paths.DataDir, "cache"), "card-photo-*.jpg")
+	if err != nil {
+		if err = os.MkdirAll(filepath.Join(s.paths.DataDir, "cache"), 0o755); err == nil {
+			f, err = os.CreateTemp(filepath.Join(s.paths.DataDir, "cache"), "card-photo-*.jpg")
+		}
+		if err != nil {
+			return "", none, err
+		}
+	}
+	_, err = io.Copy(f, io.LimitReader(res.Body, 25<<20))
+	f.Close()
+	if err != nil {
+		os.Remove(f.Name())
+		return "", none, err
+	}
+	return f.Name(), func() { os.Remove(f.Name()) }, nil
+}
+
 func (s *Server) inlineCardImage(img string) (string, error) {
 	if img == "" || strings.HasPrefix(img, "http://") || strings.HasPrefix(img, "https://") {
 		return img, nil

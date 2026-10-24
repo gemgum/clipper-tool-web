@@ -170,3 +170,71 @@ func TestNewsBoxAlign(t *testing.T) {
 		}
 	}
 }
+
+// Justify: baris yang bukan terakhir di paragrafnya ditulis per kata, dan kata
+// terakhirnya berakhir tepat di tepi kanan isi kotak. Baris terakhir tetap utuh.
+func TestNewsBoxJustify(t *testing.T) {
+	w := config.DefaultWatermark()
+	w.Headline.Box = true
+	w.Headline.Align = config.AlignJustify
+	text := "BEGINI KATA MIDLANER ANDALAN RRQ HOSHI SOAL KEKALAHAN KEMARIN MALAM"
+	bx := NewsBox(w, text)
+	if len(bx.Lines) < 2 || !bx.Stretch[0] || bx.Stretch[len(bx.Lines)-1] {
+		t.Fatalf("stretch salah: lines=%q stretch=%v", bx.Lines, bx.Stretch)
+	}
+	var b strings.Builder
+	writeNewsBox(&b, w, text, "0:00:00.00", "0:00:05.00")
+	out := b.String()
+	first := strings.Fields(bx.Lines[0])
+	if n := strings.Count(out, "}"+first[0]+"\n"); n != 1 {
+		t.Fatalf("baris pertama harus ditulis per kata:\n%s", out)
+	}
+	if !strings.Contains(out, "}"+bx.Lines[len(bx.Lines)-1]+"\n") {
+		t.Fatalf("baris terakhir harus utuh:\n%s", out)
+	}
+}
+
+// Kartu berita: panel menutup bawah bingkai, judul di bawah batas gambar, dan
+// kredit jadi lencana berwarna Badge dengan teks OnBadge.
+func TestCardLook(t *testing.T) {
+	w := config.DefaultWatermark()
+	w.Headline.Box, w.Headline.Card = true, true
+	w.Headline.BoxColor, w.Headline.Badge, w.Headline.OnBadge = "#0F2747", "#FFD400", "#15181D"
+	w.Headline.Credit = "ANTARANEWS.COM"
+	bx := CardBox(w, "Karantina Kepri musnahkan 29 ton bawang putih")
+	if bx.Photo != 1920*46/100 || bx.Top <= bx.Photo || bx.Credit == 0 {
+		t.Fatalf("tata letak salah: %+v", bx)
+	}
+	var b strings.Builder
+	writeCard(&b, w, "Karantina Kepri musnahkan 29 ton bawang putih", "0:00:00.00", "0:00:05.00")
+	out := b.String()
+	for _, want := range []string{
+		"\\1c&H0047270F&\\1a&H00&", // panel navy, pekat
+		"\\1c&H0000D4FF&",          // garis aksen & lencana kuning
+		"\\1c&H001D1815&}ANTARANEWS.COM",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("tidak ada %q di:\n%s", want, out)
+		}
+	}
+}
+
+// CardY menggeser BATAS gambar–panel; judul ikut menempel di bawahnya. Batas
+// dijepit 20–85% bingkai, dan judul tidak pernah keluar dari dasar.
+func TestCardYMovesPanel(t *testing.T) {
+	w := config.DefaultWatermark()
+	w.Headline.Box, w.Headline.Card = true, true
+	base := CardBox(w, "Judul uji")
+	w.Headline.CardY = 300
+	if got := CardBox(w, "Judul uji"); got.Photo != base.Photo+300 || got.Top != base.Top+300 {
+		t.Fatalf("CardY 300: photo %d top %d, harus %d %d", got.Photo, got.Top, base.Photo+300, base.Top+300)
+	}
+	w.Headline.CardY = 99999
+	if got := CardBox(w, "Judul uji"); got.Photo != 1920*85/100 || got.Top+got.H > 1920-cardPad {
+		t.Fatalf("jepitan bawah salah: %+v", got)
+	}
+	w.Headline.CardY = -99999
+	if got := CardBox(w, "Judul uji"); got.Photo != 1920/5 {
+		t.Fatalf("jepitan atas salah: %+v", got)
+	}
+}

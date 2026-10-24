@@ -22,6 +22,7 @@ import Warn from "../warn";
 import AISettingsPanel from "./ai-settings";
 import { useAISettings } from "../ai";
 import { useEngines } from "../engine-picker";
+import { useSticky } from "../persist";
 
 type Component = {
   id: string;
@@ -85,7 +86,7 @@ export default function RequirementsPage() {
   // Pesan hasil per komponen (selesai / gagal), hilang saat dicoba lagi.
   const [notes, setNotes] = useState<Record<string, string>>({});
   const abort = useRef<AbortController | null>(null);
-  const [tab, setTab] = useState<"ai" | "programs" | "files">("ai");
+  const [tab, setTab] = useSticky<"ai" | "programs" | "files">("settings.tab", "ai");
   const { data: ai } = useAISettings();
   const { engines } = useEngines();
 

@@ -417,3 +417,49 @@ func TestStampTextPicksWhicheverReadsBetter(t *testing.T) {
 		t.Error("tidak ada satu pun warna yang memakai teks terang — pemilihannya tidak pernah terpakai")
 	}
 }
+
+// Look: tema biasa = angka tabelnya; "photo" mengikuti rona gambar; tema tak
+// dikenal ditolak.
+func TestLook(t *testing.T) {
+	if c, ok := Look(ThemeNavy, nil); !ok || c.Panel != "#0F2747" || c.Title != "#FFFFFF" || c.Badge != "#FFD400" {
+		t.Fatalf("navy: %+v %v", c, ok)
+	}
+	if _, ok := Look("nope", nil); ok {
+		t.Fatal("tema tak dikenal harus ditolak")
+	}
+	// Warna sendiri: panelnya warna itu, judul yang terbaca di atasnya.
+	if c, _ := Look("#F2C200", nil); c.Panel != "#F2C200" || c.Title != "#15181D" {
+		t.Fatalf("kuning: %+v", c)
+	}
+	if c, _ := Look("#102030", nil); c.Title != "#FFFFFF" {
+		t.Fatalf("gelap: %+v", c)
+	}
+	red := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	for i := 0; i < len(red.Pix); i += 4 {
+		red.Pix[i], red.Pix[i+3] = 220, 255
+	}
+	fallback, _ := Look(ThemePhoto, nil)
+	if c, _ := Look(ThemePhoto, red); c.Panel == fallback.Panel {
+		t.Fatalf("photo dari gambar merah harus beda dari cadangan, dapat %s", c.Panel)
+	}
+}
+
+// AutoLook mengikuti warna DASAR gambar, bukan seluruhnya: gambar biru di
+// atas, merah di 20% terbawah → panel kemerahan, tetap gelap.
+func TestAutoLookFollowsBottomEdge(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 40, 100))
+	for y := 0; y < 100; y++ {
+		for x := 0; x < 40; x++ {
+			c := color.RGBA{0, 0, 220, 255}
+			if y >= 80 {
+				c = color.RGBA{220, 20, 20, 255}
+			}
+			img.Set(x, y, c)
+		}
+	}
+	c := AutoLook(img)
+	n, _ := strconv.ParseUint(c.Panel[1:], 16, 32)
+	if r, b := n>>16&0xFF, n&0xFF; r <= b || relLum(c.Panel) > 0.05 || c.Title != "#FFFFFF" {
+		t.Fatalf("panel harus merah gelap dengan judul putih: %+v", c)
+	}
+}

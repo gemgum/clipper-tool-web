@@ -91,13 +91,10 @@ func TestDimsPerRatio(t *testing.T) {
 // Teks tetap pada kartu ikut bahasa yang diminta; bahasa tak dikenal jatuh ke
 // bahasa Inggris, bukan string kosong.
 func TestPhrasesFollowLanguage(t *testing.T) {
-	if got := phrasesFor("id").readMore; got != "baca selengkapnya" {
-		t.Errorf("readMore(id) = %q", got)
+	if got := phrasesFor("id").labelDate; got != "Tanggal" {
+		t.Errorf("labelDate(id) = %q", got)
 	}
-	if got := phrasesFor("en").readMore; got != "read the full story" {
-		t.Errorf("readMore(en) = %q", got)
-	}
-	if got := phrasesFor("zz").readMore; got != "read the full story" {
+	if got := phrasesFor("zz").labelDate; got != "Date  " {
 		t.Errorf("bahasa tak dikenal seharusnya jatuh ke Inggris, dapat %q", got)
 	}
 	if got := langAttr("zz"); got != "en" {

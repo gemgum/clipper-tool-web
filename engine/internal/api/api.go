@@ -169,6 +169,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/news/image", s.newsImage)
 	mux.HandleFunc("POST /api/news/write", s.newsWrite)
 	mux.HandleFunc("POST /api/card", s.makeCard)
+	mux.HandleFunc("POST /api/card/html", s.cardHTML)
 	mux.HandleFunc("GET /api/card/{id}/file", s.cardFile)
 	mux.HandleFunc("GET /api/card/{id}/zip", s.cardZip)
 	mux.HandleFunc("GET /api/cards", s.listCards)
@@ -198,8 +199,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/watermark/events", s.watermarkEvents)
 	mux.HandleFunc("POST /api/watermark/layout", s.watermarkLayout)
 	mux.HandleFunc("POST /api/watermark/preview", s.watermarkPreview)
+	mux.HandleFunc("POST /api/watermark/look", s.watermarkLook)
 	mux.HandleFunc("GET /api/watermark/templates", s.listTemplates)
 	mux.HandleFunc("POST /api/watermark/templates", s.saveTemplate)
+	mux.HandleFunc("POST /api/watermark/templates/{name}/default", s.setDefaultTemplate)
 	mux.HandleFunc("DELETE /api/watermark/templates/{name}", s.deleteTemplate)
 	mux.HandleFunc("GET /api/watermark/{id}", s.getWatermark)
 	mux.HandleFunc("GET /api/watermark/{id}/file", s.watermarkFile)
@@ -456,17 +459,91 @@ const llmMaxTokens = 8192
 // Sengaja sinkron, tidak lewat antrian job: satu kartu selesai dalam hitungan
 // detik, sementara mesin job dirancang untuk pekerjaan hitungan menit.
 func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
-	if s.paths.Chrome == "" {
-		writeErr(w, 503, "browser not found: install Chrome/Chromium, or set CLIPPER_CHROME to the chrome.exe path")
-		return
-	}
 	var req struct {
 		card.Request
 		// Pratinjau menimpa satu folder tetap dan melewati berkas pendamping.
 		// Menyetel kartu itu pekerjaan puluhan percobaan; tanpa ini tiap
 		// percobaan meninggalkan satu folder permanen.
 		Preview bool `json:"preview"`
+		// Layout = "card" (kartu News, Chrome) | "box" (foto artikel penuh +
+		// kotak judul Mark, tanpa Chrome).
+		Layout string `json:"layout"`
+		// Mark = setelan halaman Mark (logo, headline, gaya) yang dibakar engine
+		// Mark ke kartu ini — satu jalur render untuk kedua halaman.
+		Mark *config.Watermark `json:"mark"`
+		Font string            `json:"font"`
 	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	box := req.Layout == "box"
+	if !box && s.paths.Chrome == "" {
+		writeErr(w, 503, "browser not found: install Chrome/Chromium, or set CLIPPER_CHROME to the chrome.exe path")
+		return
+	}
+	if box && req.Mark == nil {
+		writeErr(w, 400, "the box layout needs the mark settings")
+		return
+	}
+	req.Lang = firstNonEmpty(req.Lang, lang(r))
+	original := req.Article.Image
+	img, err := s.inlineCardImage(req.Article.Image)
+	if err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	req.Article.Image = img
+	id := previewID
+	if !req.Preview {
+		id = fmt.Sprintf("card-%d", time.Now().UnixNano())
+	}
+	dir := s.cardDir(id)
+	png := filepath.Join(dir, card.FilePNG)
+	if box {
+		code, err := s.burnCardMark(r.Context(), *req.Mark, req.Font, req.Ratio, original, png)
+		if err == nil && !req.Preview {
+			err = card.WriteSidecars(dir, req.Request)
+		}
+		if err != nil {
+			writeErr(w, code, err.Error())
+			return
+		}
+	} else {
+		if err := s.cards.Build(r.Context(), req.Request, dir, req.Preview); err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		// Logo & headline tambahan Mark di atas kartu: PNG kartu jadi bahan
+		// bakarnya, lalu menggantikannya.
+		if req.Mark != nil && req.Mark.On() {
+			tmp := filepath.Join(dir, "marked.png")
+			if code, err := s.burnCardMark(r.Context(), *req.Mark, req.Font, req.Ratio, png, tmp); err != nil {
+				writeErr(w, code, err.Error())
+				return
+			}
+			if err := os.Rename(tmp, png); err != nil {
+				writeErr(w, 500, err.Error())
+				return
+			}
+		}
+	}
+	if !req.Preview {
+		s.sweepCards()
+	}
+	width, height := card.Dims(req.Ratio)
+	writeJSON(w, 201, map[string]any{
+		"id": id, "width": width, "height": height,
+		"file": "/api/card/" + id + "/file",
+		"zip":  "/api/card/" + id + "/zip",
+	})
+}
+
+// cardHTML = halaman kartu untuk pratinjau seketika (card.Builder.HTML): tanpa
+// Chrome, jadi pratinjau tetap ada walau browser belum terpasang. Simpan tetap
+// lewat makeCard (PNG dari Chrome).
+func (s *Server) cardHTML(w http.ResponseWriter, r *http.Request) {
+	var req card.Request
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -478,23 +555,12 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Article.Image = img
-	id := previewID
-	if !req.Preview {
-		id = fmt.Sprintf("card-%d", time.Now().UnixNano())
-	}
-	if err := s.cards.Build(r.Context(), req.Request, s.cardDir(id), req.Preview); err != nil {
-		writeErr(w, 500, err.Error())
+	page, geo, err := s.cards.HTML(r.Context(), req)
+	if err != nil {
+		writeErr(w, 400, err.Error())
 		return
 	}
-	if !req.Preview {
-		s.sweepCards()
-	}
-	width, height := card.Dims(req.Ratio)
-	writeJSON(w, 201, map[string]any{
-		"id": id, "width": width, "height": height,
-		"file": "/api/card/" + id + "/file",
-		"zip":  "/api/card/" + id + "/zip",
-	})
+	writeJSON(w, 200, map[string]any{"html": string(page), "geometry": geo})
 }
 
 func (s *Server) cardDir(id string) string {
@@ -1156,9 +1222,16 @@ func (s *Server) frame(w http.ResponseWriter, r *http.Request) {
 		fw, fh := config.FrameSize(f)
 		th = tw * fh / fw / 2 * 2
 	}
-	img, err := s.ff.ExtractFrame(r.Context(), path, t, tw, th, ffmpeg.Layout{
-		Mode: string(opts.Reframe), Background: opts.Background, Zoom: opts.Zoom,
-	})
+	l := ffmpeg.Layout{Mode: string(opts.Reframe), Background: opts.Background, Zoom: opts.Zoom}
+	// card=1 = tampilan kartu berita Watermark: gambar hanya di bagian atas,
+	// potongannya sama persis dengan render (ffmpeg.Layout.Photo); card_y =
+	// geseran batas gambar–panel.
+	if q.Get("card") == "1" {
+		cardY, _ := strconv.Atoi(q.Get("card_y"))
+		_, fh := config.FrameSize(q.Get("format"))
+		l.Photo = float64(config.CardPhotoPx(q.Get("format"), cardY)) / float64(fh)
+	}
+	img, err := s.ff.ExtractFrame(r.Context(), path, t, tw, th, l)
 	if err != nil || len(img) == 0 {
 		writeErr(w, 400, "frame extraction failed")
 		return

@@ -12,6 +12,7 @@
 // masuk akal, jadi isian disimpan dan dipulihkan sendiri.
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 const PREFIX = "clipper.form.";
 
@@ -75,4 +76,65 @@ export function forget(key: string) {
   try {
     localStorage.removeItem(PREFIX + key);
   } catch {}
+}
+
+/**
+ * useSticky = useState yang diingat BROWSER (localStorage, bukan server): layar
+ * & tab yang sedang terbuka tetap sama saat pengguna pindah ke halaman lain
+ * lalu kembali — Next merender ulang halamannya dari awal setiap kali.
+ */
+export function useSticky<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(initial);
+  useRestore<T>("view." + key, setValue);
+  useKeep("view." + key, value);
+  return [value, setValue] as const;
+}
+
+/** recall membaca nilai useSticky secara langsung (mis. di dalam fetch yang
+ *  selesai sebelum useRestore sempat menjalankan setter-nya). */
+export function recall<T>(key: string): T | undefined {
+  try {
+    const raw = localStorage.getItem(PREFIX + "view." + key);
+    return raw ? (JSON.parse(raw) as T) : undefined;
+  } catch { return undefined; }
+}
+
+// Kotak yang bergulir di halaman-halaman (CLAUDE.md "Tampilan"): halaman
+// berlayar-gulir, kolom kiri, kolom hasil.
+const SCROLLERS = [".screen.scroll", ".setup-main", ".io-in", ".io-out"];
+
+/**
+ * ScrollKeep mengingat posisi gulir tiap halaman di browser dan memulihkannya
+ * saat halaman itu dibuka lagi. Dipasang SEKALI di rail (nav.tsx). Isi halaman
+ * bisa datang belakangan (daftar dari engine), jadi pemulihan dicoba ulang
+ * sebentar sampai kotaknya cukup tinggi.
+ */
+export function ScrollKeep() {
+  const path = usePathname();
+  useEffect(() => {
+    const key = (sel: string) => `${PREFIX}scroll.${path}.${sel}`;
+    let tries = 0;
+    const restore = () => {
+      let pending = false;
+      for (const sel of SCROLLERS) {
+        const el = document.querySelector<HTMLElement>(sel);
+        let want = 0;
+        try { want = Number(localStorage.getItem(key(sel))) || 0; } catch {}
+        if (!el || !want) continue;
+        el.scrollTop = want;
+        if (Math.abs(el.scrollTop - want) > 2) pending = true;
+      }
+      if (pending && ++tries < 20) id = setTimeout(restore, 100);
+    };
+    let id = setTimeout(restore, 50);
+    const save = (e: Event) => {
+      const el = e.target as HTMLElement;
+      const sel = SCROLLERS.find((s) => el.matches?.(s));
+      if (!sel) return;
+      try { localStorage.setItem(key(sel), String(Math.round(el.scrollTop))); } catch {}
+    };
+    document.addEventListener("scroll", save, true);
+    return () => { clearTimeout(id); document.removeEventListener("scroll", save, true); };
+  }, [path]);
+  return null;
 }

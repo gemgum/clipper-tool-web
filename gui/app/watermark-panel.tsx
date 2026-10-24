@@ -81,10 +81,11 @@ export default function WatermarkPanel({ watermark, setWatermark, onPickImage }:
   );
 }
 
-// Sasaran warna headline — SATU daftar untuk halaman klip dan Watermark. "Box"
-// ikut hanya saat kotak judul menyala (halaman klip tidak punya kotak judul).
-export const watermarkColors = (w: Watermark, set: (patch: Partial<Watermark>) => void, t: (k: MessageKey) => string): ColorTarget[] => [
+// Sasaran warna headline — SATU daftar untuk halaman klip dan Watermark.
+// withBox: halaman yang punya kotak judul (Watermark) selalu menampilkan "Box",
+// mati selagi kotaknya mati; halaman klip tidak punya kotak judul sama sekali.
+export const watermarkColors = (w: Watermark, set: (patch: Partial<Watermark>) => void, t: (k: MessageKey) => string, withBox = false): ColorTarget[] => [
   { key: "text", name: t("mcColText"), value: w.hlColor, set: (c) => set({ hlColor: c }) },
-  ...(w.hlBox ? [{ key: "box", name: t("wmColBox"), value: w.hlBoxColor || "white", set: (c: string) => set({ hlBoxColor: c }) }] : []),
+  ...(withBox ? [{ key: "box", name: t("wmColBox"), value: w.hlBoxColor || "white", set: (c: string) => set({ hlBoxColor: c }), off: !w.hlBox }] : []),
   { key: "outline", name: t("outline"), value: w.hlOutlineColor || (w.hlColor === "black" ? "white" : "black"), set: (c) => set({ hlOutlineColor: c }) },
 ];

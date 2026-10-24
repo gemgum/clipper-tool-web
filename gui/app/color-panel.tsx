@@ -73,21 +73,23 @@ function ColorCode({ value, onPick, label, bad }: { value: string; onPick: (c: s
 }
 
 // Satu sasaran warna: nama di tombolnya, nilai sekarang, dan penyetelnya.
-export type ColorTarget = { key: string; name: string; value: string; set: (hex: string) => void };
+// off = sasaran yang belum berlaku: tombolnya tetap ada tapi mati (jumlah tombol
+// tidak pernah berubah, jadi panelnya tidak pernah berubah tinggi).
+export type ColorTarget = { key: string; name: string; value: string; set: (hex: string) => void; off?: boolean };
 
 // ColorPanel = isi panel kanan <Split side={…}>. Sasaran yang hilang (mis. Box saat kotak
 // judul mati) jatuh ke sasaran pertama.
 export default function ColorPanel({ targets }: { targets: ColorTarget[] }) {
   const { t } = useI18n();
   const [sel, setSel] = useState(targets[0].key);
-  const cur = targets.find((x) => x.key === sel) || targets[0];
+  const cur = targets.find((x) => x.key === sel && !x.off) || targets[0];
   const hex = toHex(cur.value);
   return (
     <>
       <span className="mc-r-l">{t("color")}</span>
       <div className="segmented cp-targets" role="group" aria-label={t("color")}>
         {targets.map((x) => (
-          <button key={x.key} type="button" className={x.key === cur.key ? "on" : ""} aria-pressed={x.key === cur.key} onClick={() => setSel(x.key)}>
+          <button key={x.key} type="button" className={x.key === cur.key ? "on" : ""} aria-pressed={x.key === cur.key} disabled={x.off} onClick={() => setSel(x.key)}>
             <span className="mc-cdot" style={{ background: toHex(x.value) }} />{x.name}
           </button>
         ))}

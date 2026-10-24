@@ -204,6 +204,10 @@ func writeHeadline(b *strings.Builder, watermark config.Watermark, text string, 
 			end = 3600
 		}
 	}
+	if watermark.Headline.Box && watermark.Headline.Card {
+		writeCard(b, watermark, text, tc(watermark.At), tc(end))
+		return
+	}
 	if watermark.Headline.Box {
 		writeNewsBox(b, watermark, text, tc(watermark.At), tc(end))
 		return
@@ -242,6 +246,37 @@ type Box struct {
 	Credit int      `json:"credit"` // ukuran huruf kredit; 0 = tanpa kredit
 	Pad    int      `json:"pad"`
 	Radius int      `json:"radius"`
+	// Stretch[i] = baris i direntangkan kiri-kanan (Align justify): bukan baris
+	// terakhir paragrafnya dan berisi lebih dari satu kata.
+	Stretch []bool `json:"stretch,omitempty"`
+	// Photo > 0 = tampilan kartu berita (Headline.Card): tinggi area gambar di
+	// atas panel. Left/Top/W/H lalu membingkai blok judul + lencana kredit.
+	Photo int `json:"photo,omitempty"`
+}
+
+// wrapParagraphs memenggal judul per paragraf (Enter = baris baru) selebar maxW
+// (satuan Fontsize). stretch hanya diisi untuk Align justify: baris yang bukan
+// terakhir di paragrafnya dan berisi lebih dari satu kata.
+func wrapParagraphs(h config.Headline, text string, maxW float64) (lines []string, stretch []bool) {
+	for _, para := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
+		ls := wrapWidth(escapeText(para), maxW, headlineWidth(h))
+		lines = append(lines, ls...)
+		if h.Align == config.AlignJustify {
+			for i, ln := range ls {
+				stretch = append(stretch, i < len(ls)-1 && strings.Contains(ln, " "))
+			}
+		}
+	}
+	return lines, stretch
+}
+
+// headlineWidth = pengukur lebar teks judul (satuan Fontsize): berkas font bila
+// ada, perkiraan bila tidak.
+func headlineWidth(h config.Headline) func(string) float64 {
+	if f := fontmetrics.ForFamily(h.FontsDir, h.Font, h.Bold); f != nil {
+		return f.Width
+	}
+	return textWidth
 }
 
 // NewsBox menata kotak judul.
@@ -264,14 +299,7 @@ func NewsBox(w config.Watermark, text string) Box {
 	if h.Sharp {
 		bx.Radius = 0
 	}
-	width := textWidth
-	if f := fontmetrics.ForFamily(h.FontsDir, h.Font, h.Bold); f != nil {
-		width = f.Width
-	}
-	maxW := float64(bx.W-2*newsPad) / float64(size)
-	for _, para := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
-		bx.Lines = append(bx.Lines, wrapWidth(escapeText(para), maxW, width)...)
-	}
+	bx.Lines, bx.Stretch = wrapParagraphs(h, text, float64(bx.W-2*newsPad)/float64(size))
 	bx.H = 2*newsPad + len(bx.Lines)*size
 	if strings.TrimSpace(h.Credit) != "" {
 		bx.Credit = max(24, size*45/100)
@@ -359,20 +387,156 @@ func writeNewsBox(b *strings.Builder, w config.Watermark, text, start, end strin
 	}
 	fmt.Fprintf(b, "Dialogue: 1,%s,%s,Headline,,0,0,0,,{\\an7\\pos(%d,%d)\\bord%d\\3c%s\\shad0\\1c%s\\p1}%s\n",
 		start, end, bx.Left, bx.Top, max(0, h.Outline), assColor(h.OutlineColor)+"&", assColor(h.BoxColor)+"&", path)
-	// Perataan: \an7/8/9 = jangkar di tepi atas kiri/tengah/kanan, jadi titik
-	// \pos-nya tepi kiri isi, tengah kotak, atau tepi kanan isi.
-	an, x := 7, bx.Left+bx.Pad
-	switch h.Align {
-	case config.AlignCenter:
-		an, x = 8, bx.Left+bw/2
-	case config.AlignRight:
-		an, x = 9, bx.Left+bw-bx.Pad
-	}
-	fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an%d\\pos(%d,%d)\\bord0\\shad0}%s\n",
-		start, end, an, x, bx.Top+bx.Pad, strings.Join(bx.Lines, "\\N"))
+	an, x := writeBoxText(b, bx, h, start, end)
 	if bx.Credit > 0 {
 		fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an%d\\pos(%d,%d)\\bord0\\shad0\\fs%d\\1c%s}%s\n",
 			start, end, an, x, bx.Top+bx.Pad+len(bx.Lines)*h.Size+h.Size/4, bx.Credit, creditColor(h.BoxColor), escapeText(h.Credit))
+	}
+}
+
+// writeBoxText menulis judul di isi kotak [Left+Pad, Left+W-Pad] mulai Top+Pad.
+// Perataan: \an7/8/9 = jangkar di tepi atas kiri/tengah/kanan, jadi titik
+// \pos-nya tepi kiri isi, tengah kotak, atau tepi kanan isi. Mengembalikan
+// jangkar & x itu untuk baris sesudahnya (kredit).
+func writeBoxText(b *strings.Builder, bx Box, h config.Headline, start, end string) (int, int) {
+	an, x := 7, bx.Left+bx.Pad
+	switch h.Align {
+	case config.AlignCenter:
+		an, x = 8, bx.Left+bx.W/2
+	case config.AlignRight:
+		an, x = 9, bx.Left+bx.W-bx.Pad
+	}
+	if h.Align == config.AlignJustify {
+		writeJustified(b, bx, h, start, end)
+	} else {
+		fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an%d\\pos(%d,%d)\\bord0\\shad0}%s\n",
+			start, end, an, x, bx.Top+bx.Pad, strings.Join(bx.Lines, "\\N"))
+	}
+	return an, x
+}
+
+// Tampilan kartu berita (Headline.Card), ruang PlayRes. Angkanya meniru kartu
+// di halaman News (card.go): isi rata dengan tepi, garis aksen sedikit di atas
+// batas gambar, judul tepat di bawah batas itu.
+const (
+	cardPad    = 48 // tepi kiri & kanan isi
+	cardRuleW  = 64 // garis aksen
+	cardRuleH  = 6
+	cardRuleUp = 28 // garis aksen di atas batas gambar
+	cardGap    = 12 // judul di bawah batas gambar
+	cardChipX  = 14 // ruang dalam lencana kredit
+	cardChipY  = 8
+)
+
+// CardBox menata tampilan kartu berita. Photo = tinggi area gambar (sama dengan
+// ffmpeg.Layout.Photo, config.CardPhotoPx); Top = tepi atas judul (garis aksen cardGap+cardRuleUp
+// di atasnya); H = judul + lencana kredit.
+func CardBox(w config.Watermark, text string) Box {
+	fw, fh := w.Frame()
+	h := w.Headline
+	size := h.Size
+	if size <= 0 {
+		size = 64
+	}
+	photo := config.CardPhotoPx(w.Format, h.CardY)
+	bx := Box{Left: cardPad, W: fw - 2*cardPad, Photo: photo}
+	bx.Lines, bx.Stretch = wrapParagraphs(h, text, float64(bx.W)/float64(size))
+	bx.H = len(bx.Lines) * size
+	if strings.TrimSpace(h.Credit) != "" {
+		bx.Credit = max(22, size*38/100)
+		bx.H += size/2 + bx.Credit + 2*cardChipY
+	}
+	// Tepat di bawah batas gambar; dijepit supaya lencana tidak keluar dari dasar.
+	lo := cardRuleUp + cardGap + cardPad
+	bx.Top = clamp(photo+cardGap, lo, max(lo, fh-bx.H-cardPad))
+	return bx
+}
+
+// writeCard menulis tampilan kartu berita di atas video yang sudah dipasang di
+// bagian atas bingkai: panel BoxColor, peralihan pudar dari gambar ke panel
+// (gradien kartu berita, dipecah jadi pita-pita beralfa — libass tidak punya
+// gradien), garis aksen, judul, dan Credit sebagai lencana Badge/OnBadge.
+func writeCard(b *strings.Builder, w config.Watermark, text, start, end string) {
+	bx := CardBox(w, text)
+	if len(bx.Lines) == 0 {
+		return
+	}
+	h := w.Headline
+	fw, fh := w.Frame()
+	rect := func(layer, x, y, rw, rh int, color string, opacity float64) {
+		if rw <= 0 || rh <= 0 || opacity <= 0 {
+			return
+		}
+		fmt.Fprintf(b, "Dialogue: %d,%s,%s,Headline,,0,0,0,,{\\an7\\pos(%d,%d)\\bord0\\shad0\\1c%s&\\1a&H%02X&\\p1}m 0 0 l %d 0 l %d %d l 0 %d\n",
+			layer, start, end, x, y, color, int(math.Round(255*(1-min(1, opacity)))), rw, rw, rh, rh)
+	}
+	panel := assColor(h.BoxColor)
+	// Panel menutup sampai 1 px di atas batas gambar supaya tidak ada garis hitam
+	// dari pembulatan tinggi gambar di ffmpeg.
+	rect(0, 0, bx.Photo-1, fw, fh-bx.Photo+1, panel, 1)
+	// Gradien kartu berita: hitam 0,35→0 di 26% teratas; panel 0→0,92 di
+	// 60–88%, lalu →1 di dasar gambar.
+	const bands = 32
+	band := func(from, to float64, color string, op func(p float64) float64) {
+		y0, y1 := int(float64(bx.Photo)*from), int(float64(bx.Photo)*to)
+		for k := 0; k < bands; k++ {
+			a, z := y0+(y1-y0)*k/bands, y0+(y1-y0)*(k+1)/bands
+			rect(0, 0, a, fw, z-a, color, op(float64(a+z)/2/float64(bx.Photo)))
+		}
+	}
+	band(0, 0.26, "&H00000000", func(p float64) float64 { return 0.35 * (1 - p/0.26) })
+	band(0.60, 0.88, panel, func(p float64) float64 { return 0.92 * (p - 0.60) / 0.28 })
+	band(0.88, 1, panel, func(p float64) float64 { return 0.92 + 0.08*(p-0.88)/0.12 })
+	badge := assColor(h.Badge)
+	rule := bx.Left
+	switch h.Align {
+	case config.AlignCenter:
+		rule = bx.Left + (bx.W-cardRuleW)/2
+	case config.AlignRight:
+		rule = bx.Left + bx.W - cardRuleW
+	}
+	rect(1, rule, bx.Top-cardGap-cardRuleUp, cardRuleW, cardRuleH, badge, 1)
+	writeBoxText(b, bx, h, start, end)
+	if bx.Credit > 0 {
+		credit := escapeText(h.Credit)
+		cw := int(math.Ceil(headlineWidth(h)(credit)*float64(bx.Credit))) + 2*cardChipX
+		y := bx.Top + len(bx.Lines)*h.Size + h.Size/2
+		x := bx.Left
+		switch h.Align {
+		case config.AlignCenter:
+			x = bx.Left + (bx.W-cw)/2
+		case config.AlignRight:
+			x = bx.Left + bx.W - cw
+		}
+		rect(1, x, y, cw, bx.Credit+2*cardChipY, badge, 1)
+		fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an7\\pos(%d,%d)\\bord0\\shad0\\fs%d\\1c%s&}%s\n",
+			start, end, x+cardChipX, y+cardChipY, bx.Credit, assColor(h.OnBadge), credit)
+	}
+}
+
+// writeJustified: libass tidak punya rata kiri-kanan, jadi tiap baris yang
+// direntangkan ditulis per kata dengan \pos sendiri — sisa lebar baris dibagi
+// rata ke celah antarkata. Baris lain ditulis utuh, rata kiri.
+func writeJustified(b *strings.Builder, bx Box, h config.Headline, start, end string) {
+	width := headlineWidth(h)
+	inner := float64(bx.W - 2*bx.Pad)
+	for i, ln := range bx.Lines {
+		y := bx.Top + bx.Pad + i*h.Size
+		words := strings.Fields(ln)
+		if i >= len(bx.Stretch) || !bx.Stretch[i] || len(words) < 2 {
+			fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an7\\pos(%d,%d)\\bord0\\shad0}%s\n", start, end, bx.Left+bx.Pad, y, ln)
+			continue
+		}
+		used := 0.0
+		for _, w := range words {
+			used += width(w) * float64(h.Size)
+		}
+		gap := (inner - used) / float64(len(words)-1)
+		x := float64(bx.Left + bx.Pad)
+		for _, w := range words {
+			fmt.Fprintf(b, "Dialogue: 2,%s,%s,Headline,,0,0,0,,{\\an7\\pos(%d,%d)\\bord0\\shad0}%s\n", start, end, int(math.Round(x)), y, w)
+			x += width(w)*float64(h.Size) + gap
+		}
 	}
 }
 

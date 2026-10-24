@@ -176,6 +176,7 @@ type EncodeOpts struct {
 	// Dipakai kotak judul watermark (notes/44): kotaknya buram, dan logo yang
 	// menempel ke tepinya harus terlihat utuh seperti di pratinjau.
 	LogosOverSubs bool
+	Photo         float64 // lihat Layout.Photo
 }
 
 // Layout menempatkan video ke bingkai target.
@@ -208,6 +209,10 @@ type Layout struct {
 	Zoom       int         // persen; artinya bergantung Mode (lihat di atas)
 	Watermark  Watermark   // ditumpuk SETELAH video dipasang ke bingkai
 	Logos      []Watermark // logo tambahan, ditumpuk berurutan di atas Watermark
+	// Photo > 0 = tampilan kartu berita: video MEMENUHI bagian atas bingkai
+	// setinggi Photo (pecahan tinggi bingkai, potong tengah), sisanya hitam —
+	// panel berwarnanya digambar .ass di atasnya. Mode/Background/Zoom diabaikan.
+	Photo float64
 }
 
 // Watermark = gambar yang ditumpuk di atas video setelah reframe.
@@ -247,6 +252,11 @@ func ReframeFilter(l Layout, targetW, targetH int) string {
 	chain := centerCropChain(l, targetW, targetH)
 	if l.Mode == "fit" {
 		chain = wholePictureChain(l, targetW, targetH)
+	}
+	if l.Photo > 0 {
+		ph := evenBox(int(float64(targetH) * l.Photo))
+		chain = fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=increase:flags=lanczos,crop=%d:%d,pad=%d:%d:0:0:black",
+			targetW, ph, targetW, ph, targetW, targetH)
 	}
 	for i, b := range append([]Watermark{l.Watermark}, l.Logos...) {
 		chain = watermarkChain(chain, b, targetW, targetH, i)
@@ -454,7 +464,7 @@ func (c *Client) ClipReframe(ctx context.Context, input string, start, end float
 func burnFilter(enc EncodeOpts, targetW, targetH int, sub string) string {
 	l := Layout{
 		Mode: enc.Mode, Background: enc.Background, Zoom: enc.Zoom,
-		Watermark: enc.Watermark, Logos: enc.Logos,
+		Watermark: enc.Watermark, Logos: enc.Logos, Photo: enc.Photo,
 	}
 	top := enc.LogosOverSubs && sub != ""
 	if top {

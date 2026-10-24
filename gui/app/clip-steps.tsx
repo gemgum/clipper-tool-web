@@ -1,6 +1,7 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, type LucideIcon } from "lucide-react";
+import { useI18n } from "./i18n";
 
 // Potongan layar "Atur klip" (DESIGN.md §4, §8). Semua kendali elemen asli:
 // <button> dengan aria-pressed untuk pilihan, bukan div ber-onClick — Tab dan
@@ -52,20 +53,37 @@ export function ChoiceCards<T extends string>({
 
 /** Deret tombol dalam satu kotak bergaris; yang aktif berlatar gelap. */
 export function Segmented<T extends string | number>({
-  value, onChange, options, label,
+  value, onChange, options, label, iconOnly,
 }: {
   value: T; onChange: (v: T) => void; label: string;
   options: { value: T; name: string; icon?: LucideIcon }[];
+  // iconOnly = tombol hanya ikon; namanya pindah ke aria-label & title.
+  iconOnly?: boolean;
 }) {
   return (
-    <div className="segmented" role="group" aria-label={label}>
+    <div className={"segmented" + (iconOnly ? " icon-seg" : "")} role="group" aria-label={label}>
       {options.map((o) => (
         <button key={String(o.value)} type="button" className={o.value === value ? "on" : ""}
-          aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
-          {o.icon && <o.icon className="ico" aria-hidden="true" />}{o.name}</button>
+          aria-pressed={o.value === value} onClick={() => onChange(o.value)}
+          aria-label={iconOnly ? o.name : undefined} title={iconOnly ? o.name : undefined}>
+          {o.icon && <o.icon className="ico" aria-hidden="true" />}{!iconOnly && o.name}</button>
       ))}
     </div>
   );
+}
+
+// Align = perataan teks yang dikenal engine (card.Align* & config.Align*).
+export type Align = "left" | "center" | "right" | "justify";
+
+/** AlignPicker = empat ikon perataan. SATU pemilih untuk News dan Watermark. */
+export function AlignPicker({ value, onChange, label }: { value: Align; onChange: (v: Align) => void; label: string }) {
+  const { t } = useI18n();
+  return <Segmented iconOnly label={label} value={value} onChange={onChange} options={[
+    { value: "left", name: t("wmAlignLeft"), icon: AlignLeft },
+    { value: "center", name: t("wmAlignCenter"), icon: AlignCenter },
+    { value: "right", name: t("wmAlignRight"), icon: AlignRight },
+    { value: "justify", name: t("wmAlignJustify"), icon: AlignJustify },
+  ]} />;
 }
 
 /** Saklar on/off: kotak centang asli yang digambar ulang, jadi papan ketik dan

@@ -11,25 +11,33 @@
 //
 // Ikon: lucide-react (ISC) — alasannya di gui/app/page.tsx.
 import { copyText } from "../copy-link";
-import { ChevronLeft, ChevronRight, Copy, Download, ImageIcon, ImagePlus, MessageSquare, Palette, Plus, Sparkles, Type } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, ImageIcon, ImagePlus, Plus, RectangleVertical, Sparkles, Stamp, Type, Bookmark } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../page-header";
 import { useI18n } from "../i18n";
-import { eng, engineURL, post } from "../engine";
-import { useKeep, useRestore } from "../persist";
+import { eng, engineURL, post, useWeb } from "../engine";
+import { useKeep, useRestore, useSticky } from "../persist";
 import Stepper from "../stepper";
 import Alerts from "../alerts";
 import EmptyState from "../empty-state";
 import { useAI } from "../ai";
-import { Segmented } from "../clip-steps";
+import { AlignPicker, Segmented, type Align } from "../clip-steps";
 import TabCard, { Group, Pad, Row, Split } from "../tab-card";
-import Stage, { StageFrame } from "../stage";
+import Stage, { Shot, StageFrame } from "../stage";
+import Picker from "../picker";
+import Guides, { GridPicker } from "../guides";
+import { CENTER_X } from "../drag";
+import ColorPanel from "../color-panel";
+import { watermarkColors } from "../watermark-panel";
+import { watermarkToAPI } from "../watermark-model";
+import type { Format } from "../watermark-model";
+import { HL_FONT, MarkFont, MarkLayers, MarkLogoGroup, MarkTemplates, SIZES, useMark, useTemplates } from "../mark";
 import { Newspaper, LayoutGrid } from "lucide-react";
+import ThemePicker, { THEMES } from "../themes";
 
 // Harus sama dengan card.FontSteps / HeaderMax / CardTopMax di engine.
 const FONT_STEPS = 10;
-const HEADER_MAX = 400;
 const CARD_TOP_MAX = 400;
 // Berapa artikel diminta tiap "Muat lebih banyak".
 // Kelipatan 5: satu baris kartu berisi lima artikel.
@@ -45,23 +53,15 @@ type Article = {
 type Feed = { id: string; name: string; url: string; topic: string };
 type Config = { feeds: Feed[]; has_browser: boolean; browser: string };
 type Violation = { kind: string; text: string; detail: string };
+// Geometry = card.Geometry: letak area foto & batas geser, piksel kanvas.
+type Geometry = { width: number; height: number; photo_top: number; photo_h: number; photo_base: number; scale: number; offset_w: number; offset_h: number };
 type Saved = { id: string; file: string; zip: string; width: number; height: number; bytes: number };
 type CardItem = { id: string; made: string; bytes: number; file: string; zip: string; title?: string; source?: string };
 
 const EMPTY: Article = { title: "", summary: "", url: "", image: "", images: [], source: "", domain: "", date: "", published: "" };
 
-// Preset tampilan (§5.2 + empat tambahan pemilik 9 Oktober 2026) — warnanya ditetapkan engine (card.Request.theme);
-// di sini hanya contoh warnanya untuk kotak pilihan.
-const THEMES = [
-  { id: "dark", key: "ncThemeDark", swatch: "#15181D", style: "dark" },
-  { id: "light", key: "ncThemeLight", swatch: "#FFFFFF", style: "light" },
-  { id: "photo", key: "ncThemePhoto", swatch: "#3C2A1E", style: "dark" },
-  { id: "paper", key: "ncThemePaper", swatch: "#F2EBDD", style: "light" },
-  { id: "navy", key: "ncThemeNavy", swatch: "#0F2747", style: "dark" },
-  { id: "red", key: "ncThemeRed", swatch: "#7F1714", style: "dark" },
-  { id: "forest", key: "ncThemeForest", swatch: "#163A2D", style: "dark" },
-  { id: "plum", key: "ncThemePlum", swatch: "#2E1F4A", style: "dark" },
-] as const;
+// Rasio kartu ↔ format bingkai Mark (ukurannya sama; card.FormatOf di engine).
+const FORMAT_OF: Record<string, Format> = { "9:16": "short", "4:5": "feed45", "1:1": "feed11" };
 const RATIOS = [
   { id: "9:16", key: "ncRatioStory", w: 1080, h: 1920 },
   { id: "4:5", key: "ncRatioFeed", w: 1080, h: 1350 },
@@ -71,8 +71,12 @@ const RATIOS = [
 export default function News() {
   const { lang, t } = useI18n();
   const router = useRouter();
-  const [screen, setScreen] = useState<"pick" | "compose" | "done">("pick");
-  const [tab, setTab] = useState<"text" | "photo" | "look" | "caption">("text");
+  // Layar & tab diingat browser: kembali ke halaman ini = posisi yang sama.
+  const [screen, setScreen] = useSticky<"pick" | "compose" | "done">("news.screen", "pick");
+  const [tab, setTab] = useSticky<"format" | "photo" | "headline" | "mark" | "template">("news.tab", "headline");
+  // Tab tersimpan dari versi lama ("caption") jatuh ke Text, tempat caption sekarang.
+  const openTab = (["format", "photo", "headline", "mark", "template"] as const).includes(tab) ? tab : "headline";
+  // Kendali Format yang tampil di tab Headline (pemilih seperti Watermark).
   const [config, setConfig] = useState<Config | null>(null);
   const [error, setError] = useState("");
 
@@ -94,7 +98,8 @@ export default function News() {
   const [article, setArticle] = useState<Article>(EMPTY);
   const [theme, setTheme] = useState("dark");
   const [ratio, setRatio] = useState("9:16");
-  const [align, setAlign] = useState("left");
+  const [align, setAlign] = useState<Align>("left");
+  const [titleAlign, setTitleAlign] = useState<Align>("left");
   const [caption, setCaption] = useState("");
   const [hashtags, setHashtags] = useState("");
   // Mesin AI dari Pengaturan (global atau pengecualian alat "news").
@@ -105,17 +110,64 @@ export default function News() {
   const [checks, setChecks] = useState<{ summary: Violation[]; caption: Violation[] }>({ summary: [], caption: [] });
   const [writeError, setWriteError] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  // ---------- Mark (logo, template, judul Mark) — bersama halaman Mark ----------
+  // Gaya kartu: "card" = kartu News (Chrome) + logo & headline tambahan Mark;
+  // "box" = foto artikel penuh + kotak judul Mark berisi judul & kredit artikel.
+  const [layout, setLayout] = useState<"card" | "box">("card");
+  // Kisi pratinjau (sama dengan halaman Mark): seretan logo, kotak judul, dan
+  // batas foto menempel ke kisi ini; diingat browser.
+  const [grid, setGrid] = useSticky("news.grid", 40);
+  const [gridAlways, setGridAlways] = useSticky("news.gridAlways", true);
+  const m = useMark({ format: FORMAT_OF[ratio] || "short", first: article.image, grid });
+  const tpl = useTemplates((e) => setError(e));
+  const [activeTpl, setActiveTpl] = useSticky("news.template", "");
+  // Pemilih berkas lokal untuk logo ke-i (-1 = tambah); null = tertutup.
+  const [logoPicker, setLogoPicker] = useState<number | null>(null);
+  const web = useWeb();
+  const credit = [article.source || article.domain, article.date].filter(Boolean).join(" · ");
+  // Gaya box: kotak judul Mark diisi judul & kredit artikel — saat gaya dipilih
+  // dan saat artikelnya berganti. Selebihnya diatur bebas di panel Mark (tab
+  // Mark), sama persis dengan halaman Mark.
+  // Gaya card: Mark hanya membawa logo — judulnya milik kartu News, jadi teks
+  // Mark dikosongkan (termasuk sisa simpanan lama).
+  useEffect(() => {
+    if (layout === "box") m.setWatermark({ hlText: article.title, hlCredit: credit });
+    else if (m.watermark.hlText || m.watermark.hlBox) m.setWatermark({ hlText: "", hlBox: false });
+  }, [layout, article.title, credit, m.watermark.hlText, m.watermark.hlBox]); // eslint-disable-line react-hooks/exhaustive-deps
+  const changeLayout = (v: "card" | "box") => {
+    if (v === "box") m.setWatermark({ hlBox: true, hlStyle: "box" });
+    setLayout(v);
+  };
+  // Template: bentuknya sama dengan template halaman Mark; format ↔ rasio kartu.
+  const applyTemplate = (v: Record<string, unknown>) => {
+    const r = Object.keys(FORMAT_OF).find((k) => FORMAT_OF[k] === v.format);
+    if (r) setRatio(r);
+    m.applyMark(v, m.watermark.hlText);
+  };
+  // Template bawaan terpasang di setiap artikel baru (dibaca lewat ref supaya
+  // useArticle tetap stabil).
+  const applyDefault = useRef(() => {});
+  applyDefault.current = () => {
+    if (tpl.defaultTemplate) { applyTemplate(tpl.defaultTemplate.data); setActiveTpl(tpl.defaultTemplate.name); }
+  };
   // Laci "atur sendiri".
   const [zoom, setZoom] = useState(1);
   const [photoFit, setPhotoFit] = useState("cover");
   const [photoFill, setPhotoFill] = useState("blur");
   const [titleStep, setTitleStep] = useState(0);
   const [paragraphStep, setParagraphStep] = useState(0);
-  const [header, setHeader] = useState(0);
   const [cardTop, setCardTop] = useState(0);
 
-  const [preview, setPreview] = useState("");
-  const [previewBusy, setPreviewBusy] = useState(false);
+  // Pratinjau seketika (HTML kartu + letak bagian yang bisa diseret) dan hasil
+  // render sungguhan dari Chrome (tombol Preview result).
+  const [live, setLive] = useState<{ html: string; geometry: Geometry } | null>(null);
+  const [shot, setShot] = useState("");
+  const [shooting, setShooting] = useState(false);
+  const [photoX, setPhotoX] = useState(0);
+  const [photoY, setPhotoY] = useState(0);
+  // Geseran batas foto–isi (card.Request.CardY), diseret di pratinjau.
+  const [cardY, setCardY] = useState(0);
   // Layar 3.
   const [saved, setSaved] = useState<Saved | null>(null);
   const [saving, setSaving] = useState(false);
@@ -150,7 +202,8 @@ export default function News() {
   const useArticle = useCallback((a: Article) => {
     setArticle({ ...EMPTY, ...a, images: a.images?.length ? a.images : (a.image ? [a.image] : []) });
     setCaption(""); setHashtags(""); setChecks({ summary: [], caption: [] }); setWriteError("");
-    setPreview(""); setSaved(null); setZoom(1);
+    setShot(""); setSaved(null); setZoom(1); setPhotoX(0); setPhotoY(0);
+    if (a.title) applyDefault.current();
   }, []);
 
   const readArticle = useCallback(async (url: string, fallback?: Article) => {
@@ -220,37 +273,84 @@ export default function News() {
 
   const themeDef = THEMES.find((x) => x.id === theme) || THEMES[0];
   const cardBody = useCallback((r: string, previewOnly: boolean) => JSON.stringify({
-    article, theme, style: themeDef.style, ratio: r, align, lang, preview: previewOnly, caption,
+    article, theme, style: themeDef.style, ratio: r, align, title_align: titleAlign, lang, preview: previewOnly, caption,
     hashtags: hashtags.split(/\s+/).map((h) => h.replace(/^#/, "")).filter(Boolean),
-    photo: { offset_x: 0, offset_y: 0, zoom, fit: photoFit, fill: photoFill },
-    fonts: { title: titleStep, paragraph: paragraphStep }, header, card_top: cardTop,
-  }), [article, theme, themeDef.style, align, lang, caption, hashtags, zoom, photoFit, photoFill, titleStep, paragraphStep, header, cardTop]);
+    photo: { offset_x: photoX, offset_y: photoY, zoom, fit: photoFit, fill: photoFill },
+    fonts: { title: titleStep, paragraph: paragraphStep }, header: 0, card_top: cardTop, card_y: cardY,
+  }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, zoom, photoX, photoY, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY]);
+  // Yang benar-benar dirender (simpan & Preview result): kartu + gaya + Mark,
+  // dibakar engine Mark yang sama dengan halaman Mark.
+  const renderBody = (r: string, previewOnly: boolean) => JSON.stringify({
+    ...JSON.parse(cardBody(r, previewOnly)), layout, font: HL_FONT,
+    mark: watermarkToAPI({ ...m.eff, format: FORMAT_OF[r] || "short" }, HL_FONT),
+  });
 
+  // Pratinjau seketika: tanpa Chrome, jadi cukup jeda pendek (juga saat diseret).
   const fingerprint = cardBody(ratio, true);
   useEffect(() => {
-    if (screen !== "compose" || !article.title || !config?.has_browser) return;
-    const id = setTimeout(async () => {
-      setPreviewBusy(true);
-      try {
-        const d = await post(`/api/card`, fingerprint, t("errBuildCard"));
-        setPreview(eng(`${d.file}?v=${Date.now()}`));
-      } catch (e: any) { setError(e.message); }
-      finally { setPreviewBusy(false); }
-    }, 700);
+    if (screen !== "compose" || !article.title) return;
+    const id = setTimeout(() => {
+      post<{ html: string; geometry: Geometry }>(`/api/card/html`, fingerprint, t("errBuildCard")).then(setLive).catch((e) => setError(e.message));
+    }, 80);
     return () => clearTimeout(id);
-  }, [fingerprint, screen, config?.has_browser]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fingerprint, screen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const previewResult = async () => {
+    setShooting(true); setError("");
+    try {
+      const d = await post(`/api/card`, renderBody(ratio, true), t("errBuildCard"));
+      setShot(eng(`${d.file}?v=${Date.now()}`));
+    } catch (e: any) { setError(e.message); }
+    setShooting(false);
+  };
+
+  // Seret di pratinjau (delta, piksel layar → piksel kanvas): foto = geser
+  // OffsetX/Y dalam batas engine (offset_w/h); isi = Header (ruang 1920).
+  // Skala dari lebar bingkai SEBENARNYA (.nc-card dibatasi tinggi layar juga).
+  const [cardW, setCardW] = useState(0);
+  // Bingkai yang sama juga induk lapisan Mark (m.boxRef: seret logo & judul).
+  const cardRef = useCallback((el: HTMLDivElement | null) => {
+    m.boxRef.current = el;
+    if (!el) return;
+    new ResizeObserver(() => setCardW(el.clientWidth)).observe(el);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const frameH = Math.round((cardW * m.fh) / m.fw);
+  const photoSrc = !article.image ? "" : article.image.startsWith("http") ? article.image : eng(`/api/image?path=${encodeURIComponent(article.image)}`);
+  const geo = live?.geometry;
+  const k = geo && cardW ? cardW / geo.width : 1;
+  // Seret foto (zoom > 100%): geser OffsetX/Y dalam batas engine (offset_w/h).
+  const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const startDrag = (e: React.PointerEvent) => {
+    if (!geo) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, ox: photoX, oy: photoY };
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d || !geo) return;
+    const lim = (v: number, m: number) => Math.min(m, Math.max(-m, Math.round(v)));
+    setPhotoX(lim(d.ox + (e.clientX - d.x) / k, geo.offset_w)); setPhotoY(lim(d.oy + (e.clientY - d.y) / k, geo.offset_h));
+  };
+  const endDrag = () => { drag.current = null; };
+  // Seret isi = batas foto–isi (CardY) lewat fungsi seret yang SAMA dengan Mark
+  // (m.dragProps: kisi, magnet di posisi bawaan); jepit 20–85% = card.render.
+  const edgeDrag = geo ? m.dragProps(m.fw / 2, geo.photo_top + geo.photo_h, (_x, y) => {
+    const photo = Math.min(Math.max(Math.round(y) - geo.photo_top, Math.trunc(geo.height / 5)), Math.trunc((geo.height * 85) / 100));
+    setCardY(photo - geo.photo_base);
+  }, geo.photo_top + geo.photo_base, m.fh) : {};
+  const standard = titleStep === 0 && paragraphStep === 0 && cardTop === 0 && zoom === 1 && photoX === 0 && photoY === 0 && cardY === 0;
+  const resetLook = () => { setTitleStep(0); setParagraphStep(0); setCardTop(0); setZoom(1); setPhotoX(0); setPhotoY(0); setCardY(0); };
 
   const save = useCallback(async () => {
     setSaving(true); setRenderError("");
     try {
-      const d = await post(`/api/card`, cardBody(ratio, false), t("errBuildCard"));
+      const d = await post(`/api/card`, renderBody(ratio, false), t("errBuildCard"));
       let bytes = 0;
       try { bytes = Number((await fetch(eng(d.file), { method: "HEAD" })).headers.get("content-length")) || 0; } catch {}
       setSaved({ id: d.id, file: eng(d.file), zip: eng(d.zip), width: d.width, height: d.height, bytes });
       setCards(null); setScreen("done");
     } catch (e: any) { setRenderError(e.message); setScreen("done"); }
     finally { setSaving(false); }
-  }, [cardBody, ratio, t]);
+  }, [renderBody, ratio, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- Layar 3 ----------
   useEffect(() => {
@@ -261,11 +361,11 @@ export default function News() {
   const otherRatio = ratio === "4:5" ? "9:16" : "4:5";
   const renderAlt = useCallback(async () => {
     try {
-      const d = await post(`/api/card`, cardBody(otherRatio, false), t("errBuildCard"));
+      const d = await post(`/api/card`, renderBody(otherRatio, false), t("errBuildCard"));
       setCards(null);
       const a = document.createElement("a"); a.href = eng(d.file); a.download = `card-${otherRatio.replace(":", "x")}.png`; a.click();
     } catch (e: any) { setError(e.message); }
-  }, [cardBody, otherRatio, t]);
+  }, [renderBody, otherRatio, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Caption yang tersalin PERSIS seperti kotak pratinjaunya (§6): teks, hashtag,
   // lalu baris kredit — tanpa em dash.
@@ -279,14 +379,17 @@ export default function News() {
   const newCard = () => { setScreen("pick"); setPicked(""); useArticle(EMPTY); setRenderError(""); };
 
   // ---------- isian tersimpan ----------
-  useKeep("news", { article, caption, hashtags, theme, ratio, align, zoom, photoFit, photoFill, titleStep, paragraphStep, header, cardTop });
+  useKeep("news", { article, caption, hashtags, theme, ratio, align, titleAlign, zoom, photoX, photoY, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, saved,
+    layout, mark: { watermark: m.watermark, logos: m.logos, logoOn: m.logoOn } });
   useRestore<Record<string, unknown>>("news", (v) => {
     const set = <T,>(fn: (x: T) => void, val: unknown) => { if (val !== undefined && val !== null) fn(val as T); };
     set(setArticle, v.article); set(setCaption, v.caption); set(setHashtags, v.hashtags);
-    if (typeof v.theme === "string" && THEMES.some((x) => x.id === v.theme)) setTheme(v.theme);
-    set(setRatio, v.ratio); set(setAlign, v.align); set(setZoom, v.zoom);
+    if (typeof v.theme === "string" && (v.theme === "auto" || THEMES.some((x) => x.id === v.theme))) setTheme(v.theme);
+    set(setRatio, v.ratio); set(setAlign, v.align); set(setTitleAlign, v.titleAlign); set(setZoom, v.zoom); set(setPhotoX, v.photoX); set(setPhotoY, v.photoY); set(setCardY, v.cardY); set(setSaved, v.saved);
+    if (v.layout === "card" || v.layout === "box") setLayout(v.layout);
+    if (v.mark && typeof v.mark === "object") m.applyMark(v.mark as Record<string, unknown>);
     set(setPhotoFit, v.photoFit); set(setPhotoFill, v.photoFill);
-    set(setTitleStep, v.titleStep); set(setParagraphStep, v.paragraphStep); set(setHeader, v.header); set(setCardTop, v.cardTop);
+    set(setTitleStep, v.titleStep); set(setParagraphStep, v.paragraphStep); set(setCardTop, v.cardTop);
   });
 
   // ---------- turunan ----------
@@ -318,7 +421,7 @@ export default function News() {
     ? { title: article.title || t("tabNews"), subtitle: [article.source || article.domain, article.date].filter(Boolean).join(" · "), actions: (
         <>
           <button type="button" className="ghost" onClick={() => setScreen("pick")}><ChevronLeft className="ico" aria-hidden="true" /> {t("ncChangeArticle")}</button>
-          <button type="button" className="primary big" onClick={save} disabled={saving || !article.title || !config?.has_browser}>
+          <button type="button" className="primary big" onClick={save} disabled={saving || !article.title || (layout === "card" && !config?.has_browser)}>
             {saving ? t("rendering") : t("ncSaveContinue")} <ChevronRight className="ico" aria-hidden="true" />
           </button>
         </>) }
@@ -331,6 +434,7 @@ export default function News() {
   return (
     <div className="screen scroll clips-v2 news-v2">
       <PageHeader title={headerProps.title} subtitle={headerProps.subtitle}>{headerProps.actions}</PageHeader>
+      <MarkFont />
       <Alerts items={[
         error && { kind: "error" as const, text: error },
         config && !config.has_browser && { kind: "warn" as const, key: "no-browser", text: `${t("browserMissing")} CLIPPER_CHROME ${t("browserMissingTail")}` },
@@ -413,57 +517,61 @@ export default function News() {
         // kolom pratinjau yang menempel (stage.tsx).
         <div className="setup-grid">
           <div className="setup-main">
-            <TabCard label={t("ncLook")} open={tab} setOpen={setTab} tabs={[
-              { key: "text", icon: Type, label: t("ncTabText") },
+            {/* Bentuk acuan Watermark: Format | Photo | Headline | Caption. */}
+            {/* Satu kendali untuk satu fungsi: Format (bingkai) | Photo | Text (teks
+                + SATU Format + SATU Theme) | Mark (logo, headline tambahan, template) | Caption. */}
+            <TabCard label={t("tabNews")} open={openTab} setOpen={setTab} tabs={[
+              { key: "format", icon: RectangleVertical, label: t("wmFormatTitle") },
               { key: "photo", icon: ImageIcon, label: t("ncPhoto") },
-              { key: "look", icon: Palette, label: t("ncLook") },
-              { key: "caption", icon: MessageSquare, label: t("ncTabCaption") },
+              { key: "headline", icon: Type, label: t("ncTabText") },
+              { key: "mark", icon: Stamp, label: t("ncTabMark") },
+              { key: "template", icon: Bookmark, label: t("wmTplTitle") },
             ]}>
-              {tab === "text" && (
-                // Sejajar: kiri = ringkasan di kartu, kanan = data artikel.
-                <Group title={t("ncCardText")}>
-                  <Split side={<>
-                    <span className="mc-r-l">{t("articleTitle")}</span>
-                    <input value={article.title} aria-label={t("articleTitle")} onChange={(e) => setArticle((a) => ({ ...a, title: e.target.value }))} />
-                    <span className="mc-r-l">{t("sourceBadge")}</span>
-                    <input value={article.source} aria-label={t("sourceBadge")} onChange={(e) => setArticle((a) => ({ ...a, source: e.target.value }))} />
-                    <span className="mc-r-l">{t("date")}</span>
-                    <input value={article.date} aria-label={t("date")} onChange={(e) => setArticle((a) => ({ ...a, date: e.target.value }))} />
+              {openTab === "format" && (
+                // Sejajar: kiri = bingkai, gaya & cara foto dipasang; kanan = posisi
+                // kartu (milik kartu News: mati di gaya box). Batas foto–isi diseret
+                // langsung di pratinjau.
+                <Group title={t("wmFormatTitle")}>
+                  <Split sideOff={layout === "box"} side={<>
+                    <span className="mc-r-l">{t("cardDown")}</span>
+                    <Stepper value={cardTop} onChange={setCardTop} min={0} max={CARD_TOP_MAX} step={10} suffix="px" />
+                    <span className="mc-note">{t("ncEdgeDrag")}</span>
+                    <button type="button" className="ghost" onClick={resetLook} disabled={standard}>{t("fontReset")}</button>
                   </>}>
-                      <Pad>
-                        <div className="nc-pad-head">
-                          <label className="mc-r-l" htmlFor="nc-sum">{t("ncSummaryLabel")}</label>
-                          <button type="button" className="ai-btn" onClick={() => write("summary")} disabled={!!writing || !article.url}>
-                            <Sparkles className="ico" aria-hidden="true" /> {writing === "summary" ? t("analyzing") : t("ncSummarise")}
-                          </button>
-                        </div>
-                        <textarea id="nc-sum" rows={3} value={article.summary} onChange={(e) => { setArticle((a) => ({ ...a, summary: e.target.value })); setChecks((c) => ({ ...c, summary: [] })); }} />
-                        <div className="nc-count">
-                          <span className={"count-" + band}>{t(band === "ok" ? "ncCharsOk" : band === "dense" ? "ncCharsDense" : "ncCharsLong", { n })}</span>
-                          <span className="meta">{t("ncSafeLimit")}</span>
-                        </div>
-                        <Checks list={checks.summary} />
-                        {writeError && <p className="nc-note-err">{writeError}</p>}
-                      </Pad>
+                    <Row label={t("ratio")}>
+                      <Segmented label={t("ratio")} value={ratio} onChange={setRatio} options={RATIOS.map((r) => ({ value: r.id, name: t(r.key) }))} />
+                    </Row>
+                    <Row label={t("wmStyle")} note={t(layout === "box" ? "ncStyleBoxNote" : "ncStyleCardNote")}>
+                      <Segmented label={t("wmStyle")} value={layout} onChange={changeLayout}
+                        options={[{ value: "card" as const, name: t("wmStyleLook") }, { value: "box" as const, name: t("wmStyleBox") }]} />
+                    </Row>
+                    {/* Sudut kotak judul: hanya ada di gaya box. */}
+                    <Row label={t("wmCorner")} off={layout !== "box"}>
+                      <Segmented label={t("wmCorner")} value={m.watermark.hlSharp ? "sharp" : "round"} onChange={(v) => m.setWatermark({ hlSharp: v === "sharp" })}
+                        options={[{ value: "round", name: t("wmCornerRound") }, { value: "sharp", name: t("wmCornerSharp") }]} />
+                    </Row>
+                    <Row label={t("photoFitLabel")} off={layout === "box"}>
+                      <Segmented label={t("photoFitLabel")} value={photoFit} onChange={(v) => { setPhotoFit(v); setZoom(1); setPhotoX(0); setPhotoY(0); }}
+                        options={[{ value: "cover", name: t("photoFitCover") }, { value: "whole", name: t("photoFitWhole") }]} />
+                    </Row>
+                    {/* Selalu ada; hanya berarti saat seluruh foto dimuat. */}
+                    <Row label={t("photoFill")} off={photoFit !== "whole" || layout === "box"}>
+                      <Segmented label={t("photoFill")} value={photoFill} onChange={setPhotoFill}
+                        options={[{ value: "blur", name: t("photoFillBlur") }, { value: "solid", name: t("photoFillSolid") }]} />
+                    </Row>
                   </Split>
                 </Group>
               )}
 
-              {tab === "photo" && (
-                // Sejajar: kiri = pilihan foto, kanan = cara memasangnya.
+              {openTab === "photo" && (
+                // Sejajar: kiri = pilihan foto, kanan = besarnya (geser di pratinjau).
                 <Group title={t("ncPhoto")}>
                   <Split side={<>
-                    <span className="mc-r-l">{t("photoFitLabel")}</span>
-                    <Segmented label={t("photoFitLabel")} value={photoFit} onChange={(v) => { setPhotoFit(v); setZoom(1); }}
-                      options={[{ value: "cover", name: t("photoFitCover") }, { value: "whole", name: t("photoFitWhole") }]} />
-                    {/* Selalu ada; hanya berarti saat seluruh foto dimuat. */}
-                    <span className="mc-r-l">{t("photoFill")}</span>
-                    <fieldset className="cp-plain" disabled={photoFit !== "whole"}>
-                      <Segmented label={t("photoFill")} value={photoFill} onChange={setPhotoFill}
-                        options={[{ value: "blur", name: t("photoFillBlur") }, { value: "solid", name: t("photoFillSolid") }]} />
-                    </fieldset>
                     <span className="mc-r-l">{t("photoZoom")}</span>
-                    <Stepper value={Math.round(zoom * 100)} onChange={(v) => setZoom(v / 100)} min={100} max={400} step={5} suffix="%" />
+                    <fieldset className="cp-plain" disabled={layout === "box"}>
+                      <Stepper value={Math.round(zoom * 100)} onChange={(v) => setZoom(v / 100)} min={100} max={400} step={5} suffix="%" />
+                    </fieldset>
+                    <span className="mc-note">{t("ncPhotoDrag")}</span>
                   </>}>
                       <Pad>
                         <span className="mc-note">{article.images?.length ? t("ncPhotoHint") : t("ncPhotoNone")}</span>
@@ -471,7 +579,7 @@ export default function News() {
                           {(article.images || []).map((src, i) => (
                             <button key={src} type="button" className={"photo-btn" + (article.image === src ? " on" : "")}
                               aria-pressed={article.image === src} aria-label={t("ncPhotoN", { n: i + 1 })}
-                              onClick={() => setArticle((a) => ({ ...a, image: src }))}>
+                              onClick={() => { setArticle((a) => ({ ...a, image: src })); setPhotoX(0); setPhotoY(0); }}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img alt="" src={src.startsWith("http") ? src : eng(`/api/image?path=${encodeURIComponent(src)}`)} />
                             </button>
@@ -489,42 +597,37 @@ export default function News() {
                 </Group>
               )}
 
-              {tab === "look" && (
-                // Sejajar: kiri = tema & perataan, kanan = huruf dan jarak.
-                <Group title={t("ncLook")}>
-                  <Split side={<>
-                    <span className="mc-r-l">{t("fontTitle")}</span>
-                    <Stepper value={titleStep} onChange={setTitleStep} min={-FONT_STEPS} max={FONT_STEPS} />
-                    <span className="mc-r-l">{t("fontParagraph")}</span>
-                    <Stepper value={paragraphStep} onChange={setParagraphStep} min={-FONT_STEPS} max={FONT_STEPS} />
-                    <span className="mc-r-l">{t("headerSpace")}</span>
-                    <Stepper value={header} onChange={setHeader} min={0} max={HEADER_MAX} step={10} suffix="px" />
-                    <span className="mc-r-l">{t("cardDown")}</span>
-                    <Stepper value={cardTop} onChange={setCardTop} min={0} max={CARD_TOP_MAX} step={10} suffix="px" />
-                    <button type="button" className="ghost" onClick={() => { setTitleStep(0); setParagraphStep(0); setHeader(0); setCardTop(0); setZoom(1); }}
-                      disabled={titleStep === 0 && paragraphStep === 0 && header === 0 && cardTop === 0 && zoom === 1}>{t("fontReset")}</button>
-                  </>}>
-                      <Pad>
-                        <div className="theme-grid" role="group" aria-label={t("ncLook")}>
-                          {THEMES.map((x) => (
-                            <button key={x.id} type="button" className={"theme-tile" + (theme === x.id ? " on" : "")}
-                              aria-pressed={theme === x.id} onClick={() => setTheme(x.id)}>
-                              <span className="theme-swatch" style={{ background: x.swatch }} />
-                              <span>{t(x.key)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </Pad>
-                      <Row label={t("ncAlign")}>
-                        <Segmented label={t("ncAlign")} value={align} onChange={setAlign}
-                          options={[{ value: "left", name: t("ncAlignLeft") }, { value: "center", name: t("ncAlignCenter") },
-                            { value: "right", name: t("ncAlignRight") }, { value: "justify", name: t("ncAlignJustify") }]} />
-                      </Row>
-                  </Split>
+              {openTab === "headline" && <>
+                {/* Teks kartu SEKALI, lalu caption postingan. */}
+                <Group title={t("ncCardText")}>
+                  <Pad>
+                    {/* Ringkasan hanya ada di kartu News: mati di gaya box. */}
+                    <fieldset className="cp-plain" disabled={layout === "box"}>
+                    <div className="nc-pad-head">
+                      <label className="mc-r-l" htmlFor="nc-sum">{t("ncSummaryLabel")}</label>
+                      <button type="button" className="ai-btn" onClick={() => write("summary")} disabled={!!writing || !article.url}>
+                        <Sparkles className="ico" aria-hidden="true" /> {writing === "summary" ? t("analyzing") : t("ncSummarise")}
+                      </button>
+                    </div>
+                    <textarea id="nc-sum" rows={3} value={article.summary} onChange={(e) => { setArticle((a) => ({ ...a, summary: e.target.value })); setChecks((c) => ({ ...c, summary: [] })); }} />
+                    <div className="nc-count">
+                      <span className={"count-" + band}>{t(band === "ok" ? "ncCharsOk" : band === "dense" ? "ncCharsDense" : "ncCharsLong", { n })}</span>
+                      <span className="meta">{t("ncSafeLimit")}</span>
+                    </div>
+                    <Checks list={checks.summary} />
+                    {writeError && <p className="nc-note-err">{writeError}</p>}
+                    </fieldset>
+                  </Pad>
+                  <Row label={t("articleTitle")}>
+                    <input value={article.title} aria-label={t("articleTitle")} onChange={(e) => setArticle((a) => ({ ...a, title: e.target.value }))} />
+                  </Row>
+                  <Row label={t("sourceBadge")}>
+                    <input value={article.source} aria-label={t("sourceBadge")} onChange={(e) => setArticle((a) => ({ ...a, source: e.target.value }))} />
+                  </Row>
+                  <Row label={t("date")}>
+                    <input value={article.date} aria-label={t("date")} onChange={(e) => setArticle((a) => ({ ...a, date: e.target.value }))} />
+                  </Row>
                 </Group>
-              )}
-
-              {tab === "caption" && (
                 <Group title={t("ncCaptionTitle")}>
                   <Pad>
                     <div className="nc-pad-head">
@@ -540,18 +643,91 @@ export default function News() {
                     <input id="nc-tags" value={hashtags} aria-label={t("ncHashtags")} onChange={(e) => setHashtags(e.target.value)} placeholder="#..." />
                   </Row>
                 </Group>
+              </>}
+
+              {openTab === "mark" && <>
+                <MarkLogoGroup m={m} web={web} setError={setError} openPicker={setLogoPicker} />
+                {/* Panel judul. Kiri = teks di kartu, dibedakan Headline & Summary
+                    (gaya box: hanya Headline, kotak judulnya); kanan = kotak judul
+                    Mark (garis tepi, warna) — hanya berlaku di gaya box; sudutnya di tab Format.
+                    Teks diisi di tab Text, gaya dipilih di tab Format. */}
+                {(() => {
+                  const box = layout === "box";
+                  const steps = { s: -3, m: 0, l: 3 } as const;
+                  const sizeOf = (step: number) => (step <= -2 ? "s" : step >= 2 ? "l" : "m");
+                  const sml = <T extends string | number>(value: T, onChange: (v: T) => void, vals: [T, T, T]) => (
+                    <Segmented label={t("wmTextSize")} value={value} onChange={onChange}
+                      options={[{ value: vals[0], name: t("wmSmall") }, { value: vals[1], name: t("wmMedium") }, { value: vals[2], name: t("wmLarge") }]} />
+                  );
+                  return (
+                    <Group title={t("wmTabHeadline")}>
+                      <Split sideOff={!box} side={<>
+                        <span className="mc-r-l">{t("outline")}</span>
+                        <Stepper value={m.watermark.hlOutline} onChange={(v) => m.setWatermark({ hlOutline: v })} min={0} max={12} step={1} suffix="px" />
+                        <ColorPanel targets={watermarkColors(m.watermark, m.setWatermark, t, true)} />
+                      </>}>
+                        <Row label={t("wmTheme")} off={box}>
+                          {/* Auto: engine mencari warna yang menyambung dasar foto artikel
+                              (card.AutoLook — sama dengan Auto di halaman Mark). */}
+                          <ThemePicker label={t("wmTheme")} value={theme} onChange={setTheme}
+                            auto={{ onClick: () => setTheme("auto"), disabled: !article.image }} />
+                        </Row>
+                        <Row label={t("ncHeadlineSize")}>
+                          {box ? sml(m.watermark.hlSize, (v) => m.setWatermark({ hlSize: v }), [SIZES[0], SIZES[1], SIZES[2]])
+                            : sml(sizeOf(titleStep), (v) => setTitleStep(steps[v]), ["s", "m", "l"])}
+                        </Row>
+                        <Row label={t("ncHeadlineAlign")}>
+                          <AlignPicker label={t("ncHeadlineAlign")} value={box ? m.watermark.hlAlign || "left" : titleAlign}
+                            onChange={box ? (v) => m.setWatermark({ hlAlign: v }) : setTitleAlign} />
+                        </Row>
+                        <Row label={t("ncSummarySize")} off={box}>
+                          {sml(sizeOf(paragraphStep), (v) => setParagraphStep(steps[v]), ["s", "m", "l"])}
+                        </Row>
+                        <Row label={t("ncSummaryAlign")} off={box}>
+                          <AlignPicker label={t("ncSummaryAlign")} value={align} onChange={setAlign} />
+                        </Row>
+                      </Split>
+                    </Group>
+                  );
+                })()}
+              </>}
+
+              {openTab === "template" && (
+                <MarkTemplates tpl={tpl} active={activeTpl} onApply={(v, name) => { applyTemplate(v); setActiveTpl(name); }}
+                  data={() => ({ format: FORMAT_OF[ratio] || "short", logoOn: m.logoOn, logos: m.logos, watermark: { ...m.watermark, hlText: "" } })} />
               )}
             </TabCard>
           </div>
 
-          {/* Rasio di bawah bingkai, setara tombol di bawah bingkai Watermark. */}
-          <Stage title={t("previewTitle")} badge={ratio} help={t("ncActualSize", { w: ratioDef.w, h: ratioDef.h })}
-            tools={<Segmented label={t("ratio")} value={ratio} onChange={setRatio} options={RATIOS.map((r) => ({ value: r.id, name: t(r.key) }))} />}>
+          {/* Pratinjau seketika seperti Watermark: halaman kartu dari engine
+              (/api/card/html, template yang SAMA dengan PNG) di dalam iframe,
+              ditambah dua lapis seret — foto (geser saat zoom > 100%) dan isi
+              (= "Push the content down"). "Preview result" = PNG dari Chrome. */}
+          <Stage title={t("previewTitle")} badge={`${ratioDef.w} × ${ratioDef.h}`} help={t("ncDragHelp")}
+            action={
+              <button type="button" className="wm-preview-btn" disabled={!article.title || shooting || (layout === "card" && !config?.has_browser)} onClick={previewResult}>
+                <Eye className="ico" aria-hidden="true" /> {shooting ? t("wmPreviewing") : t("wmPreviewResult")}
+              </button>
+            }
+            tools={<GridPicker grid={grid} setGrid={setGrid} always={gridAlways} setAlways={setGridAlways} />}>
             <StageFrame>
-              <div className="nc-card" style={{ aspectRatio: ratio.replace(":", " / ") }}>
-                {preview ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={preview} alt="" /> : <span className="meta">{t("ncPreviewWait")}</span>}
-                {previewBusy && <span className="nc-busy">{t("rendering")}</span>}
-                {band === "long" && <span className="nc-warn">{t("ncTooLongOnCard")}</span>}
+              <div className="nc-card nc-live" ref={cardRef} style={{ aspectRatio: ratio.replace(":", " / "), "--pvh": `${frameH}px` } as React.CSSProperties}>
+                {layout === "box" ? (
+                  // Gaya box: foto artikel memenuhi bingkai (potong tengah, sama dengan engine).
+                  photoSrc ? /* eslint-disable-next-line @next/next/no-img-element */ <img className="nc-box-photo" src={photoSrc} alt="" draggable={false} />
+                    : <span className="meta">{t("ncPhotoNone")}</span>
+                ) : live && geo ? <>
+                  <iframe title={t("previewTitle")} srcDoc={live.html} sandbox="" tabIndex={-1}
+                    style={{ width: geo.width, height: geo.height, transform: `scale(${k})` }} />
+                  <div className={"nc-drag" + (geo.offset_w || geo.offset_h ? " can" : "")} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag}
+                    style={{ top: geo.photo_top * k, height: geo.photo_h * 0.75 * k }} />
+                  <div className="nc-drag can" {...edgeDrag} style={{ top: (geo.photo_top + geo.photo_h * 0.75) * k, bottom: 0 }} />
+                </> : <span className="meta">{t("ncPreviewWait")}</span>}
+                {cardW > 0 && <Guides grid={grid} visible={gridAlways || m.dragAt !== null} playH={m.fh}
+                  atX={(m.dragAt?.x ?? m.placed[m.sel]?.x) === CENTER_X} atY={(m.dragAt?.y ?? m.placed[m.sel]?.y) === m.fh / 2} dragAt={m.dragAt} />}
+                {/* Logo & judul Mark di atas kartu — lapisan yang sama dengan halaman Mark. */}
+                {cardW > 0 && <MarkLayers m={m} frameH={frameH} />}
+                {layout === "card" && band === "long" && <span className="nc-warn">{t("ncTooLongOnCard")}</span>}
               </div>
             </StageFrame>
           </Stage>
@@ -621,6 +797,12 @@ export default function News() {
             </StageFrame>
           </Stage>
         </div>
+      )}
+      {shot && <Shot src={shot} label={t("wmPreviewResult")} onClose={() => setShot("")} />}
+      {tpl.confirmEl}
+      {logoPicker !== null && (
+        <Picker mode="file" start={m.logos[logoPicker]?.image || m.logos[0]?.image}
+          onPick={(p) => { m.putLogo(p, logoPicker); setLogoPicker(null); }} onClose={() => setLogoPicker(null)} />
       )}
     </div>
   );

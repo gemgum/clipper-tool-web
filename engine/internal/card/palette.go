@@ -355,6 +355,69 @@ func toneOfHex(s string) tone {
 	return tone{hue: hue, sat: sat, ok: true, exact: true, pick: h}
 }
 
+// LookColors = warna tampilan kartu berita di halaman Watermark.
+type LookColors struct {
+	Panel   string `json:"box"`      // latar panel
+	Title   string `json:"text"`     // judul
+	Badge   string `json:"badge"`    // garis aksen & lencana
+	OnBadge string `json:"on_badge"` // teks di lencana
+	Body    string `json:"-"`        // teks isi (ringkasan) — dipakai kartu News
+}
+
+// Look = warna satu tampilan jadi untuk halaman Watermark. ThemePhoto dengan
+// img != nil diturunkan dari rona gambar itu — rumus yang sama dengan kartu
+// berita, jadi "Photo colours" berarti hal yang sama di kedua halaman.
+// "#rrggbb" = panel warna itu sendiri; judul hitam/putih yang terbaca, lencana
+// dari ronanya. ok = false bila bukan tema yang dikenal dan bukan warna.
+func Look(theme string, img image.Image) (LookColors, bool) {
+	if hex, ok := parseHex(theme); ok {
+		p := paletteFor(toneOfHex(hex), true)
+		title := "#15181D"
+		if contrastOf(hex, "#FFFFFF") >= contrastOf(hex, title) {
+			title = "#FFFFFF"
+		}
+		return LookColors{Panel: hex, Title: title, Badge: p.Accent, OnBadge: p.OnAccent, Body: p.Muted}, true
+	}
+	tc, ok := themeTable[theme]
+	if !ok {
+		return LookColors{}, false
+	}
+	if theme == ThemePhoto && img != nil {
+		if t := toneOf(img); t.ok {
+			p := paletteFor(t, true)
+			return LookColors{Panel: p.Ink, Title: p.Paper, Badge: p.Accent, OnBadge: p.OnAccent, Body: p.Muted}, true
+		}
+	}
+	return LookColors{Panel: tc.Panel, Title: tc.Title, Badge: tc.Badge, OnBadge: tc.OnBadge, Body: tc.Body}, true
+}
+
+// AutoLook = warna panel yang MENYAMBUNG gambar: rata-rata warna 20% terbawah
+// area gambar (bagian yang memudar ke panel), dijaga gelap & tidak berteriak
+// supaya judul terang tetap terbaca. Berbeda dengan ThemePhoto, yang memakai
+// rona khas SELURUH foto.
+func AutoLook(img image.Image) LookColors {
+	b := img.Bounds()
+	var r, g, bl, n float64
+	stepX := max(1, b.Dx()/120)
+	for y := b.Max.Y - max(1, b.Dy()/5); y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x += stepX {
+			r16, g16, b16, _ := img.At(x, y).RGBA()
+			r, g, bl, n = r+float64(r16)/65535, g+float64(g16)/65535, bl+float64(b16)/65535, n+1
+		}
+	}
+	if n == 0 {
+		n = 1
+	}
+	h, s, l := toHSL(r/n, g/n, bl/n)
+	panel := hex(h, min(s, 0.45), min(l, 0.14))
+	title := "#15181D"
+	if contrastOf(panel, "#FFFFFF") >= contrastOf(panel, title) {
+		title = "#FFFFFF"
+	}
+	p := paletteFor(tone{hue: h, sat: s, ok: s >= 0.08}, true)
+	return LookColors{Panel: panel, Title: title, Badge: p.Accent, OnBadge: p.OnAccent, Body: p.Muted}
+}
+
 // toneOf membaca rona khas sebuah foto.
 //
 // Piksel yang paling banyak di sebuah foto biasanya justru yang tidak punya
@@ -516,6 +579,32 @@ func (b *Builder) tone(ctx context.Context, url string) tone {
 	}
 	b.tones[key] = t
 	return t
+}
+
+// autoLook = AutoLook foto artikel, disimpan per alamat (lihat tone).
+func (b *Builder) autoLook(ctx context.Context, url string) (LookColors, bool) {
+	key := url
+	if strings.HasPrefix(url, "data:") {
+		key = fmt.Sprintf("data:%x", sha256.Sum256([]byte(url)))
+	}
+	b.mu.Lock()
+	c, seen := b.autos[key]
+	b.mu.Unlock()
+	if seen {
+		return c, true
+	}
+	img, err := fetchImage(ctx, url)
+	if err != nil {
+		return LookColors{}, false
+	}
+	c = AutoLook(img)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.autos) > 64 || b.autos == nil {
+		b.autos = make(map[string]LookColors)
+	}
+	b.autos[key] = c
+	return c, true
 }
 
 // --- konversi warna ---

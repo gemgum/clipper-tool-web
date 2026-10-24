@@ -93,6 +93,15 @@ adalah filter TERAKHIR, teks otomatis mendarat di atas gambar. **Hanya ikut ke
 berkas yang subtitle-nya dibakar** — berkas `clean` tetap bersih. Sumber teks
 `llm` memakai `llm.Pick.Title` klip itu, jadi tak ada panggilan LLM tambahan.
 
+**News memakai Mark yang sama** (keputusan pemilik 24 Oktober 2026): setiap
+kartu berita wajib membawa mark. `/api/card` menerima `mark` (config.Watermark)
+dan `layout`: `card` = PNG kartu Chrome lalu dibakar Mark (logo + headline
+tambahan), `box` = foto artikel penuh + kotak judul Mark (tanpa Chrome). Keduanya
+lewat `watermark.BurnTo`. Template Mark satu daftar untuk kedua halaman; satu
+bisa ditandai bawaan (`POST /api/watermark/templates/{name}/default`) dan
+terpasang otomatis di artikel baru. Pratinjau News = `/api/card/html` (halaman
+kartu yang sama dengan PNG) + `MarkLayers`.
+
 Ukuran gambarnya sebuah **KOTAK** (`-watermark-width` x `-watermark-height`,
 persen sisi bingkai, bawaan 25x25) dan gambarnya dimuat UTUH ke dalamnya:
 `force_original_aspect_ratio=decrease` di ffmpeg, `object-fit: contain` di
@@ -175,6 +184,10 @@ yang wajib diingat saat menulis kode baru:
 - **GUI disajikan engine.** `next build` menghasilkan `gui/out` (ekspor statis),
   dan engine menyajikannya di akar alamatnya. `npm run dev` tetap ada untuk
   mengembangkan, tapi server tidak memakainya.
+- **Posisi halaman diingat browser, bukan server.** Next merender ulang halaman
+  dari awal setiap pindah halaman, jadi layar & tab memakai `useSticky` dan
+  posisi gulir disimpan `ScrollKeep` (keduanya `persist.ts`, localStorage).
+  State navigasi baru (layar, tab, panel terbuka) = `useSticky`, bukan `useState`.
 - **Kunci sesi.** Saat terpasang, engine memakai port acak + kunci yang wajib
   ada di setiap permintaan, ditulis ke `<DataDir>/engine.json`. Kuncinya tinggal
   di cookie `HttpOnly` yang dipasang engine saat halaman pertama dibuka; `/api/`
@@ -411,6 +424,12 @@ sama dengan `--stage-in` di CSS. Kartu di kolom terbatas wajib
 | POST JSON ke engine | `engine.ts` (`post(path, body, fallback?)`) — jangan menulis `fetch(eng(..), {method:"POST"…})` sendiri |
 | salin ke clipboard | `copy-link.tsx` (`copyText`) — `navigator.clipboard` TIDAK ADA lewat alamat IP |
 | nama berkas dari path | `file-list.tsx` (`baseName`) |
+| tema kartu berita (8 warna + Auto) | `themes.tsx` (`ThemePicker`, `THEMES`) — News DAN Watermark |
+| perataan teks (4 ikon) | `clip-steps.tsx` (`AlignPicker`, `Align`) — News DAN Watermark |
+| Mark: state logo/judul + seret | `mark.tsx` (`useMark`) — Watermark DAN News |
+| Mark: panel Logo / Headline / Template | `mark.tsx` (`MarkLogoGroup`, `MarkHeadline`, `MarkTemplates`, `useTemplates`) |
+| Mark: lapisan di pratinjau | `mark.tsx` (`MarkLayers`, `MarkFont`) |
+| jendela "Preview result" | `stage.tsx` (`Shot`) |
 
 Nama warna (`white`, `yellow`, `black`, `red`) diterjemahkan HANYA oleh
 `toHex`, dengan angka yang sama persis dengan `subtitle.assColor` di engine.
@@ -446,8 +465,16 @@ dan tab Headline di Watermark. Jangan menyusun markup setelan sendiri.
    SELALU ada — dimatikan (`<fieldset disabled>`), tidak disembunyikan — supaya
    memilih/menambah sesuatu tidak menggeser isi. Contoh: tab Logo (daftar |
    penempatan), Format (format | keluaran), Template (tersimpan | simpan).
-6. **Penjelasan** = `note` di bawah kendali atau `desc` Toggle, satu kalimat.
-7. **Berkas/sumber** = kartu sendiri DI ATAS kartu setelan (Source di klip,
+6. **Tidak ada yang muncul atau hilang** (keputusan pemilik 24 Oktober 2026).
+   Baris, isian, atau pilihan yang belum berlaku TETAP tampil tapi dimatikan:
+   `<Row off>`, `row(label, kendali, note, off)` di klip, `<Split sideOff>`,
+   `ColorTarget.off`. Satu kolom teks tidak berganti input↔textarea. Diukur:
+   tinggi kartu setelan Watermark sama persis saat kotak judul / "Set time"
+   dinyalakan (957/957, 798/798).
+7. **Daftar = `.item-list`** (logo, template, …): baris bergaris padat, tombol
+   `tiny`, kotaknya bergulir setelah ±5 baris — panelnya tidak memanjang.
+8. **Penjelasan** = `note` di bawah kendali atau `desc` Toggle, satu kalimat.
+9. **Berkas/sumber** = kartu sendiri DI ATAS kartu setelan (Source di klip,
    Files di Watermark/Captions).
 
 ## Konvensi

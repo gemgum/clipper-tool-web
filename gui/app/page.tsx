@@ -29,7 +29,7 @@ import { useI18n } from "./i18n";
 import Alerts from "./alerts";
 import { eng, engineURL, isWeb, useWeb, post } from "./engine";
 import Picker from "./picker";
-import { useKeep, useRestore } from "./persist";
+import { recall, useKeep, useRestore, useSticky } from "./persist";
 
 import SourceCard from "./source-card";
 import MoreControls, { zoomBounds } from "./more-controls";
@@ -291,12 +291,22 @@ export default function Home() {
         setJobClips(Array.isArray(newest.clips) ? newest.clips : []);
         if (newest.created_at) setStartedAt(Date.parse(newest.created_at));
         addLog(t("logReconnect", { id: newest.id }));
+      } else {
+        // Tidak ada yang berjalan: hasil yang terakhir dilihat dibuka lagi —
+        // pindah halaman lalu kembali tidak boleh membuang layar hasil.
+        const done = jobs.find((j) => j.id === recall<string>("clips.result") && Array.isArray(j.clips));
+        if (done) { setJobClips(done.clips); setJobId(done.id); setScreen("result"); }
       }
     }).catch(() => {});
   }, [addLog, t]);
 
   const selectedModel = models.find((m) => m.name === model);
   const modelMissing = selectedModel && !selectedModel.downloaded;
+
+  // Job yang hasilnya sedang dilihat diingat browser (dibuka lagi saat kembali
+  // ke halaman ini); dilupakan hanya lewat "New batch".
+  const [, setResultJob] = useSticky<string>("clips.result", "");
+  useEffect(() => { if (screen === "result" && jobId) setResultJob(jobId); }, [screen, jobId, setResultJob]);
 
   // Isian tab klip ikut disimpan, dengan alasan yang sama seperti tab kartu:
   // halaman bisa termuat ulang tanpa diminta, dan menyusun ulang setelan render
@@ -668,7 +678,7 @@ export default function Home() {
     </>
   ) : (
     <>
-      <button type="button" className="ghost" onClick={() => { setScreen("setup"); setJobClips([]); }}>{t("newBatch")}</button>
+      <button type="button" className="ghost" onClick={() => { setScreen("setup"); setJobClips([]); setResultJob(""); }}>{t("newBatch")}</button>
       {okClips.length > 0 && (
         <a className="btn-primary big" href={downloadAllURL(jobClips)} download>{t("downloadAll", { n: okClips.length })}</a>
       )}

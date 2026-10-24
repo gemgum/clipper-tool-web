@@ -13,6 +13,8 @@
 //   - kolomnya sticky, jadi tetap terlihat saat setelan di kiri digulir.
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+import { useI18n } from "./i18n";
 
 // Lebar BINGKAI (--stage-in di globals.css): lebar kolom (340, atau 280 di
 // jendela <= 1100 px) dikurangi 50 px padding & tepi kartu, dibatasi tinggi
@@ -34,14 +36,16 @@ export function useStageWidth() {
   return w;
 }
 
-export default function Stage({ title, badge, tools, help, bad, children }: {
-  title: string; badge?: string; tools?: React.ReactNode; help?: React.ReactNode; bad?: boolean; children: React.ReactNode;
+// action = tombol di tempat judul (mis. "Preview result"); title tetap jadi
+// nama kartunya untuk pembaca layar.
+export default function Stage({ title, action, badge, tools, help, bad, children }: {
+  title: string; action?: React.ReactNode; badge?: string; tools?: React.ReactNode; help?: React.ReactNode; bad?: boolean; children: React.ReactNode;
 }) {
   return (
-    <aside className="setup-side">
+    <aside className="setup-side" aria-label={title}>
       <section className="card preview-card stage">
         <div className="card-head">
-          <h2>{title}</h2>
+          {action ?? <h2>{title}</h2>}
           {badge && <span className="chip">{badge}</span>}
         </div>
         {children}
@@ -55,4 +59,22 @@ export default function Stage({ title, badge, tools, help, bad, children }: {
 // StageFrame = slot tetap setinggi bingkai 9:16; bingkai apa pun di tengahnya.
 export function StageFrame({ children }: { children: React.ReactNode }) {
   return <div className="stage-slot">{children}</div>;
+}
+
+// Shot = hasil render sungguhan (tombol "Preview result") di atas layar penuh;
+// klik di mana saja atau Escape menutupnya. SATU jendela untuk Watermark & News.
+export function Shot({ src, label, onClose }: { src: string; label: string; onClose: () => void }) {
+  const { t } = useI18n();
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+  return (
+    <div className="stage-shot" role="dialog" aria-label={label} onClick={onClose}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={label} />
+      <button type="button" className="ghost stage-shot-close" aria-label={t("close")} title={t("close")}><X className="ico" aria-hidden="true" /></button>
+    </div>
+  );
 }

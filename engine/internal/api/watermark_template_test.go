@@ -33,3 +33,38 @@ func TestWatermarkTemplates(t *testing.T) {
 		t.Fatalf("template tidak terhapus: %s", rec.Body.String())
 	}
 }
+
+// Template bawaan: paling banyak satu; memilih yang lain memindahkannya, memilih
+// yang sama mencabutnya, dan menimpa template tidak menghapus tandanya.
+func TestDefaultTemplate(t *testing.T) {
+	s := &Server{paths: config.Paths{DataDir: t.TempDir()}}
+	for _, n := range []string{"A", "B"} {
+		s.saveTemplate(httptest.NewRecorder(), httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"`+n+`","data":{}}`)))
+	}
+	def := func(name string) {
+		req := httptest.NewRequest("POST", "/", strings.NewReader("{}"))
+		req.SetPathValue("name", name)
+		s.setDefaultTemplate(httptest.NewRecorder(), req)
+	}
+	which := func() (out string) {
+		for _, t := range s.readTemplates() {
+			if t.Default {
+				out += t.Name
+			}
+		}
+		return
+	}
+	def("A")
+	def("B")
+	if got := which(); got != "B" {
+		t.Fatalf("bawaan harus B saja, dapat %q", got)
+	}
+	s.saveTemplate(httptest.NewRecorder(), httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"B","data":{"x":1}}`)))
+	if got := which(); got != "B" {
+		t.Fatalf("menimpa B mencabut tandanya: %q", got)
+	}
+	def("B")
+	if got := which(); got != "" {
+		t.Fatalf("memilih bawaan yang sama harus mencabutnya: %q", got)
+	}
+}

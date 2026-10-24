@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 	"mime"
 	"net/http"
 	"os"
@@ -13,7 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gemgum/clipper/engine/internal/card"
 	"github.com/gemgum/clipper/engine/internal/config"
+	"github.com/gemgum/clipper/engine/internal/ffmpeg"
 	"github.com/gemgum/clipper/engine/internal/subtitle"
 	"github.com/gemgum/clipper/engine/internal/watermark"
 )
@@ -222,6 +226,54 @@ func (s *Server) watermarkPreview(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(img)
 }
 
+// watermarkLook = warna tampilan kartu berita (panel, judul, lencana) untuk satu
+// tema kartu berita atau satu "#rrggbb". Tema "photo" diturunkan dari bingkai berkas pertama; tanpa
+// berkas (atau bingkainya gagal dibaca) ia memakai warna cadangan temanya.
+func (s *Server) watermarkLook(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Theme  string `json:"theme"`
+		File   string `json:"file"`
+		Format string `json:"format"`
+		CardY  int    `json:"card_y"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	auto := req.Theme == "auto"
+	var img image.Image
+	if file := hostPath(req.File); (auto || req.Theme == card.ThemePhoto) && file != "" {
+		fw, fh := config.FrameSize(req.Format)
+		// auto membaca AREA GAMBAR kartu (potongan yang sama dengan render);
+		// photo membaca seluruh bingkai.
+		if auto {
+			fh = config.CardPhotoPx(req.Format, req.CardY)
+		}
+		// Detik 1 untuk video (detik 0 sering hitam); foto hanya punya detik 0.
+		for _, t := range []float64{1, 0} {
+			raw, err := s.ff.ExtractFrame(r.Context(), file, t, 270, 270*fh/fw/2*2, ffmpeg.Layout{Mode: string(config.ReframeCenter)})
+			if err == nil && len(raw) > 0 {
+				img, _, _ = image.Decode(bytes.NewReader(raw))
+				break
+			}
+		}
+	}
+	if auto {
+		if img == nil {
+			writeErr(w, 400, "auto colour needs a video or photo in the list")
+			return
+		}
+		writeJSON(w, 200, card.AutoLook(img))
+		return
+	}
+	c, ok := card.Look(req.Theme, img)
+	if !ok {
+		writeErr(w, 400, "unknown look: "+req.Theme)
+		return
+	}
+	writeJSON(w, 200, c)
+}
+
 // watermarkLayout = tata letak kotak judul berita untuk pratinjau.
 //
 // Dihitung engine dengan metrik font asli (subtitle.NewsBox), BUKAN ditiru di
@@ -247,6 +299,10 @@ func (s *Server) watermarkLayout(w http.ResponseWriter, r *http.Request) {
 	}
 	wm := opts.Watermark
 	wm.Headline.Font, wm.Headline.FontsDir = opts.Subtitle.Font, s.paths.FontsDir
+	if wm.Headline.Card {
+		writeJSON(w, 200, subtitle.CardBox(wm, wm.Headline.Text))
+		return
+	}
 	writeJSON(w, 200, subtitle.NewsBox(wm, wm.Headline.Text))
 }
 
@@ -264,6 +320,9 @@ type watermarkTemplate struct {
 	Name  string          `json:"name"`
 	Data  json.RawMessage `json:"data"`
 	Saved time.Time       `json:"saved"`
+	// Default = template yang otomatis terpasang di setiap kartu News baru
+	// (paling banyak satu). Diatur lewat setDefaultTemplate, bukan saveTemplate.
+	Default bool `json:"default,omitempty"`
 }
 
 var templateMu sync.Mutex
@@ -325,8 +384,11 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	defer templateMu.Unlock()
 	list := s.readTemplates()
 	found := false
+	req.Default = false
 	for i := range list {
 		if list[i].Name == req.Name {
+			// Menimpa template tidak mencabut tanda bawaannya.
+			req.Default = list[i].Default
 			list[i], found = req, true
 		}
 	}
@@ -335,6 +397,30 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.writeTemplates(list); err != nil {
 		writeErr(w, 500, "could not save the template: "+err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"templates": list})
+}
+
+// setDefaultTemplate menjadikan satu template bawaan (yang lain dicabut), atau
+// mencabutnya bila ia sudah bawaan.
+func (s *Server) setDefaultTemplate(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	templateMu.Lock()
+	defer templateMu.Unlock()
+	list := s.readTemplates()
+	found := false
+	for i := range list {
+		on := list[i].Name == name && !list[i].Default
+		found = found || list[i].Name == name
+		list[i].Default = on
+	}
+	if !found {
+		writeErr(w, 404, "no template with that name")
+		return
+	}
+	if err := s.writeTemplates(list); err != nil {
+		writeErr(w, 500, "could not save the templates: "+err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]any{"templates": list})

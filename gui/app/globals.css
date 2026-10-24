@@ -2890,7 +2890,15 @@ button.chip-btn.on { background: var(--text); color: var(--panel); border-color:
   border-radius: 16px; overflow: hidden; background: var(--sunken);
   box-shadow: 0 10px 30px rgb(21 24 29 / 14%); display: flex; align-items: center; justify-content: center;
 }
-.nc-card img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* :not(.wmoverlay) — logo Mark di pratinjau punya ukuran sendiri (lihat .preview9x16). */
+.nc-card img:not(.wmoverlay) { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Pratinjau seketika: halaman kartu ukuran asli diperkecil ke bingkai; lapis
+   seret di atasnya (foto: hanya bila ada ruang geser). */
+.nc-live iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; background: transparent; }
+.nc-drag { position: absolute; left: 0; right: 0; touch-action: none; }
+.nc-card img.nc-box-photo { position: absolute; inset: 0; object-fit: cover; pointer-events: none; }
+.nc-drag.can { cursor: grab; }
+.nc-drag.can:active { cursor: grabbing; }
 .nc-busy, .nc-warn { position: absolute; left: 10px; font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
 .nc-busy { top: 10px; background: rgb(0 0 0 / 65%); color: #fff; }
 .nc-warn { bottom: 10px; background: var(--bad-text); color: #fff; }
@@ -2918,13 +2926,19 @@ button.ai-btn {
 .photo-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-btn.on { border: 2px solid var(--accent); box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
 .photo-btn.upload { border-style: dashed; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-2); font-size: 12px; font-weight: 600; }
-.theme-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
-button.theme-tile {
-  padding: 10px; border-radius: 12px; background: var(--panel); color: var(--text); text-align: center; min-height: 0;
-  border: 1px solid var(--border-strong); font-size: 13.5px; font-weight: 600; display: flex; flex-direction: column; gap: 9px;
-}
-button.theme-tile.on { border: 2px solid var(--accent); padding: 9px; box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
-.theme-swatch { display: block; height: 54px; border-radius: 7px; border: 1px solid var(--border-strong); }
+/* ThemePicker (themes.tsx), News & Watermark: kisi 4x2 contoh warna tanpa nama
+   yang melebar penuh + tombol Auto opsional di kanan setinggi dua baris. */
+.theme-pick { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; width: 100%; }
+.theme-pick.with-auto { grid-template-columns: minmax(0, 1fr) auto; }
+.theme-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+button.theme-tile { padding: 4px; border-radius: 10px; background: var(--panel); min-height: 0; border: 1px solid var(--border-strong); display: flex; }
+button.theme-tile.on { border: 2px solid var(--accent); padding: 3px; box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
+.theme-swatch { display: block; flex: 1; height: 32px; border-radius: 7px; border: 1px solid var(--border-strong); }
+.theme-auto { height: 100%; min-height: 0; margin: 0; padding: 6px 12px; display: inline-flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 4px; max-width: 96px; white-space: normal; text-align: center; line-height: 1.2; font-size: 12.5px; }
+.tpl-star.active { color: var(--warn-text, #d9a400); border-color: currentColor; }
+.tpl-star.active .ico { fill: currentColor; }
+.theme-auto.active { border-color: var(--accent); color: var(--accent); }
 .nc-align { max-width: 260px; }
 .news-v2 .adv .grid3, .news-v2 .adv .grid4 { margin-top: 12px; }
 .news-v2 .adv > .ghost { margin-top: 14px; }
@@ -3109,9 +3123,6 @@ button.cap-add { flex: 1; min-height: 44px; border-style: dashed; }
 .wm-logo-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .wm-logo-thumb { width: 72px; height: 72px; object-fit: contain; border-radius: 10px; background: var(--sunken); border: 1px solid var(--border); flex: none; }
 button.wm-logo-empty { width: 100%; min-height: 72px; }
-.wm-anchors { display: grid; grid-template-columns: repeat(3, 40px); gap: 6px; }
-.wm-anchors button { width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 7px; background: var(--panel); border: 1px solid var(--border-strong); }
-.wm-anchors button.on { background: var(--accent); border-color: var(--accent); }
 .wm-radio { display: flex; align-items: center; gap: 11px; margin-top: 12px; font-size: 15px; cursor: pointer; }
 .wm-radio span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .wm-radio span input { width: 64px; min-height: 34px; height: 34px; text-align: center; padding: 0 6px; }
@@ -3126,16 +3137,14 @@ button.wm-logo-empty { width: 100%; min-height: 72px; }
    inline dari newsBox() — sama dengan subtitle.NewsBox di engine. */
 .wm-newsbox { position: absolute; box-sizing: border-box; background: #fff; font-weight: 700; white-space: nowrap; overflow: visible; }
 .wm-credit { color: #222; }
+/* Tampilan kartu berita (Look) di pratinjau — lihat subtitle.writeCard. */
+.wm-card-panel { position: absolute; left: 0; right: 0; bottom: 0; touch-action: none; }
+.wm-card-fade { position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
+.wm-card-text { position: absolute; display: flex; flex-direction: column; font-weight: 700; white-space: nowrap; touch-action: none; }
+.wm-card-text > span { display: block; flex: none; }
+.wm-card-chip { white-space: nowrap; }
 .wmoverlay.on { outline-color: var(--accent); outline-style: solid; }
-.wm-logos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
-.wm-logos li { display: flex; gap: 12px; align-items: center; padding: 6px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; }
-.wm-logos li.on { border-color: var(--accent); background: var(--accent-soft); }
-.wm-logos .wm-logo-thumb { width: 52px; height: 52px; }
-.wm-logos .grow { min-width: 0; }
-.wm-logos .meta { margin: 2px 0 0; }
-.wm-pin { margin: 8px 0 0; width: 100%; }
 button.wm-pin.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.wm-pin { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 /* Tanda di logo: gembok (terkunci ke kotak judul) / magnet (sedang menempel). */
 .wm-mark { position: absolute; transform: translate(-60%, -40%); width: 20px; height: 20px; border-radius: 50%;
   display: grid; place-items: center; background: var(--accent); color: #fff; pointer-events: none;
@@ -3144,16 +3153,15 @@ button.wm-pin.active { background: var(--accent); border-color: var(--accent); c
 .wm-mark.stick { background: #16a34a; }
 /* Kotak judul yang sedang ditempeli logo: tepinya menyala. */
 .wm-newsbox.stick { outline: 2px solid #16a34a; outline-offset: 0; }
-.wm-tpls { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
-.wm-tpls li { display: flex; align-items: center; gap: 10px; }
-.wm-tpls .grow { flex: 1; min-width: 0; font-weight: 600; }
 button.wm-preview-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; min-height: 44px; }
 button.wm-preview-btn:disabled { opacity: 0.5; }
+/* Di tempat judul kartu pratinjau (Stage action): selebar isinya, setinggi judul. */
+.stage .card-head button.wm-preview-btn { margin-right: auto; width: auto; min-height: 0; height: 34px; padding: 0 14px; font-size: 14px; }
 /* Pratinjau hasil asli: layar penuh, klik di mana saja / Esc untuk menutup. */
-.wm-shot { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.8); display: grid; place-items: center; padding: 24px; cursor: zoom-out; }
-.wm-shot img { max-width: 100%; max-height: calc(100vh - 48px); border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
-.wm-shot-close { position: absolute; top: 16px; right: 16px; color: #fff; border-color: rgba(255, 255, 255, 0.5); }
+.stage-shot { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.8); display: grid; place-items: center; padding: 24px; cursor: zoom-out; }
+.stage-shot img { max-width: 100%; max-height: calc(100vh - 48px); border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+.stage-shot-close { position: absolute; top: 16px; right: 16px; color: #fff; border-color: rgba(255, 255, 255, 0.5); }
 
 /* ================= Pengaturan: satu form mesin ================= */
 .engine-form .mc-group { margin-top: 14px; }
@@ -3261,7 +3269,6 @@ video:fullscreen { object-fit: contain !important; background: #000; }
 .wm-videos:empty + .cap-add-row, .wm-videos:empty + .cap-add { margin-top: 0; }
 .mc-r-pad .wm-radio { margin: 0; min-height: 40px; }
 .mc-r-c textarea { flex: 1; width: 100%; min-width: 0; }
-.mc-r-c .wm-pin { width: auto; margin: 0; }
 @media (max-width: 1100px) {
   /* Jendela sempit (berlaku untuk SEMUA kartu bertab): ikon tab dibuang,
      kolom label menyempit, tombol segmen boleh dua baris. */
@@ -3337,8 +3344,65 @@ fieldset.cp-plain:disabled { opacity: .5; }
 /* Segmen di dalam split: tanpa ikon (lebarnya untuk teks), teks boleh dua
    baris; di panel kanan pilihan banyak dibungkus jadi beberapa baris. */
 .mc-split .segmented .ico { display: none; }
+.mc-split .segmented.icon-seg .ico { display: inline-block; }
+.segmented.icon-seg button { display: inline-flex; align-items: center; justify-content: center; }
 .mc-split .segmented button { white-space: normal; line-height: 1.2; min-width: 0; }
-.mc-split-r .segmented { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); }
+/* Hanya segmen berpilihan 4+ yang dibungkus; 2–3 pilihan & segmen ikon tetap satu baris. */
+.mc-split-r .segmented:has(> :nth-child(4)):not(.icon-seg) { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); }
 .setup-main > .banner { margin: 0; }
 .stage-tools > a.btn-dark { justify-content: center; }
 .stage-tools > a.off { opacity: .5; pointer-events: none; }
+
+/* Daftar baku (logo, template, …): baris bergaris yang padat; lebih dari ±5
+   baris → kotaknya bergulir, panelnya tidak memanjang. Satu gaya untuk semua. */
+.item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 248px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.item-list li { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px 8px 6px 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--panel); cursor: pointer; flex: none; }
+.item-list li.on { border-color: var(--accent); background: var(--accent-soft); }
+.item-list .grow { flex: 1; min-width: 0; }
+.item-list .hi-title { margin: 0; }
+.item-list .meta { margin: 2px 0 0; }
+.item-list .wm-logo-thumb { width: 36px; height: 36px; border-radius: 8px; }
+.item-list button.tiny { flex: none; }
+/* Panel kanan Logo: kisi & tombol kunci selebar isinya, bukan selebar panel. */
+.wm-pin { display: inline-flex; align-items: center; justify-content: center; gap: 6px; align-self: flex-start; }
+.mc-split-r .cap-add, .mc-split-l .cap-add { min-height: 40px; }
+/* Baris mati (Row off) & isian detik mati: tetap terlihat, jelas tidak aktif. */
+fieldset.mc-r-c { margin: 0; padding: 0; border: 0; }
+.mc-r.off .mc-r-l { opacity: .5; }
+fieldset.mc-r-c:disabled, fieldset.wm-timed:disabled { opacity: .5; }
+fieldset.wm-timed { margin: 0; padding: 0; border: 0; min-width: 0; }
+.cp-targets { grid-auto-flow: column !important; grid-template-columns: none !important; grid-auto-columns: minmax(0, 1fr) !important; }
+.cp-targets button { font-size: 12.5px; }
+.cp-targets button:disabled { opacity: .4; }
+/* Kendali Format terpilih: tinggi tetap (setinggi segmen), lebar penuh. */
+.wm-fmt-slot { min-height: 46px; display: flex; align-items: center; }
+.wm-fmt-slot > * { flex: 1; }
+.wm-fmt-slot > .stepper { flex: none; }
+.item-list .hi-title, .item-list .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-list li > button { flex: none; }
+/* Kisi posisi logo (peta kecil bingkai): tinggi TETAP, lebar mengikuti format. */
+.wm-pad { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); height: 216px; max-width: 100%; gap: 3px; padding: 3px;
+  background: var(--border); border-radius: 8px; overflow: hidden; align-self: center; }
+.wm-pad-box { display: grid; grid-template: repeat(5, 1fr) / repeat(5, 1fr); gap: 1px; min-width: 0; min-height: 0; }
+.wm-pad button { min-height: 0; height: auto; padding: 0; border: 0; border-radius: 1px; background: var(--panel2); cursor: pointer; }
+.wm-pad button:hover { background: var(--accent-soft); }
+.wm-pad button.other { background: var(--muted); }
+.wm-pad button.on { background: var(--accent); }
+/* Stepper ringkas di baris daftar (ukuran logo). */
+.item-list .stepper { flex: none; width: 104px; }
+.item-list .step-btn { height: 28px; padding: 0 7px; }
+.item-list .stepper input { width: 28px; padding: 3px 0; font-size: 13px; }
+/* Baris logo: kotak bergaris (gambar, nama, hapus) + kendali di luar kotak, sejajar. */
+.item-list li.logo-row { padding: 0; border: 0; background: none; }
+.logo-box { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px 8px 6px 10px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--panel); }
+.item-list li.logo-row.on .logo-box { border-color: var(--accent); background: var(--accent-soft); }
+.logo-ctl { flex: none; display: flex; align-items: center; gap: 6px; }
+/* Tiga kendali setinggi sama (32 px), bingkai & radius sama dengan stepper. */
+.logo-ctl .stepper { height: 32px; }
+.logo-ctl .step-btn { height: 30px; min-height: 0; }
+.logo-ctl > button { height: 32px; min-height: 0; margin: 0; padding: 0 10px; border-radius: var(--r-sm);
+  display: inline-flex; align-items: center; justify-content: center; }
+.logo-ctl > button.wm-pin { width: 32px; padding: 0; }

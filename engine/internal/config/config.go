@@ -584,8 +584,20 @@ type Headline struct {
 	Sharp bool `json:"sharp"`
 	// BoxColor = warna isi kotak judul (nama atau #rrggbb); kosong = putih.
 	BoxColor string `json:"box_color"`
-	// Align = perataan teks di dalam kotak judul: left (bawaan) | center | right.
+	// Align = perataan teks di dalam kotak judul: left (bawaan) | center | right | justify.
 	Align string `json:"align"`
+	// Card = tampilan jadi kartu berita (Style "Look" di GUI; berlaku bersama
+	// Box): gambar mengisi CardPhotoPct bagian atas bingkai, panel BoxColor di
+	// bawahnya dengan peralihan pudar, lalu garis aksen, judul, dan Credit
+	// sebagai lencana. Sudut & Outline kotak tidak berlaku di sini.
+	Card bool `json:"card"`
+	// Badge = warna garis aksen & lencana kredit; OnBadge = teks di lencana.
+	Badge   string `json:"badge"`
+	OnBadge string `json:"on_badge"`
+	// CardY = geseran tegak BATAS gambar–panel dari tempat bawaannya: panel
+	// warna naik-turun, area gambar memendek/memanjang, dan judul tetap
+	// menempel di bawah batas itu. Dijepit di CardPhotoPx.
+	CardY int `json:"card_y"`
 	// FontsDir = folder font tempat lebar teks diukur (fontmetrics). Diisi
 	// engine, tidak pernah dari klien; kosong = perkiraan lebar huruf.
 	FontsDir string `json:"-"`
@@ -640,6 +652,8 @@ const (
 	AlignLeft   = "left"
 	AlignCenter = "center"
 	AlignRight  = "right"
+	// AlignJustify = rata kiri-kanan; baris terakhir tiap paragraf tetap rata kiri.
+	AlignJustify = "justify"
 )
 
 // Format bingkai watermark.
@@ -655,6 +669,27 @@ const MaxLogos = 8
 
 // FrameSize = ruang koordinat untuk satu format. Lebarnya selalu PlayResX;
 // tingginya mengikuti rasio, jadi angka di pratinjau tetap = angka di hasil.
+// CardPhotoPct = tinggi area gambar (persen tinggi bingkai) pada Headline.Card,
+// dan pada tampilan jadi kartu berita (card.themePhotoPct memanggil ini) — supaya
+// kartu berita & Watermark sebangun.
+func CardPhotoPct(format string) int {
+	switch format {
+	case FormatFeed45:
+		return 42
+	case FormatFeed11:
+		return 38
+	}
+	return 46
+}
+
+// CardPhotoPx = tinggi area gambar (ruang PlayRes) pada Headline.Card:
+// CardPhotoPct digeser cardY, dijepit 20–85% tinggi bingkai supaya gambar dan
+// panel sama-sama tetap terlihat. GUI (watermark/page.tsx) memakai rumus yang sama.
+func CardPhotoPx(format string, cardY int) int {
+	_, fh := FrameSize(format)
+	return min(max(fh*CardPhotoPct(format)/100+cardY, fh/5), fh*85/100)
+}
+
 func FrameSize(format string) (w, h int) {
 	switch format {
 	case FormatFeed45:
@@ -760,9 +795,15 @@ func (b *Watermark) validate() {
 		h.OutlineColor = d.Headline.OutlineColor
 	}
 	switch h.Align {
-	case AlignCenter, AlignRight:
+	case AlignCenter, AlignRight, AlignJustify:
 	default:
 		h.Align = AlignLeft
+	}
+	if h.Badge == "" {
+		h.Badge = "#FFD400"
+	}
+	if h.OnBadge == "" {
+		h.OnBadge = "#15181D"
 	}
 }
 

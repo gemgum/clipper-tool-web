@@ -1,4 +1,5 @@
 "use client";
+import type { Align } from "./clip-steps";
 
 // Watermark: banner PNG milik pengguna + teks di atasnya, dibakar ke setiap klip.
 //
@@ -43,7 +44,19 @@ export type Watermark = {
   // Warna isi kotak judul (nama atau #rrggbb); kosong = putih.
   hlBoxColor?: string;
   // Perataan teks di dalam kotak judul.
-  hlAlign?: "left" | "center" | "right";
+  hlAlign?: Align;
+  // Gaya kotak judul di GUI: "box" = warna diatur sendiri + pilihan sudut;
+  // "look" = tampilan jadi kartu berita. Engine tidak membacanya — Look hanya
+  // MENGISI hlBoxColor & hlColor.
+  hlStyle?: "box" | "look";
+  // Look terpilih: id tema (themes.ts) atau "#rrggbb" isian sendiri.
+  hlLook?: string;
+  // Warna garis aksen & lencana kredit tampilan Look, dan teks di lencana
+  // (diisi /api/watermark/look).
+  hlBadge?: string;
+  hlOnBadge?: string;
+  // Geseran tegak blok judul kartu dari bawaannya (config.Headline.CardY).
+  hlCardY?: number;
   // Warna garis tepi: huruf (judul biasa) atau KOTAK (kotak judul). Kosong =
   // otomatis (hitam, putih untuk teks hitam).
   hlOutlineColor?: string;
@@ -108,6 +121,11 @@ export const watermarkToAPI = (b: Watermark, font: string) => ({
     sharp: !!b.hlSharp,
     box_color: b.hlBoxColor || "",
     align: b.hlAlign || "left",
+    // Style Look = tampilan kartu berita (config.Headline.Card).
+    card: !!b.hlBox && b.hlStyle === "look",
+    badge: b.hlBadge || "",
+    on_badge: b.hlOnBadge || "",
+    card_y: Math.round(b.hlCardY || 0),
     dx: Math.round(b.hlDX), dy: Math.round(b.hlDY),
   },
 });
@@ -138,6 +156,8 @@ export function headlineBox(b: Watermark) {
 export type NewsLayout = {
   left: number; top: number; w: number; h: number;
   lines: string[]; credit: number; pad: number; radius: number;
+  stretch?: boolean[]; // baris yang direntangkan kiri-kanan (Align justify)
+  photo?: number; // > 0 = tampilan kartu berita: tinggi area gambar (subtitle.CardBox)
 };
 
 export function wrapHeadline(text: string, size: number, boxW: number): string[] {

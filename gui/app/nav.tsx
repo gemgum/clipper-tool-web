@@ -7,6 +7,7 @@ import { useI18n, type MessageKey } from "./i18n";
 import AccountButton from "./account";
 import { RailAI, useRunning } from "./rail-status";
 import { useMe } from "./engine";
+import { ScrollKeep } from "./persist";
 
 // Navigasi kiri — rancangan 14 Oktober 2026: SATU rail sempit di semua lebar
 // jendela, ikon dengan label pendek di bawahnya. Alat di atas, Riwayat
@@ -57,6 +58,8 @@ export default function Nav() {
 
   return (
     <nav className="rail" aria-label={t("navMain")}>
+      {/* Posisi gulir tiap halaman diingat browser (persist.ts). */}
+      <ScrollKeep />
       <Link href="/" className="rail-brand" aria-label="Clipper" data-tip="Clipper">
         {/* eslint-disable-next-line @next/next/no-img-element -- ekspor statis, tanpa optimasi gambar */}
         <img className="rail-logo" src="/logo.png" alt="" width={30} height={22} />
