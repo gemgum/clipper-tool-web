@@ -2896,6 +2896,15 @@ button.chip-btn.on { background: var(--text); color: var(--panel); border-color:
    seret di atasnya (foto: hanya bila ada ruang geser). */
 .nc-live iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; background: transparent; }
 .nc-drag { position: absolute; left: 0; right: 0; touch-action: none; }
+/* Pindah halaman carousel di bawah pratinjau News. */
+.nc-pager { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+.nc-pager button { margin: 0; }
+/* Pilihan foto di tab Photo: tombol hapus kecil di pojok kanan atas tiap foto. */
+.photo-item { position: relative; display: flex; }
+.photo-item > .photo-btn { flex: 1; }
+.photo-del { position: absolute; top: 4px; right: 4px; margin: 0; padding: 0; width: 24px; height: 24px; min-height: 0; border-radius: 50%; justify-content: center; align-items: center;
+  background: rgb(0 0 0 / 60%); color: #fff; border-color: transparent; display: inline-flex; }
+.photo-del:hover { background: var(--bad-text); }
 .nc-card img.nc-box-photo { position: absolute; inset: 0; object-fit: cover; pointer-events: none; }
 .nc-drag.can { cursor: grab; }
 .nc-drag.can:active { cursor: grabbing; }

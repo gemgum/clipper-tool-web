@@ -121,3 +121,36 @@ func TestAutoThemeWithoutPhoto(t *testing.T) {
 		t.Fatal("auto tanpa foto harus memakai warna Dark dan tinggi foto tampilan jadi")
 	}
 }
+
+// Carousel: badan artikel dipecah ke beberapa halaman tanpa memotong kalimat,
+// paragraf ringkasan dilewati, dan halaman lanjutan berisi teks + nomor.
+func TestCarouselPages(t *testing.T) {
+	sentence := "Pemerintah menyalurkan bantuan pangan kepada warga di seluruh wilayah terdampak banjir. "
+	long := strings.Repeat(sentence, 40)
+	req := Request{Whole: true, Theme: ThemeNavy, Ratio: Ratio45,
+		Article: news.Article{Title: "Judul", Summary: "Ringkasan di kartu pertama yang cukup panjang.", Domain: "antaranews.com"},
+		Body:    []string{"Ringkasan di kartu pertama yang cukup panjang. Lanjutannya.", long, "Paragraf penutup."}}
+	pages := Pages(req, 1080, 1350)
+	if len(pages) < 2 {
+		t.Fatalf("paragraf panjang harus jadi beberapa halaman, dapat %d", len(pages))
+	}
+	for _, pg := range pages {
+		for _, p := range pg {
+			if strings.HasPrefix(p, "Ringkasan di kartu pertama") {
+				t.Fatal("paragraf ringkasan tidak boleh diulang")
+			}
+			if !strings.HasSuffix(strings.TrimSpace(p), ".") {
+				t.Fatalf("potongan berhenti di tengah kalimat: %q", p[len(p)-30:])
+			}
+		}
+	}
+	b := New(nil, t.TempDir())
+	req.Page = 1
+	html, geo, err := b.HTML(context.Background(), req)
+	if err != nil || geo.Pages != len(pages)+1 || !strings.Contains(string(html), "2 / ") || !strings.Contains(string(html), "#0F2747") {
+		t.Fatalf("halaman lanjutan salah: pages=%d err=%v", geo.Pages, err)
+	}
+	if Pages(Request{Body: []string{long}}, 1080, 1350) != nil {
+		t.Fatal("tanpa Whole tidak ada halaman lanjutan")
+	}
+}

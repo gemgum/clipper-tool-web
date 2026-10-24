@@ -200,6 +200,12 @@ type Request struct {
 	// berisi semua yang dibutuhkan saat memposting.
 	Caption  string   `json:"caption"`
 	Hashtags []string `json:"hashtags"`
+	// Whole = carousel: setelah kartu pertama, badan artikel (Body) dipecah jadi
+	// halaman-halaman lanjutan (pages.go). Page = halaman yang diminta pratinjau
+	// HTML (0 = kartu pertama).
+	Whole bool     `json:"whole"`
+	Body  []string `json:"body"`
+	Page  int      `json:"page"`
 	// Theme = salah satu dari empat tampilan jadi (DESIGN-NEWSCARD §5.2):
 	// dark | light | photo | paper. Kosong = perilaku lama (style + colors).
 	// Bila diisi, ia menang atas Colors.
@@ -416,17 +422,26 @@ type Geometry struct {
 	Scale     float64 `json:"scale"`      // piksel kanvas per piksel ruang 1920 (Header, CardTop)
 	OffsetW   int     `json:"offset_w"`   // batas geser foto mendatar (offsetLimit)
 	OffsetH   int     `json:"offset_h"`   // batas geser foto tegak
+	Pages     int     `json:"pages"`      // jumlah kartu carousel (1 = tanpa halaman lanjutan)
 }
 
 // HTML = halaman kartu yang SAMA dengan yang difoto Chrome di Build, tanpa
 // Chrome: font & foto unggahan sudah tertanam, jadi GUI bisa menampilkannya
 // langsung sebagai pratinjau seketika (seperti pratinjau Watermark).
+// Page > 0 = halaman lanjutan carousel ke-(Page+1); Geometry.Pages = jumlah kartu.
 func (b *Builder) HTML(ctx context.Context, req Request) ([]byte, Geometry, error) {
 	if strings.TrimSpace(req.Article.Title) == "" {
 		return nil, Geometry{}, fmt.Errorf("the title is empty: a card needs the article title")
 	}
 	width, height := Dims(req.Ratio)
-	return b.render(ctx, req, width, height)
+	pages := Pages(req, width, height)
+	if req.Page > 0 && req.Page <= len(pages) {
+		page, err := b.renderPage(ctx, req, width, height, req.Page+1, len(pages)+1, pages[req.Page-1])
+		return page, Geometry{Width: width, Height: height, Scale: float64(height) / 1920, Pages: len(pages) + 1}, err
+	}
+	page, geo, err := b.render(ctx, req, width, height)
+	geo.Pages = len(pages) + 1
+	return page, geo, err
 }
 
 // WriteSidecars menulis caption & keterangan sumber di sebelah gambar.
@@ -680,26 +695,7 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 
 	// Tampilan jadi: menimpa warna lewat satu blok CSS di akhir template, jadi
 	// jalur lama (style + colors) tidak tersentuh sama sekali.
-	var theme *themeColors
-	if tc, ok := themeTable[req.Theme]; ok {
-		if req.Theme == ThemePhoto && hasImage {
-			if t := b.tone(ctx, a.Image); t.ok {
-				p := paletteFor(t, true)
-				tc = themeColors{Panel: p.Ink, Title: p.Paper, Body: p.Muted, Badge: p.Accent, OnBadge: p.OnAccent}
-			}
-		}
-		tc.PanelRGB = rgbOf(tc.Panel)
-		theme = &tc
-	} else if req.Theme == ThemeAuto {
-		tc := themeTable[ThemeDark]
-		if hasImage {
-			if c, ok := b.autoLook(ctx, a.Image); ok {
-				tc = themeColors{Panel: c.Panel, Title: c.Title, Body: c.Body, Badge: c.Badge, OnBadge: c.OnBadge}
-			}
-		}
-		tc.PanelRGB = rgbOf(tc.Panel)
-		theme = &tc
-	}
+	theme := b.themeFor(ctx, req, hasImage)
 
 	// Skala mengikuti tinggi kanvas supaya kartu 1:1 dan 4:5 tidak terlihat
 	// seperti kartu 9:16 yang dipangkas.
@@ -816,6 +812,34 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 	}
 	return buf.Bytes(), Geometry{Width: width, Height: height, PhotoTop: d.CardTop, PhotoH: frameHeight, PhotoBase: photoBase,
 		Scale: scale, OffsetW: limitW, OffsetH: limitH}, nil
+}
+
+// themeFor = warna tampilan jadi untuk req (nil = tanpa tema, gaya lama).
+// Dipakai kartu pertama DAN halaman lanjutan carousel (pages.go), jadi
+// warnanya pasti sama.
+func (b *Builder) themeFor(ctx context.Context, req Request, hasImage bool) *themeColors {
+	a := req.Article
+	if tc, ok := themeTable[req.Theme]; ok {
+		if req.Theme == ThemePhoto && hasImage {
+			if t := b.tone(ctx, a.Image); t.ok {
+				p := paletteFor(t, true)
+				tc = themeColors{Panel: p.Ink, Title: p.Paper, Body: p.Muted, Badge: p.Accent, OnBadge: p.OnAccent}
+			}
+		}
+		tc.PanelRGB = rgbOf(tc.Panel)
+		return &tc
+	}
+	if req.Theme == ThemeAuto {
+		tc := themeTable[ThemeDark]
+		if hasImage {
+			if c, ok := b.autoLook(ctx, a.Image); ok {
+				tc = themeColors{Panel: c.Panel, Title: c.Title, Body: c.Body, Badge: c.Badge, OnBadge: c.OnBadge}
+			}
+		}
+		tc.PanelRGB = rgbOf(tc.Panel)
+		return &tc
+	}
+	return nil
 }
 
 // fonts menanam font bawaan proyek sebagai data URI.

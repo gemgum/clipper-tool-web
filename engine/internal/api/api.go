@@ -163,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/news/feeds", s.newsFeeds)
 	mux.HandleFunc("GET /api/news/list", s.newsList)
 	mux.HandleFunc("POST /api/news/article", s.newsArticle)
+	mux.HandleFunc("POST /api/news/body", s.newsBody)
 	mux.HandleFunc("POST /api/news/resolve", s.newsResolve)
 	mux.HandleFunc("POST /api/news/analyze", s.newsAnalyze)
 	// Rancangan ulang News cards (DESIGN-NEWSCARD.md) — lihat newscard.go.
@@ -514,17 +515,36 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 500, err.Error())
 			return
 		}
-		// Logo & headline tambahan Mark di atas kartu: PNG kartu jadi bahan
-		// bakarnya, lalu menggantikannya.
+		// Logo & headline Mark di atas kartu: PNG kartu jadi bahan bakarnya.
 		if req.Mark != nil && req.Mark.On() {
-			tmp := filepath.Join(dir, "marked.png")
-			if code, err := s.burnCardMark(r.Context(), *req.Mark, req.Font, req.Ratio, png, tmp); err != nil {
+			if code, err := s.markInPlace(r.Context(), *req.Mark, req.Font, req.Ratio, png); err != nil {
 				writeErr(w, code, err.Error())
 				return
 			}
-			if err := os.Rename(tmp, png); err != nil {
-				writeErr(w, 500, err.Error())
-				return
+		}
+	}
+	// Carousel: halaman lanjutan berisi badan artikel (Chrome), lalu logo Mark
+	// di SETIAP halaman — judul/kotak judul Mark hanya milik kartu pertama.
+	pages := 1
+	if req.Whole {
+		if s.paths.Chrome == "" {
+			writeErr(w, 503, "browser not found: the article pages of a carousel need Chrome/Chromium")
+			return
+		}
+		n, err := s.cards.BuildPages(r.Context(), req.Request, dir)
+		if err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		pages = n
+		if req.Mark != nil {
+			logos := *req.Mark
+			logos.Headline.Text = ""
+			for i := 2; i <= pages && logos.On(); i++ {
+				if code, err := s.markInPlace(r.Context(), logos, req.Font, req.Ratio, filepath.Join(dir, card.PageFile(i))); err != nil {
+					writeErr(w, code, err.Error())
+					return
+				}
 			}
 		}
 	}
@@ -533,10 +553,38 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 	}
 	width, height := card.Dims(req.Ratio)
 	writeJSON(w, 201, map[string]any{
-		"id": id, "width": width, "height": height,
+		"id": id, "width": width, "height": height, "pages": pages,
 		"file": "/api/card/" + id + "/file",
 		"zip":  "/api/card/" + id + "/zip",
 	})
+}
+
+// markInPlace membakar Mark ke PNG kartu dan menimpanya.
+func (s *Server) markInPlace(ctx context.Context, mark config.Watermark, font, ratio, png string) (int, error) {
+	tmp := png + ".marked.png"
+	if code, err := s.burnCardMark(ctx, mark, font, ratio, png, tmp); err != nil {
+		return code, err
+	}
+	return 500, os.Rename(tmp, png)
+}
+
+// newsBody = badan artikel (paragraf asli) untuk carousel seluruh artikel.
+// Diminta sekali saat carousel dinyalakan; GUI menyimpannya bersama artikelnya.
+func (s *Server) newsBody(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL  string `json:"url"`
+		Lang string `json:"lang"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	content, err := news.FetchContent(r.Context(), req.URL, s.browser(), s.paths.DataDir, firstNonEmpty(req.Lang, lang(r)))
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"paragraphs": content.Body})
 }
 
 // cardHTML = halaman kartu untuk pratinjau seketika (card.Builder.HTML): tanpa
@@ -575,7 +623,9 @@ func (s *Server) cardFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "invalid card id")
 		return
 	}
-	p := filepath.Join(s.cardDir(id), card.FilePNG)
+	// ?page=N = halaman carousel ke-N (1 = kartu pertama).
+	n, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	p := filepath.Join(s.cardDir(id), card.PageFile(n))
 	if _, err := os.Stat(p); err != nil {
 		writeErr(w, 404, "card not found")
 		return

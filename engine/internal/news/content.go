@@ -25,6 +25,10 @@ type Content struct {
 	Article    Article     `json:"article"`
 	Paragraphs []Paragraph `json:"paragraphs"`
 	WordCount  int         `json:"word_count"`
+	// Body = SELURUH teks badan artikel, termasuk baris pendek (subjudul,
+	// daftar harga "1 gram: Rp2.467.000") yang tersaring dari Paragraphs.
+	// Dipakai carousel kartu, yang harus memuat artikel utuh.
+	Body []string `json:"-"`
 }
 
 // minParagraphWords = ambang panjang sebuah blok agar dianggap paragraf berita.
@@ -105,7 +109,7 @@ func contentFromHTML(htmlStr, origin, lang string) (Content, error) {
 }
 
 func buildContent(art Article, htmlStr string) (Content, error) {
-	paragraphs := parseParagraphs(htmlStr)
+	paragraphs, body := parseBody(htmlStr)
 	if len(paragraphs) == 0 {
 		return Content{}, fmt.Errorf(
 			"the article body could not be read from %s: the page may be paywalled, or its content is loaded via JavaScript. "+
@@ -115,7 +119,7 @@ func buildContent(art Article, htmlStr string) (Content, error) {
 	for _, p := range paragraphs {
 		words += len(strings.Fields(p.Text))
 	}
-	return Content{Article: art, Paragraphs: paragraphs, WordCount: words}, nil
+	return Content{Article: art, Paragraphs: paragraphs, WordCount: words, Body: body}, nil
 }
 
 var (
@@ -167,13 +171,22 @@ var junkPhrases = []string{
 
 // parseParagraphs memecah HTML jadi paragraf badan berita.
 func parseParagraphs(h string) []Paragraph {
+	p, _ := parseBody(h)
+	return p
+}
+
+// parseBody = parseParagraphs + seluruh teks badan (Content.Body). Ambang
+// minParagraphWords hanya dilonggarkan bila badan artikel dikenali — di luar
+// itu baris pendek kemungkinan besar menu, jadi Body = paragrafnya saja.
+func parseBody(h string) ([]Paragraph, []string) {
+	inBody := false
 	// Dipersempit ke BADAN ARTIKEL lebih dulu bila penandanya dikenali
 	// (post-body, entry-content, article-body, itemprop=articleBody). Di dalam
 	// sana, blok apa pun boleh dianggap paragraf tanpa takut menangkap menu
 	// atau daftar berita lain — dan itu yang membuat lapisan ketiga di bawah
 	// aman dipakai.
 	if body := articleBodyHTML(h); body != "" {
-		h = body
+		h, inBody = body, true
 	} else if m := reBody.FindStringSubmatch(h); len(m) == 2 {
 		h = m[1]
 	}
@@ -203,18 +216,21 @@ func parseParagraphs(h string) []Paragraph {
 	}
 
 	var out []Paragraph
+	var all []string
 	seen := map[string]bool{}
 	for _, t := range candidates {
-		if len(strings.Fields(t)) < minParagraphWords || seen[t] {
-			continue
-		}
-		if isJunk(t) {
+		if seen[t] || isJunk(t) {
 			continue
 		}
 		seen[t] = true
-		out = append(out, Paragraph{Index: len(out), Text: t})
+		if len(strings.Fields(t)) >= minParagraphWords {
+			out = append(out, Paragraph{Index: len(out), Text: t})
+			all = append(all, t)
+		} else if inBody {
+			all = append(all, t)
+		}
 	}
-	return out
+	return out, all
 }
 
 func extractBlocks(h string, re *regexp.Regexp) []string {

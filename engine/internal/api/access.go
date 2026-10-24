@@ -91,6 +91,7 @@ var routePerms = map[string]string{
 	"GET /api/news/feeds":          permAnyone,
 	"GET /api/news/list":           permAnyone,
 	"POST /api/news/article":       permAnyone,
+	"POST /api/news/body":          permAnyone,
 	"POST /api/news/resolve":       permAnyone,
 
 	"GET /api/requirements":          "settings.view",

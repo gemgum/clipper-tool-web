@@ -11,7 +11,7 @@
 //
 // Ikon: lucide-react (ISC) — alasannya di gui/app/page.tsx.
 import { copyText } from "../copy-link";
-import { ChevronLeft, ChevronRight, Copy, Download, Eye, ImageIcon, ImagePlus, Plus, RectangleVertical, Sparkles, Stamp, Type, Bookmark } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, ImageIcon, ImagePlus, Plus, X, RectangleVertical, Sparkles, Stamp, Type, Bookmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../page-header";
@@ -22,7 +22,7 @@ import Stepper from "../stepper";
 import Alerts from "../alerts";
 import EmptyState from "../empty-state";
 import { useAI } from "../ai";
-import { AlignPicker, Segmented, type Align } from "../clip-steps";
+import { AlignPicker, Segmented, Toggle, type Align } from "../clip-steps";
 import TabCard, { Group, Pad, Row, Split } from "../tab-card";
 import Stage, { Shot, StageFrame } from "../stage";
 import Picker from "../picker";
@@ -49,13 +49,15 @@ const LIMIT = 180;
 type Article = {
   title: string; summary: string; url: string; image: string; images?: string[];
   source: string; domain: string; date: string; published: string;
+  // body = paragraf asli badan artikel untuk carousel (/api/news/body), diambil sekali.
+  body?: string[];
 };
 type Feed = { id: string; name: string; url: string; topic: string };
 type Config = { feeds: Feed[]; has_browser: boolean; browser: string };
 type Violation = { kind: string; text: string; detail: string };
 // Geometry = card.Geometry: letak area foto & batas geser, piksel kanvas.
-type Geometry = { width: number; height: number; photo_top: number; photo_h: number; photo_base: number; scale: number; offset_w: number; offset_h: number };
-type Saved = { id: string; file: string; zip: string; width: number; height: number; bytes: number };
+type Geometry = { width: number; height: number; photo_top: number; photo_h: number; photo_base: number; scale: number; offset_w: number; offset_h: number; pages: number };
+type Saved = { id: string; file: string; zip: string; width: number; height: number; bytes: number; pages?: number };
 type CardItem = { id: string; made: string; bytes: number; file: string; zip: string; title?: string; source?: string };
 
 const EMPTY: Article = { title: "", summary: "", url: "", image: "", images: [], source: "", domain: "", date: "", published: "" };
@@ -152,7 +154,6 @@ export default function News() {
     if (tpl.defaultTemplate) { applyTemplate(tpl.defaultTemplate.data); setActiveTpl(tpl.defaultTemplate.name); }
   };
   // Laci "atur sendiri".
-  const [zoom, setZoom] = useState(1);
   const [photoFit, setPhotoFit] = useState("cover");
   const [photoFill, setPhotoFill] = useState("blur");
   const [titleStep, setTitleStep] = useState(0);
@@ -162,10 +163,12 @@ export default function News() {
   // Pratinjau seketika (HTML kartu + letak bagian yang bisa diseret) dan hasil
   // render sungguhan dari Chrome (tombol Preview result).
   const [live, setLive] = useState<{ html: string; geometry: Geometry } | null>(null);
+  // Carousel seluruh artikel: kartu pertama + halaman lanjutan berisi badan
+  // artikel. page = halaman yang sedang dipratinjau (0 = kartu pertama).
+  const [whole, setWhole] = useState(false);
+  const [page, setPage] = useState(0);
   const [shot, setShot] = useState("");
   const [shooting, setShooting] = useState(false);
-  const [photoX, setPhotoX] = useState(0);
-  const [photoY, setPhotoY] = useState(0);
   // Geseran batas foto–isi (card.Request.CardY), diseret di pratinjau.
   const [cardY, setCardY] = useState(0);
   // Layar 3.
@@ -202,7 +205,7 @@ export default function News() {
   const useArticle = useCallback((a: Article) => {
     setArticle({ ...EMPTY, ...a, images: a.images?.length ? a.images : (a.image ? [a.image] : []) });
     setCaption(""); setHashtags(""); setChecks({ summary: [], caption: [] }); setWriteError("");
-    setShot(""); setSaved(null); setZoom(1); setPhotoX(0); setPhotoY(0);
+    setShot(""); setSaved(null);
     if (a.title) applyDefault.current();
   }, []);
 
@@ -275,9 +278,10 @@ export default function News() {
   const cardBody = useCallback((r: string, previewOnly: boolean) => JSON.stringify({
     article, theme, style: themeDef.style, ratio: r, align, title_align: titleAlign, lang, preview: previewOnly, caption,
     hashtags: hashtags.split(/\s+/).map((h) => h.replace(/^#/, "")).filter(Boolean),
-    photo: { offset_x: photoX, offset_y: photoY, zoom, fit: photoFit, fill: photoFill },
+    photo: { fit: photoFit, fill: photoFill },
     fonts: { title: titleStep, paragraph: paragraphStep }, header: 0, card_top: cardTop, card_y: cardY,
-  }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, zoom, photoX, photoY, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY]);
+    whole, body: whole ? article.body || [] : [],
+  }), [article, theme, themeDef.style, align, titleAlign, lang, caption, hashtags, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, whole]);
   // Yang benar-benar dirender (simpan & Preview result): kartu + gaya + Mark,
   // dibakar engine Mark yang sama dengan halaman Mark.
   const renderBody = (r: string, previewOnly: boolean) => JSON.stringify({
@@ -290,15 +294,26 @@ export default function News() {
   useEffect(() => {
     if (screen !== "compose" || !article.title) return;
     const id = setTimeout(() => {
-      post<{ html: string; geometry: Geometry }>(`/api/card/html`, fingerprint, t("errBuildCard")).then(setLive).catch((e) => setError(e.message));
+      post<{ html: string; geometry: Geometry }>(`/api/card/html`, { ...JSON.parse(fingerprint), page }, t("errBuildCard")).then((d) => {
+        setLive(d);
+        // Halaman yang tidak ada lagi (badan dipecah ulang) → kembali ke halaman terakhir.
+        if (page >= d.geometry.pages) setPage(Math.max(0, d.geometry.pages - 1));
+      }).catch((e) => setError(e.message));
     }, 80);
     return () => clearTimeout(id);
-  }, [fingerprint, screen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fingerprint, screen, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Badan artikel diambil SEKALI saat carousel dinyalakan, lalu ikut tersimpan.
+  useEffect(() => {
+    if (!whole || !article.url || article.body) return;
+    post<{ paragraphs: string[] }>(`/api/news/body`, { url: article.url, lang }, t("errReadArticle"))
+      .then((d) => setArticle((a) => (a.url === article.url ? { ...a, body: d.paragraphs } : a))).catch((e) => setError(e.message));
+  }, [whole, article.url, article.body]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pages = live?.geometry.pages || 1;
   const previewResult = async () => {
     setShooting(true); setError("");
     try {
       const d = await post(`/api/card`, renderBody(ratio, true), t("errBuildCard"));
-      setShot(eng(`${d.file}?v=${Date.now()}`));
+      setShot(eng(`${d.file}?page=${page + 1}&v=${Date.now()}`));
     } catch (e: any) { setError(e.message); }
     setShooting(false);
   };
@@ -317,28 +332,14 @@ export default function News() {
   const photoSrc = !article.image ? "" : article.image.startsWith("http") ? article.image : eng(`/api/image?path=${encodeURIComponent(article.image)}`);
   const geo = live?.geometry;
   const k = geo && cardW ? cardW / geo.width : 1;
-  // Seret foto (zoom > 100%): geser OffsetX/Y dalam batas engine (offset_w/h).
-  const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
-  const startDrag = (e: React.PointerEvent) => {
-    if (!geo) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, y: e.clientY, ox: photoX, oy: photoY };
-  };
-  const moveDrag = (e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d || !geo) return;
-    const lim = (v: number, m: number) => Math.min(m, Math.max(-m, Math.round(v)));
-    setPhotoX(lim(d.ox + (e.clientX - d.x) / k, geo.offset_w)); setPhotoY(lim(d.oy + (e.clientY - d.y) / k, geo.offset_h));
-  };
-  const endDrag = () => { drag.current = null; };
   // Seret isi = batas foto–isi (CardY) lewat fungsi seret yang SAMA dengan Mark
   // (m.dragProps: kisi, magnet di posisi bawaan); jepit 20–85% = card.render.
   const edgeDrag = geo ? m.dragProps(m.fw / 2, geo.photo_top + geo.photo_h, (_x, y) => {
     const photo = Math.min(Math.max(Math.round(y) - geo.photo_top, Math.trunc(geo.height / 5)), Math.trunc((geo.height * 85) / 100));
     setCardY(photo - geo.photo_base);
   }, geo.photo_top + geo.photo_base, m.fh) : {};
-  const standard = titleStep === 0 && paragraphStep === 0 && cardTop === 0 && zoom === 1 && photoX === 0 && photoY === 0 && cardY === 0;
-  const resetLook = () => { setTitleStep(0); setParagraphStep(0); setCardTop(0); setZoom(1); setPhotoX(0); setPhotoY(0); setCardY(0); };
+  const standard = titleStep === 0 && paragraphStep === 0 && cardTop === 0 && cardY === 0;
+  const resetLook = () => { setTitleStep(0); setParagraphStep(0); setCardTop(0); setCardY(0); };
 
   const save = useCallback(async () => {
     setSaving(true); setRenderError("");
@@ -346,7 +347,7 @@ export default function News() {
       const d = await post(`/api/card`, renderBody(ratio, false), t("errBuildCard"));
       let bytes = 0;
       try { bytes = Number((await fetch(eng(d.file), { method: "HEAD" })).headers.get("content-length")) || 0; } catch {}
-      setSaved({ id: d.id, file: eng(d.file), zip: eng(d.zip), width: d.width, height: d.height, bytes });
+      setSaved({ id: d.id, file: eng(d.file), zip: eng(d.zip), width: d.width, height: d.height, bytes, pages: d.pages });
       setCards(null); setScreen("done");
     } catch (e: any) { setRenderError(e.message); setScreen("done"); }
     finally { setSaving(false); }
@@ -379,13 +380,13 @@ export default function News() {
   const newCard = () => { setScreen("pick"); setPicked(""); useArticle(EMPTY); setRenderError(""); };
 
   // ---------- isian tersimpan ----------
-  useKeep("news", { article, caption, hashtags, theme, ratio, align, titleAlign, zoom, photoX, photoY, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, saved,
+  useKeep("news", { article, caption, hashtags, theme, ratio, align, titleAlign, photoFit, photoFill, titleStep, paragraphStep, cardTop, cardY, saved, whole,
     layout, mark: { watermark: m.watermark, logos: m.logos, logoOn: m.logoOn } });
   useRestore<Record<string, unknown>>("news", (v) => {
     const set = <T,>(fn: (x: T) => void, val: unknown) => { if (val !== undefined && val !== null) fn(val as T); };
     set(setArticle, v.article); set(setCaption, v.caption); set(setHashtags, v.hashtags);
     if (typeof v.theme === "string" && (v.theme === "auto" || THEMES.some((x) => x.id === v.theme))) setTheme(v.theme);
-    set(setRatio, v.ratio); set(setAlign, v.align); set(setTitleAlign, v.titleAlign); set(setZoom, v.zoom); set(setPhotoX, v.photoX); set(setPhotoY, v.photoY); set(setCardY, v.cardY); set(setSaved, v.saved);
+    set(setRatio, v.ratio); set(setAlign, v.align); set(setTitleAlign, v.titleAlign); set(setCardY, v.cardY); set(setSaved, v.saved); set(setWhole, v.whole);
     if (v.layout === "card" || v.layout === "box") setLayout(v.layout);
     if (v.mark && typeof v.mark === "object") m.applyMark(v.mark as Record<string, unknown>);
     set(setPhotoFit, v.photoFit); set(setPhotoFill, v.photoFill);
@@ -545,13 +546,17 @@ export default function News() {
                       <Segmented label={t("wmStyle")} value={layout} onChange={changeLayout}
                         options={[{ value: "card" as const, name: t("wmStyleLook") }, { value: "box" as const, name: t("wmStyleBox") }]} />
                     </Row>
+                    {/* Carousel: kartu pertama + badan artikel di halaman lanjutan. */}
+                    <Row label={t("ncWhole")} note={t("ncWholeNote")} off={!article.url}>
+                      <Toggle checked={whole} onChange={(on) => { setWhole(on); setPage(0); }} label={t("ncWholeOn")} />
+                    </Row>
                     {/* Sudut kotak judul: hanya ada di gaya box. */}
                     <Row label={t("wmCorner")} off={layout !== "box"}>
                       <Segmented label={t("wmCorner")} value={m.watermark.hlSharp ? "sharp" : "round"} onChange={(v) => m.setWatermark({ hlSharp: v === "sharp" })}
                         options={[{ value: "round", name: t("wmCornerRound") }, { value: "sharp", name: t("wmCornerSharp") }]} />
                     </Row>
                     <Row label={t("photoFitLabel")} off={layout === "box"}>
-                      <Segmented label={t("photoFitLabel")} value={photoFit} onChange={(v) => { setPhotoFit(v); setZoom(1); setPhotoX(0); setPhotoY(0); }}
+                      <Segmented label={t("photoFitLabel")} value={photoFit} onChange={setPhotoFit}
                         options={[{ value: "cover", name: t("photoFitCover") }, { value: "whole", name: t("photoFitWhole") }]} />
                     </Row>
                     {/* Selalu ada; hanya berarti saat seluruh foto dimuat. */}
@@ -564,25 +569,26 @@ export default function News() {
               )}
 
               {openTab === "photo" && (
-                // Sejajar: kiri = pilihan foto, kanan = besarnya (geser di pratinjau).
+                // Pilihan foto (pilih, hapus, unggah) lalu alamatnya.
                 <Group title={t("ncPhoto")}>
-                  <Split side={<>
-                    <span className="mc-r-l">{t("photoZoom")}</span>
-                    <fieldset className="cp-plain" disabled={layout === "box"}>
-                      <Stepper value={Math.round(zoom * 100)} onChange={(v) => setZoom(v / 100)} min={100} max={400} step={5} suffix="%" />
-                    </fieldset>
-                    <span className="mc-note">{t("ncPhotoDrag")}</span>
-                  </>}>
                       <Pad>
                         <span className="mc-note">{article.images?.length ? t("ncPhotoHint") : t("ncPhotoNone")}</span>
                         <div className="nc-photos">
                           {(article.images || []).map((src, i) => (
-                            <button key={src} type="button" className={"photo-btn" + (article.image === src ? " on" : "")}
-                              aria-pressed={article.image === src} aria-label={t("ncPhotoN", { n: i + 1 })}
-                              onClick={() => { setArticle((a) => ({ ...a, image: src })); setPhotoX(0); setPhotoY(0); }}>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img alt="" src={src.startsWith("http") ? src : eng(`/api/image?path=${encodeURIComponent(src)}`)} />
-                            </button>
+                            <div key={src} className="photo-item">
+                              <button type="button" className={"photo-btn" + (article.image === src ? " on" : "")}
+                                aria-pressed={article.image === src} aria-label={t("ncPhotoN", { n: i + 1 })}
+                                onClick={() => setArticle((a) => ({ ...a, image: src }))}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img alt="" src={src.startsWith("http") ? src : eng(`/api/image?path=${encodeURIComponent(src)}`)} />
+                              </button>
+                              {/* Hapus dari pilihan; foto terpilih yang dihapus diganti foto pertama yang tersisa. */}
+                              <button type="button" className="ghost tiny icon-only photo-del" aria-label={t("ncPhotoRemove")} title={t("ncPhotoRemove")}
+                                onClick={() => setArticle((a) => {
+                                  const images = (a.images || []).filter((x) => x !== src);
+                                  return { ...a, images, image: a.image === src ? images[0] || "" : a.image };
+                                })}><X className="ico" aria-hidden="true" /></button>
+                            </div>
                           ))}
                           <label className="photo-btn upload">
                             <input type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={uploading}
@@ -593,7 +599,6 @@ export default function News() {
                         </div>
                       </Pad>
                       <Row label={t("imageURL")}><input value={article.image} aria-label={t("imageURL")} onChange={(e) => setArticle((a) => ({ ...a, image: e.target.value }))} /></Row>
-                  </Split>
                 </Group>
               )}
 
@@ -701,32 +706,42 @@ export default function News() {
 
           {/* Pratinjau seketika seperti Watermark: halaman kartu dari engine
               (/api/card/html, template yang SAMA dengan PNG) di dalam iframe,
-              ditambah dua lapis seret — foto (geser saat zoom > 100%) dan isi
-              (= "Push the content down"). "Preview result" = PNG dari Chrome. */}
+              ditambah lapis seret batas foto–isi. "Preview result" = PNG dari Chrome. */}
           <Stage title={t("previewTitle")} badge={`${ratioDef.w} × ${ratioDef.h}`} help={t("ncDragHelp")}
             action={
               <button type="button" className="wm-preview-btn" disabled={!article.title || shooting || (layout === "card" && !config?.has_browser)} onClick={previewResult}>
                 <Eye className="ico" aria-hidden="true" /> {shooting ? t("wmPreviewing") : t("wmPreviewResult")}
               </button>
             }
-            tools={<GridPicker grid={grid} setGrid={setGrid} always={gridAlways} setAlways={setGridAlways} />}>
+            tools={<>
+              {/* Carousel: pindah halaman pratinjau. */}
+              {pages > 1 && (
+                <div className="nc-pager" role="group" aria-label={t("ncPages")}>
+                  <button type="button" className="ghost tiny icon-only" aria-label={t("ncPagePrev")} disabled={page === 0} onClick={() => setPage(page - 1)}>
+                    <ChevronLeft className="ico" aria-hidden="true" /></button>
+                  <span>{page + 1} / {pages}</span>
+                  <button type="button" className="ghost tiny icon-only" aria-label={t("ncPageNext")} disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>
+                    <ChevronRight className="ico" aria-hidden="true" /></button>
+                </div>
+              )}
+              <GridPicker grid={grid} setGrid={setGrid} always={gridAlways} setAlways={setGridAlways} />
+            </>}>
             <StageFrame>
               <div className="nc-card nc-live" ref={cardRef} style={{ aspectRatio: ratio.replace(":", " / "), "--pvh": `${frameH}px` } as React.CSSProperties}>
-                {layout === "box" ? (
+                {layout === "box" && page === 0 ? (
                   // Gaya box: foto artikel memenuhi bingkai (potong tengah, sama dengan engine).
                   photoSrc ? /* eslint-disable-next-line @next/next/no-img-element */ <img className="nc-box-photo" src={photoSrc} alt="" draggable={false} />
                     : <span className="meta">{t("ncPhotoNone")}</span>
                 ) : live && geo ? <>
                   <iframe title={t("previewTitle")} srcDoc={live.html} sandbox="" tabIndex={-1}
                     style={{ width: geo.width, height: geo.height, transform: `scale(${k})` }} />
-                  <div className={"nc-drag" + (geo.offset_w || geo.offset_h ? " can" : "")} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag}
-                    style={{ top: geo.photo_top * k, height: geo.photo_h * 0.75 * k }} />
-                  <div className="nc-drag can" {...edgeDrag} style={{ top: (geo.photo_top + geo.photo_h * 0.75) * k, bottom: 0 }} />
+                  {page === 0 && <div className="nc-drag can" {...edgeDrag} style={{ top: (geo.photo_top + geo.photo_h * 0.75) * k, bottom: 0 }} />}
                 </> : <span className="meta">{t("ncPreviewWait")}</span>}
                 {cardW > 0 && <Guides grid={grid} visible={gridAlways || m.dragAt !== null} playH={m.fh}
                   atX={(m.dragAt?.x ?? m.placed[m.sel]?.x) === CENTER_X} atY={(m.dragAt?.y ?? m.placed[m.sel]?.y) === m.fh / 2} dragAt={m.dragAt} />}
                 {/* Logo & judul Mark di atas kartu — lapisan yang sama dengan halaman Mark. */}
-                {cardW > 0 && <MarkLayers m={m} frameH={frameH} />}
+                {/* Halaman lanjutan carousel: hanya logo — judul/kotak judul milik kartu pertama. */}
+                {cardW > 0 && <MarkLayers m={page === 0 ? m : { ...m, nb: null, hlLines: [] }} frameH={frameH} />}
                 {layout === "card" && band === "long" && <span className="nc-warn">{t("ncTooLongOnCard")}</span>}
               </div>
             </StageFrame>
@@ -747,7 +762,8 @@ export default function News() {
             ) : saved && (
               <div className="banner good" role="status">
                 <span className="banner-ico" aria-hidden="true"><Download className="ico" /></span>
-                <p><b>{t("ncSaved")}</b> {t("ncSavedMeta", { w: saved.width, h: saved.height, size: sizeText })}</p>
+                <p><b>{t("ncSaved")}</b> {t("ncSavedMeta", { w: saved.width, h: saved.height, size: sizeText })}
+                  {(saved.pages || 1) > 1 && <> {t("ncSavedPages", { n: saved.pages! })}</>}</p>
               </div>
             )}
             <section className="card">
