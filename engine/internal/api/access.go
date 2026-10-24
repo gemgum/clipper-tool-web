@@ -105,6 +105,9 @@ var routePerms = map[string]string{
 	"POST /api/settings/ai":          "settings.manage",
 	"POST /api/settings":             "settings.manage",
 	"POST /api/settings/folders":     "settings.manage",
+	"GET /api/news/crawl":            "settings.view",
+	"POST /api/news/crawl":           "settings.manage",
+	"POST /api/news/crawl/keys":      "settings.manage",
 	"POST /api/ollama/pull":          "settings.manage",
 	// Dimatikan webOff di mode web; tetap dipetakan supaya tabelnya lengkap.
 	"GET /api/browse":                         "settings.manage",

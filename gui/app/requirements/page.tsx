@@ -1,7 +1,7 @@
 "use client";
 
 // Halaman Pengaturan (dulu Requirements) — DESIGN-Clipper-Lanjutan.md §7:
-// tiga tab (Mesin AI · Program & model · Lokasi berkas) dan panel Kesiapan
+// empat tab (Mesin AI · Pencarian berita · Program & model · Lokasi berkas) dan panel Kesiapan
 // sistem yang selalu terlihat. Logika pasang/hapus/path/folder tidak berubah.
 //
 // Halaman Requirements: daftar komponen, statusnya, dan tombol pasang.
@@ -23,6 +23,7 @@ import AISettingsPanel from "./ai-settings";
 import { useAISettings } from "../ai";
 import { useEngines } from "../engine-picker";
 import { useSticky } from "../persist";
+import CrawlSettings from "./crawl";
 
 type Component = {
   id: string;
@@ -86,7 +87,7 @@ export default function RequirementsPage() {
   // Pesan hasil per komponen (selesai / gagal), hilang saat dicoba lagi.
   const [notes, setNotes] = useState<Record<string, string>>({});
   const abort = useRef<AbortController | null>(null);
-  const [tab, setTab] = useSticky<"ai" | "programs" | "files">("settings.tab", "ai");
+  const [tab, setTab] = useSticky<"ai" | "news" | "programs" | "files">("settings.tab", "ai");
   const { data: ai } = useAISettings();
   const { engines } = useEngines();
 
@@ -275,10 +276,10 @@ export default function RequirementsPage() {
             )}</> },
       ]} />
 
-      {/* Tiga tab dengan garis bawah aksen (DESIGN §9 SettingsTabs). */}
+      {/* Tab-tab dengan garis bawah aksen (DESIGN §9 SettingsTabs). */}
       <div className="set-tabs" role="tablist" aria-label={t("tabRequirements")}>
         {/* Mode web: tab lokasi berkas dibuang — folder server bukan urusan tim. */}
-        {([["ai", t("setTabAI")], ["programs", t("setTabPrograms")], ...(web ? [] : [["files", t("setTabFiles")]])] as [typeof tab, string][]).map(([id, label]) => (
+        {([["ai", t("setTabAI")], ["news", t("setTabNews")], ["programs", t("setTabPrograms")], ...(web ? [] : [["files", t("setTabFiles")]])] as [typeof tab, string][]).map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""}
             onClick={() => setTab(id)}>{label}</button>
         ))}
@@ -296,6 +297,8 @@ export default function RequirementsPage() {
               </section>
             </>
           )}
+
+          {tab === "news" && <CrawlSettings />}
 
           {tab === "programs" && (
             <>

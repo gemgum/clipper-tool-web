@@ -3424,3 +3424,8 @@ fieldset.wm-timed { margin: 0; padding: 0; border: 0; min-width: 0; }
 .mc-r-pad > fieldset.cp-plain { display: flex; flex-direction: column; gap: 6px; }
 /* Isi carousel: tinggi mengikuti teksnya, dibatasi supaya tetap ringkas. */
 textarea.nc-story { field-sizing: content; min-height: 160px; max-height: 520px; line-height: 1.6; }
+
+/* Tab News search (notes/45): lencana + saldo sebaris, kunci + tombol sebaris. */
+.crawl-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.crawl-key { display: flex; align-items: center; gap: 8px; }
+.crawl-key input { flex: 1; min-width: 0; }

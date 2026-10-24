@@ -40,6 +40,8 @@ type Server struct {
 	paths  config.Paths
 	ff     *ffmpeg.Client
 	cards  *card.Builder
+	// crawl = crawl berita lewat Serper/SociaVault (notes/45), dipicu daftar berita.
+	crawl *news.Crawler
 	// installs = pemasangan komponen yang berjalan di latar (lihat installs.go).
 	installs installs
 	// posts = job pembuat berita yang berjalan di latar (lihat posts.go).
@@ -70,6 +72,7 @@ func NewServer(mgr *job.Manager, l config.Layout) *Server {
 		paths:  paths,
 		ff:     ffmpeg.New(paths.FFmpeg, paths.FFprobe),
 		cards:  card.New(capture.New(paths.Chrome), paths.FontsDir),
+		crawl:  news.NewCrawler(filepath.Join(paths.DataDir, "news")),
 	}
 	// Hasil pembuat berita, caption, dan watermark bertahan setelah aplikasi
 	// ditutup (riwayat bersama, DESIGN-Clipper-Lanjutan §6).
@@ -98,6 +101,9 @@ func (s *Server) applyPaths() {
 	s.paths = config.ResolvePaths(s.layout, config.DefaultOptions())
 	s.ff = ffmpeg.New(s.paths.FFmpeg, s.paths.FFprobe)
 	s.cards = card.New(capture.New(s.paths.Chrome), s.paths.FontsDir)
+	if dir := filepath.Join(s.paths.DataDir, "news"); dir != s.crawl.Dir {
+		s.crawl = news.NewCrawler(dir)
+	}
 }
 
 // Handler membangun router.
@@ -164,6 +170,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/news/list", s.newsList)
 	mux.HandleFunc("POST /api/news/article", s.newsArticle)
 	mux.HandleFunc("POST /api/news/body", s.newsBody)
+	mux.HandleFunc("GET /api/news/crawl", s.crawlState)
+	mux.HandleFunc("POST /api/news/crawl", s.crawlNow)
+	mux.HandleFunc("POST /api/news/crawl/keys", s.crawlKeys)
 	mux.HandleFunc("POST /api/news/resolve", s.newsResolve)
 	mux.HandleFunc("POST /api/news/analyze", s.newsAnalyze)
 	// Rancangan ulang News cards (DESIGN-NEWSCARD.md) — lihat newscard.go.
@@ -290,12 +299,17 @@ func (s *Server) newsList(w http.ResponseWriter, r *http.Request) {
 	// berita di GUI, supaya pengguna tidak perlu memilih sumber satu per satu
 	// hanya untuk melihat apa yang baru.
 	if feed == "" || feed == "all" {
+		// Membuka daftar berita = website sedang dipakai: saat inilah crawl
+		// boleh jalan (paling cepat tiap 3 jam, di latar — notes/45). Hasil
+		// crawl yang tersimpan ikut digabung dengan RSS.
+		s.crawl.MaybeStart(false)
 		items, err := news.ListAll(r.Context(), max, lang(r))
-		if err != nil {
+		crawled := s.crawl.Items()
+		if err != nil && len(crawled) == 0 {
 			writeErr(w, 502, err.Error())
 			return
 		}
-		writeJSON(w, 200, items)
+		writeJSON(w, 200, news.Merge(max, items, crawled))
 		return
 	}
 	// Nama media diambil dari daftar kurasi bila feednya dikenal — judul channel
