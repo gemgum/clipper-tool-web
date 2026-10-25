@@ -3554,3 +3554,16 @@ button.mc-cswatch.cp-wand .ico { width: 16px; height: 16px; }
 /* Pilihan cepat + angka (Text size, Outline): angka sempit, label tidak menempel. */
 .mc-combo .segmented { grid-auto-flow: column !important; grid-template-columns: none !important; grid-auto-columns: auto !important; }
 .mc-combo .segmented button { padding: 0 2px; font-size: 12.5px; min-width: 0; }
+/* Satu tinggi untuk seluruh bilah: tombol alat (Clips) & tombol garis bantu
+   setinggi pemilih kisi, sudut sama dengan pemilihnya. */
+.stage-bar { align-items: stretch; }
+.stage-bar > .pv-tools { margin: 0; flex: none; flex-wrap: nowrap; gap: 6px; }
+.stage-bar > .field-inline { align-items: stretch; }
+.stage-bar > .pv-tools > button, .stage-bar > .field-inline > button { height: auto; min-height: 0; margin: 0; padding: 0 10px; border-radius: var(--r-sm); }
+/* Kartu sumber (Clips) & Files (Mark) KELUAR dari gulir: menempel di atas kolom
+   kiri, kartu setelan bergulir di bawahnya. Bayangan selebar gap kolom (20 px)
+   berwarna latar menutup isi yang lewat di antara kartu dan setelan. */
+.setup-main > .src-card, .setup-main > .cap-drop { position: sticky; top: 0; z-index: 4; box-shadow: 0 20px 0 var(--bg); }
+/* .stage juga nama baris tahap di log (margin-top 8px) — kartu pratinjau tidak
+   ikut, supaya tepi atasnya sejajar dengan kartu pertama kolom kiri. */
+.preview-card.stage { margin-top: 0; }

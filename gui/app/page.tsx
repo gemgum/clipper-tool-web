@@ -21,7 +21,7 @@
 // ada di font mana pun.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Crosshair, Eye, Grid3x3, Move, Play, Smartphone } from "lucide-react";
+import { Eye, Grid3x3, Move, Play, Smartphone } from "lucide-react";
 import Stage, { StageBar } from "./stage";
 import PageHeader from "./page-header";
 import { useAI, useAISettings } from "./ai";
@@ -757,12 +757,11 @@ export default function Home() {
               posisi & bantu-lihat di bawahnya, tempat subtitlenya diseret. */}
           <Stage title={t("previewTitle")} badge="9:16" bad={inUnsafe} help={inUnsafe ? t("unsafeWarning") : t("dragHint")}>
             {/* Satu baris alat di atas pratinjau (StageBar, sama dengan Mark & News):
-                tengah · area aman · area tertutup UI, lalu kisi + garis bantu. */}
+                area aman · area tertutup UI, lalu kisi + garis bantu (tombol "tengah"
+                dibuang: kembar dengan garis bantu, subtitle tetap menempel di tengah saat digeser). */}
             <StageBar grid={{ grid, setGrid, always: alwaysGuides, setAlways: setAlwaysGuides }}
               lead={
                 <fieldset className="pv-tools" disabled={!path}>
-                  <button type="button" className="ghost tiny icon-only" title={t("mcCentre")} aria-label={t("mcCentre")}
-                    onClick={() => { setSubX(CENTER_X); setSubY(centerAnchorY); }}><Crosshair className="ico" aria-hidden="true" /></button>
                   <button type="button" className="ghost tiny icon-only" title={t("mcSafe")} aria-label={t("mcSafe")} disabled={!zone} onClick={placeSafe}>
                     <Smartphone className="ico" aria-hidden="true" /></button>
                   <button type="button" className={"ghost tiny icon-only" + (showZones ? " active" : "")} aria-pressed={showZones}
