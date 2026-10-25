@@ -351,7 +351,10 @@ func isImageURL(s string) bool {
 // BuildPages menulis halaman lanjutan carousel (card-2.png, …) ke dir dan
 // mengembalikan jumlah seluruh kartu (termasuk yang pertama). PNG halaman
 // lama di folder yang sama (pratinjau dipakai ulang) dibuang lebih dulu.
-func (b *Builder) BuildPages(ctx context.Context, req Request, dir string) (int, error) {
+//
+// only >= 2 = hanya halaman itu yang dirender (Pratinjau hasil: satu halaman
+// lewat Chrome, bukan seluruh carousel); 0 = semua. Jumlah halaman tetap total.
+func (b *Builder) BuildPages(ctx context.Context, req Request, dir string, only int) (int, error) {
 	old, _ := filepath.Glob(filepath.Join(dir, "card-*.png"))
 	for _, f := range old {
 		os.Remove(f)
@@ -360,6 +363,9 @@ func (b *Builder) BuildPages(ctx context.Context, req Request, dir string) (int,
 	pages := Pages(req, width, height)
 	total := len(pages) + 1
 	for i, text := range pages {
+		if only >= 2 && i+2 != only {
+			continue
+		}
 		page, _, err := b.renderPage(ctx, req, width, height, i+2, total, text)
 		if err != nil {
 			return 0, err

@@ -135,6 +135,7 @@ var routePerms = map[string]string{
 	"POST /api/news/write":    "card.create",
 	"POST /api/card":          "card.create",
 	"POST /api/card/html":     "card.create",
+	"GET /api/card/fonts":     "card.create",
 	"GET /api/card/{id}/file": "card.view",
 	"GET /api/card/{id}/zip":  "card.view",
 	"GET /api/cards":          "card.view",

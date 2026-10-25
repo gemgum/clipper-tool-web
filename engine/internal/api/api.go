@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"net/http"
@@ -180,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/news/write", s.newsWrite)
 	mux.HandleFunc("POST /api/card", s.makeCard)
 	mux.HandleFunc("POST /api/card/html", s.cardHTML)
+	mux.HandleFunc("GET /api/card/fonts", s.cardFonts)
 	mux.HandleFunc("GET /api/card/{id}/file", s.cardFile)
 	mux.HandleFunc("GET /api/card/{id}/zip", s.cardZip)
 	mux.HandleFunc("GET /api/cards", s.listCards)
@@ -480,6 +482,9 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 		// Menyetel kartu itu pekerjaan puluhan percobaan; tanpa ini tiap
 		// percobaan meninggalkan satu folder permanen.
 		Preview bool `json:"preview"`
+		// Page (hanya dengan Preview) = halaman carousel yang dilihat, 1 = kartu
+		// pertama. Hanya halaman itu yang dirender; 0 = semua (Simpan).
+		Page int `json:"page"`
 		// Layout = "card" (kartu News, Chrome) | "box" (foto artikel penuh +
 		// kotak judul Mark, tanpa Chrome).
 		Layout string `json:"layout"`
@@ -519,7 +524,14 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := s.cardDir(id)
 	png := filepath.Join(dir, card.FilePNG)
-	if box {
+	only := 0
+	if req.Preview {
+		only = req.Page
+	}
+	// Pratinjau halaman lanjutan tidak butuh kartu pertama sama sekali.
+	if only >= 2 {
+		os.Remove(png)
+	} else if box {
 		code, err := s.burnCardMark(r.Context(), *req.Mark, req.Font, req.Ratio, original, png)
 		if err == nil && !req.Preview {
 			err = card.WriteSidecars(dir, req.Request)
@@ -544,12 +556,16 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 	// Carousel: halaman lanjutan berisi badan artikel (Chrome), lalu logo Mark
 	// di SETIAP halaman — judul/kotak judul Mark hanya milik kartu pertama.
 	pages := 1
-	if req.Whole {
+	if req.Whole && only == 1 {
+		// Pratinjau kartu pertama: jumlah halaman dihitung, tidak dirender.
+		width, height := card.Dims(req.Ratio)
+		pages = len(card.Pages(req.Request, width, height)) + 1
+	} else if req.Whole {
 		if s.paths.Chrome == "" {
 			writeErr(w, 503, "browser not found: the article pages of a carousel need Chrome/Chromium")
 			return
 		}
-		n, err := s.cards.BuildPages(r.Context(), req.Request, dir)
+		n, err := s.cards.BuildPages(r.Context(), req.Request, dir, only)
 		if err != nil {
 			writeErr(w, 500, err.Error())
 			return
@@ -559,6 +575,9 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 			logos := *req.Mark
 			logos.Headline.Text = ""
 			for i := 2; i <= pages && logos.On(); i++ {
+				if only >= 2 && i != only {
+					continue
+				}
 				if code, err := s.markInPlace(r.Context(), logos, req.Font, req.Ratio, filepath.Join(dir, card.PageFile(i))); err != nil {
 					writeErr(w, code, err.Error())
 					return
@@ -630,20 +649,28 @@ func (s *Server) cardHTML(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	// Font tertanam (±1,25 MB base64) tidak dikirim ulang tiap halaman/setelan:
-	// HTML membawa penanda CardFontMark, CSS fontnya ikut sekali di "fonts", dan
-	// GUI yang sudah menyimpannya meminta ?fonts=cached. Lewat internet, 1,3 MB
-	// per pindah halaman itulah yang membuat pager carousel lambat.
-	html, fonts := string(page), string(s.cards.FontCSS())
-	out := map[string]any{"geometry": geo}
-	if fonts != "" {
+	// Font tertanam (±1,25 MB base64) TIDAK ikut di sini: HTML membawa penanda
+	// CardFontMark dan kunci fontnya; GUI mengambil CSS-nya dari cardFonts yang
+	// disimpan cache browser. Lewat internet, 1,3 MB per pindah halaman itulah
+	// yang membuat pager carousel lambat.
+	html := string(page)
+	if fonts := string(s.cards.FontCSS()); fonts != "" {
 		html = strings.Replace(html, fonts, CardFontMark, 1)
-		if r.URL.Query().Get("fonts") != "cached" {
-			out["fonts"] = fonts
-		}
 	}
-	out["html"] = html
-	writeJSON(w, 200, out)
+	writeJSON(w, 200, map[string]any{"html": html, "geometry": geo, "fonts_key": s.cards.FontKey()})
+}
+
+// cardFonts = CSS font kartu (pasangan CardFontMark). ?v= yang cocok dengan
+// kuncinya boleh disimpan browser selamanya (isinya tak berubah untuk kunci
+// itu); kunci lain/kosong tidak di-cache.
+func (s *Server) cardFonts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	if r.URL.Query().Get("v") == s.cards.FontKey() {
+		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
+	io.WriteString(w, string(s.cards.FontCSS()))
 }
 
 // CardFontMark = pengganti CSS font di HTML pratinjau kartu (cardHTML); GUI
@@ -669,9 +696,33 @@ func (s *Server) cardFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, "card not found")
 		return
 	}
+	// ?jpg=1 = untuk DILIHAT (Pratinjau hasil): JPEG ±300 KB, bukan PNG ±3 MB.
+	// Berkas yang disimpan & diunduh tetap PNG apa adanya.
+	if r.URL.Query().Get("jpg") == "1" {
+		if err := servePNGAsJPEG(w, p); err != nil {
+			writeErr(w, 500, err.Error())
+		}
+		return
+	}
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	http.ServeFile(w, r, p)
+}
+
+// servePNGAsJPEG menyajikan PNG kartu sebagai JPEG mutu 85 (pratinjau saja).
+func servePNGAsJPEG(w http.ResponseWriter, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "no-store")
+	return jpeg.Encode(w, img, &jpeg.Options{Quality: 85})
 }
 
 // cardZip membungkus gambar + caption + keterangan sumber jadi satu berkas.

@@ -336,12 +336,12 @@ export default function News() {
   });
 
   // Pratinjau seketika: tanpa Chrome, jadi cukup jeda pendek (juga saat diseret).
-  // Font tertanam (±1,25 MB) dikirim engine SEKALI lalu disimpan di fontCSS;
-  // permintaan berikutnya ?fonts=cached dan HTML-nya membawa penanda saja.
-  // Halaman yang sudah pernah dibuat disimpan per setelan (pageCache), jadi
-  // bolak-balik pager tidak menunggu jaringan.
+  // HTML dari engine membawa penanda font + kuncinya; CSS font (±1,25 MB)
+  // diambil dari /api/card/fonts?v=<kunci>, yang disimpan cache browser — jadi
+  // diunduh sekali seumur font itu, bukan tiap membuka News. Halaman yang sudah
+  // pernah dibuat disimpan per setelan (pageCache): bolak-balik pager instan.
   const fingerprint = cardBody(ratio, true);
-  const fontCSS = useRef("");
+  const fontCSS = useRef({ key: "", css: "" });
   const pageCache = useRef(new Map<string, { html: string; geometry: Geometry }>());
   useEffect(() => {
     if (screen !== "compose" || !article.title) return;
@@ -349,9 +349,12 @@ export default function News() {
     const hit = pageCache.current.get(key);
     if (hit) { setLive(hit); return; }
     const id = setTimeout(() => {
-      post<{ html: string; geometry: Geometry; fonts?: string }>(`/api/card/html${fontCSS.current ? "?fonts=cached" : ""}`, { ...JSON.parse(fingerprint), page }, t("errBuildCard")).then((d) => {
-        if (d.fonts) fontCSS.current = d.fonts;
-        const v = { html: d.html.replace(CARD_FONT_MARK, fontCSS.current), geometry: d.geometry };
+      post<{ html: string; geometry: Geometry; fonts_key: string }>(`/api/card/html`, { ...JSON.parse(fingerprint), page }, t("errBuildCard")).then(async (d) => {
+        if (fontCSS.current.key !== d.fonts_key) {
+          const css = await fetch(eng(`/api/card/fonts?v=${d.fonts_key}`)).then((r) => (r.ok ? r.text() : ""));
+          fontCSS.current = { key: d.fonts_key, css };
+        }
+        const v = { html: d.html.replace(CARD_FONT_MARK, fontCSS.current.css), geometry: d.geometry };
         if (pageCache.current.size > 40) pageCache.current.clear();
         pageCache.current.set(key, v);
         setLive(v);
@@ -380,8 +383,10 @@ export default function News() {
   const previewResult = async () => {
     setShooting(true); setError("");
     try {
-      const d = await post(`/api/card`, renderBody(ratio, true), t("errBuildCard"));
-      setShot(eng(`${d.file}?page=${page + 1}&v=${Date.now()}`));
+      // Hanya halaman yang sedang dilihat yang dirender (page), dan gambarnya
+      // dilihat sebagai JPEG (jpg=1) — Simpan tetap merender semua halaman PNG.
+      const d = await post(`/api/card`, { ...JSON.parse(renderBody(ratio, true)), page: page + 1 }, t("errBuildCard"));
+      setShot(eng(`${d.file}?page=${page + 1}&jpg=1&v=${Date.now()}`));
     } catch (e: any) { setError(e.message); }
     setShooting(false);
   };

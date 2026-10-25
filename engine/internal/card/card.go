@@ -9,6 +9,7 @@ package card
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"html/template"
@@ -358,6 +359,7 @@ type Builder struct {
 
 	once    sync.Once
 	fontCSS template.CSS // @font-face dengan font ditanam sebagai data URI
+	fontKey string       // sidik jari fontCSS (cache browser, lihat FontKey)
 
 	// Rona foto per alamat. Satu artikel biasanya dirender berkali-kali sambil
 	// pengguna menggeser fotonya, dan foto yang sama tidak perlu diunduh ulang
@@ -877,8 +879,17 @@ func (b *Builder) FontCSS() template.CSS {
 		embed("Anton.ttf", "Clipper Display")
 		embed("BebasNeue.ttf", "Clipper Condensed")
 		b.fontCSS = template.CSS(sb.String())
+		sum := sha256.Sum256([]byte(b.fontCSS))
+		b.fontKey = fmt.Sprintf("%x", sum[:8])
 	})
 	return b.fontCSS
+}
+
+// FontKey = sidik jari CSS font: berubah hanya bila berkas fontnya berubah,
+// jadi GUI boleh menyimpan /api/card/fonts?v=<kunci> di cache browser selamanya.
+func (b *Builder) FontKey() string {
+	b.FontCSS()
+	return b.fontKey
 }
 
 // clampZoom menjaga zoom di rentang masuk akal. Nilai 0 datang dari permintaan
