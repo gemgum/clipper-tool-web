@@ -65,7 +65,7 @@ type Article = {
   body?: string[];
 };
 type Feed = { id: string; name: string; url: string; topic: string };
-type Config = { feeds: Feed[]; has_browser: boolean; browser: string };
+type Config = { feeds: Feed[]; has_browser: boolean; browser: string; preview_slots?: number };
 type Violation = { kind: string; text: string; detail: string };
 // Geometry = card.Geometry: letak area foto & batas geser, piksel kanvas.
 type Geometry = { width: number; height: number; photo_top: number; photo_h: number; photo_base: number; scale: number; offset_w: number; offset_h: number; pages: number;
@@ -391,26 +391,45 @@ export default function News() {
   // - tiap gambar disimpan di browser (blob) dengan kunci isi permintaan +
   //   halaman: membuka lagi tanpa mengubah apa pun = langsung tampil, dan
   //   setelan yang berubah otomatis berkunci lain;
-  // - render BERURUTAN (shotQueue) — server memakai satu folder pratinjau;
-  // - setelah halaman yang dilihat siap, halaman sebelahnya dirender di latar,
-  //   jadi menggeser di jendela biasanya sudah siap.
+  // - begitu jendela dibuka, SEMUA halaman ikut masuk antrean render (folder
+  //   pratinjau per halaman di server): halaman yang dilihat lebih dulu, lalu
+  //   sesudahnya, sebelumnya, sisanya. Berapa yang berjalan bersamaan = jumlah
+  //   slot dari engine (preview_slots, ikut jumlah CPU: di VPS 2 CPU = 1,
+  //   sebab render paralel di sana hanya memperlambat halaman yang dilihat).
+  //   Halaman yang dibuka saat slot penuh menyerobot antrean.
   // Hanya halaman itu yang dirender (page) dan dilihat sebagai JPEG (jpg=1);
   // Simpan tetap merender semua halaman PNG.
   const shotCache = useRef(new Map<string, string>());
-  const shotQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const shotJobs = useRef(new Map<string, Promise<void>>());
+  const shotWait = useRef<(() => void)[]>([]);
+  const shotActive = useRef(0);
   const shotKey = (body: string, p: number) => `${p}|${body}`;
-  const renderShot = (p: number) => {
+  // Satu slot render; urgent = halaman yang sedang dilihat, masuk paling depan.
+  const shotSlot = (urgent: boolean) => new Promise<void>((go) => {
+    const start = () => { shotActive.current++; go(); };
+    if (shotActive.current < (config?.preview_slots || 1)) start();
+    else if (urgent) shotWait.current.unshift(start);
+    else shotWait.current.push(start);
+  });
+  const renderShot = (p: number, urgent = false) => {
     const body = renderBody(ratio, true), key = shotKey(body, p);
     if (shotCache.current.has(key)) return Promise.resolve();
-    const job = shotQueue.current.then(async () => {
-      if (shotCache.current.has(key)) return;
-      const d = await post(`/api/card`, { ...JSON.parse(body), page: p + 1 }, t("errBuildCard"));
-      const blob = await fetch(eng(`${d.file}?page=${p + 1}&jpg=1&v=${Date.now()}`)).then((r) => r.blob());
-      if (shotCache.current.size > 30) { shotCache.current.forEach((u) => URL.revokeObjectURL(u)); shotCache.current.clear(); }
-      shotCache.current.set(key, URL.createObjectURL(blob));
-      setShotTick((x) => x + 1);
-    });
-    shotQueue.current = job.catch(() => {});
+    const running = shotJobs.current.get(key);
+    if (running) return running;
+    const job = (async () => {
+      await shotSlot(urgent);
+      try {
+        const d = await post(`/api/card`, { ...JSON.parse(body), page: p + 1 }, t("errBuildCard"));
+        const blob = await fetch(eng(`${d.file}?page=${p + 1}&jpg=1&v=${Date.now()}`)).then((r) => r.blob());
+        if (shotCache.current.size > 30) { shotCache.current.forEach((u) => URL.revokeObjectURL(u)); shotCache.current.clear(); }
+        shotCache.current.set(key, URL.createObjectURL(blob));
+        setShotTick((x) => x + 1);
+      } finally {
+        shotActive.current--; shotWait.current.shift()?.();
+        shotJobs.current.delete(key);
+      }
+    })();
+    shotJobs.current.set(key, job);
     return job;
   };
   const openShot = (p: number) => { setError(""); setShotPage(p); };
@@ -422,9 +441,9 @@ export default function News() {
   useEffect(() => {
     if (shotPage < 0) return;
     const p = shotPage;
-    renderShot(p).then(() => {
-      for (const n of [p + 1, p - 1]) if (n >= 0 && n < pages) renderShot(n).catch(() => {});
-    }).catch((e) => { setError(e.message); setShotPage(-1); });
+    renderShot(p, true).catch((e) => { setError(e.message); setShotPage(-1); });
+    // Sisanya langsung menyusul: sesudahnya, sebelumnya, lalu yang lebih jauh.
+    for (let d = 1; d < pages; d++) for (const n of [p + d, p - d]) if (n >= 0 && n < pages) renderShot(n).catch(() => {});
   }, [shotPage, shotBody]); // eslint-disable-line react-hooks/exhaustive-deps
   const curShot = shotPage >= 0 ? shotCache.current.get(shotKey(shotBody, shotPage)) || "" : "";
   // Gambar yang terakhir tampil tetap terlihat (diredupkan) selama halaman lain dirender.

@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -255,11 +256,13 @@ func (s *Server) newsFeeds(w http.ResponseWriter, r *http.Request) {
 		"feeds":       news.DefaultSources,
 		"has_browser": s.paths.Chrome != "",
 		"browser":     filepath.Base(s.paths.Chrome),
-		"styles":      []string{card.StyleDark, card.StyleLight, card.StyleQuote},
-		"ratios":      []string{card.Ratio916, card.Ratio45, card.Ratio11},
-		"aligns":      []string{card.AlignLeft, card.AlignCenter, card.AlignRight, card.AlignJustify},
-		"photo_fits":  []string{card.FitCover, card.FitWhole},
-		"photo_fills": []string{card.FillBlur, card.FillSolid},
+		// Render "Pratinjau hasil" yang boleh berjalan bersamaan (cap(previewSlots)).
+		"preview_slots": cap(previewSlots),
+		"styles":        []string{card.StyleDark, card.StyleLight, card.StyleQuote},
+		"ratios":        []string{card.Ratio916, card.Ratio45, card.Ratio11},
+		"aligns":        []string{card.AlignLeft, card.AlignCenter, card.AlignRight, card.AlignJustify},
+		"photo_fits":    []string{card.FitCover, card.FitWhole},
+		"photo_fills":   []string{card.FillBlur, card.FillSolid},
 		// Banyaknya langkah ukuran huruf ke tiap arah. Dikirim dari sini supaya
 		// GUI tidak menyalin angkanya — satu tempat, satu kebenaran.
 		"font_steps":   card.FontSteps,
@@ -524,8 +527,22 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id := previewID
+	if req.Preview && req.Page > 0 {
+		// Satu folder per halaman: GUI merender beberapa halaman pratinjau
+		// BERSAMAAN, dan satu folder bersama membuat mereka saling menimpa.
+		id = fmt.Sprintf("%s-p%d", previewID, req.Page)
+	}
 	if !req.Preview {
 		id = fmt.Sprintf("card-%d", time.Now().UnixNano())
+	} else {
+		// Paling banyak previewSlots render pratinjau sekaligus: tiap render =
+		// satu Chrome (±200 MB), dan VPS-nya kecil.
+		select {
+		case previewSlots <- struct{}{}:
+			defer func() { <-previewSlots }()
+		case <-r.Context().Done():
+			return
+		}
 	}
 	dir := s.cardDir(id)
 	png := filepath.Join(dir, card.FilePNG)
@@ -773,7 +790,18 @@ func (s *Server) cardZip(w http.ResponseWriter, r *http.Request) {
 // kartu berkali-kali tidak meninggalkan satu folder per percobaan.
 const previewID = "card-preview"
 
-var cardIDPattern = regexp.MustCompile(`^card-(preview|[0-9]{1,25})$`)
+// previewSlots = batas render pratinjau yang berjalan bersamaan (makeCard):
+// separuh CPU, 1..3. Diukur di VPS 2 CPU: render Chrome terikat CPU — 6 halaman
+// paralel 11,2 dtk vs berurutan 11,4 dtk, tapi tiap halaman paralel 2–3x lebih
+// lambat. Jadi paralel hanya di mesin ber-CPU banyak; GUI membaca angkanya
+// (newsFeeds "preview_slots") supaya halaman yang dilihat tidak berebut CPU.
+var previewSlots = make(chan struct{}, min(3, max(1, runtime.NumCPU()/2)))
+
+// isPreviewID = folder pratinjau (card-preview, card-preview-pN): bukan kartu
+// tersimpan, jadi tidak tampil di daftar dan tidak ikut disapu.
+func isPreviewID(name string) bool { return strings.HasPrefix(name, previewID) }
+
+var cardIDPattern = regexp.MustCompile(`^card-(preview(-p[0-9]{1,3})?|[0-9]{1,25})$`)
 
 // keepCards = berapa kartu tersimpan yang dipertahankan.
 //
@@ -799,7 +827,7 @@ func (s *Server) sweepCards() {
 	}
 	var cards []aged
 	for _, e := range entries {
-		if !e.IsDir() || e.Name() == previewID || !cardIDPattern.MatchString(e.Name()) {
+		if !e.IsDir() || isPreviewID(e.Name()) || !cardIDPattern.MatchString(e.Name()) {
 			continue
 		}
 		info, err := e.Info()
@@ -1871,7 +1899,7 @@ func (s *Server) listCards(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]cardEntry, 0, len(dirs))
 	for _, d := range dirs {
-		if !d.IsDir() || d.Name() == "card-preview" {
+		if !d.IsDir() || isPreviewID(d.Name()) {
 			continue
 		}
 		png := filepath.Join(root, d.Name(), "card.png")

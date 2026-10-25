@@ -42,3 +42,16 @@ func TestCardHTMLFontsSeparate(t *testing.T) {
 		}
 	}
 }
+
+// Folder pratinjau per halaman (render paralel) sah sebagai id kartu, tapi
+// tidak dianggap kartu tersimpan.
+func TestPreviewPageIDs(t *testing.T) {
+	for id, ok := range map[string]bool{"card-preview": true, "card-preview-p3": true, "card-123": true, "card-preview-x": false, "card-preview-p1234": false} {
+		if cardIDPattern.MatchString(id) != ok {
+			t.Errorf("%s: harus %v", id, ok)
+		}
+	}
+	if !isPreviewID("card-preview-p2") || isPreviewID("card-123") {
+		t.Error("isPreviewID salah")
+	}
+}
