@@ -839,6 +839,30 @@ const previewID = "card-preview"
 // (newsFeeds "preview_slots") supaya halaman yang dilihat tidak berebut CPU.
 var previewSlots = make(chan struct{}, min(3, max(1, runtime.NumCPU()/2)))
 
+// sweepPreviews membuang folder pratinjau (card-preview, card-preview-pN) yang
+// 24 jam tidak tersentuh: isinya selalu ditimpa, tapi gambar terakhirnya
+// tertinggal selamanya, satu folder per nomor halaman yang pernah dilihat.
+// "Tersentuh" = berkas terbaru di dalamnya (menimpa berkas tidak mengubah
+// waktu folder).
+func (s *Server) sweepPreviews(now time.Time) {
+	dirs, _ := filepath.Glob(filepath.Join(s.layout.CardsRoot(), previewID+"*"))
+	for _, d := range dirs {
+		if !isPreviewID(filepath.Base(d)) {
+			continue
+		}
+		latest := time.Time{}
+		files, _ := os.ReadDir(d)
+		for _, f := range files {
+			if info, err := f.Info(); err == nil && info.ModTime().After(latest) {
+				latest = info.ModTime()
+			}
+		}
+		if now.Sub(latest) > 24*time.Hour {
+			os.RemoveAll(d)
+		}
+	}
+}
+
 // isPreviewID = folder pratinjau (card-preview, card-preview-pN): bukan kartu
 // tersimpan, jadi tidak tampil di daftar dan tidak ikut disapu.
 func isPreviewID(name string) bool { return strings.HasPrefix(name, previewID) }

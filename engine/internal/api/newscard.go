@@ -191,14 +191,8 @@ func (s *Server) newsImg(w http.ResponseWriter, r *http.Request) {
 	}
 	out := filepath.Join(filepath.Dir(photo), fmt.Sprintf("w%d.jpg", width))
 	if _, err := os.Stat(out); err != nil {
-		tmp := fmt.Sprintf("%s.%d.tmp.jpg", out, time.Now().UnixNano())
-		if err := s.ff.Thumb(r.Context(), photo, 0, width, tmp); err != nil {
-			os.Remove(tmp)
+		if err := s.thumbFile(r.Context(), photo, 0, width, out); err != nil {
 			writeErr(w, 422, fmt.Sprintf("could not read the article photo: %v", err))
-			return
-		}
-		if err := os.Rename(tmp, out); err != nil {
-			writeErr(w, 500, err.Error())
 			return
 		}
 	}
@@ -254,10 +248,14 @@ func writeFileAtomic(dir, file string, raw []byte) error {
 		return err
 	}
 	tmp := fmt.Sprintf("%s.%d.tmp", file, time.Now().UnixNano())
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
-		return err
+	err := os.WriteFile(tmp, raw, 0o644)
+	if err == nil {
+		err = os.Rename(tmp, file)
 	}
-	return os.Rename(tmp, file)
+	if err != nil {
+		os.Remove(tmp) // tulisan setengah jadi tidak boleh tertinggal
+	}
+	return err
 }
 
 func (s *Server) inlineCardImage(img string) (string, error) {

@@ -129,6 +129,7 @@ func (s *Server) sweepFetched(now time.Time) {
 		}
 	}
 	s.sweepUploads(now)
+	s.sweepPreviews(now)
 	dirs, _ := filepath.Glob(filepath.Join(s.uploadDir(), "yt-*"))
 	for _, d := range dirs {
 		parts, _ := filepath.Glob(filepath.Join(d, ".dl-*"))

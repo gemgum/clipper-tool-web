@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gemgum/clipper/engine/internal/capture"
 	"github.com/gemgum/clipper/engine/internal/card"
@@ -53,5 +55,41 @@ func TestPreviewPageIDs(t *testing.T) {
 	}
 	if !isPreviewID("card-preview-p2") || isPreviewID("card-123") {
 		t.Error("isPreviewID salah")
+	}
+}
+
+// Folder pratinjau yang 24 jam tak tersentuh disapu; kartu tersimpan dan
+// pratinjau yang baru dipakai tetap ada.
+func TestSweepPreviews(t *testing.T) {
+	root := t.TempDir()
+	s := &Server{layout: config.Layout{CardsDir: root}}
+	old := time.Now().Add(-48 * time.Hour)
+	for name, aged := range map[string]bool{"card-preview-p3": true, "card-preview-p4": false, "card-preview": true, "card-123": true} {
+		d := filepath.Join(root, name)
+		os.MkdirAll(d, 0o755)
+		f := filepath.Join(d, "card.png")
+		os.WriteFile(f, []byte("x"), 0o644)
+		if aged {
+			os.Chtimes(f, old, old)
+		}
+	}
+	s.sweepPreviews(time.Now())
+	for name, keep := range map[string]bool{"card-preview-p3": false, "card-preview": false, "card-preview-p4": true, "card-123": true} {
+		if _, err := os.Stat(filepath.Join(root, name)); (err == nil) != keep {
+			t.Errorf("%s: harus tetap ada = %v", name, keep)
+		}
+	}
+}
+
+// Tulisan atomik yang gagal tidak meninggalkan berkas .tmp.
+func TestWriteFileAtomicCleansUp(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "sub") // folder → Rename berkas ke sana gagal
+	os.MkdirAll(filepath.Join(target, "isi"), 0o755)
+	if err := writeFileAtomic(dir, target, []byte("x")); err == nil {
+		t.Fatal("rename ke folder berisi harus gagal")
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, "*.tmp")); len(left) != 0 {
+		t.Fatalf("berkas sementara tertinggal: %v", left)
 	}
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -53,16 +54,8 @@ func (s *Server) thumb(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 500, err.Error())
 			return
 		}
-		// Ditulis ke nama sementara lalu diganti nama: dua permintaan yang
-		// sama sekaligus tidak pernah menyajikan JPEG setengah jadi.
-		tmp := fmt.Sprintf("%s.%d.tmp.jpg", out, time.Now().UnixNano())
-		if err := s.ff.Thumb(r.Context(), path, thumbAt(dur, i), 320, tmp); err != nil {
-			os.Remove(tmp)
+		if err := s.thumbFile(r.Context(), path, thumbAt(dur, i), 320, out); err != nil {
 			writeErr(w, 422, "frame extraction failed")
-			return
-		}
-		if err := os.Rename(tmp, out); err != nil {
-			writeErr(w, 500, err.Error())
 			return
 		}
 	}
@@ -71,6 +64,22 @@ func (s *Server) thumb(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) thumbDir() string { return filepath.Join(s.paths.DataDir, "thumbs") }
+
+// thumbFile menulis gambar kecil (ffmpeg.Thumb) ke out lewat nama sementara
+// lalu ganti nama: dua permintaan yang sama sekaligus tidak pernah menyajikan
+// JPEG setengah jadi, dan yang gagal tidak meninggalkan .tmp. Dipakai cuplikan
+// video (thumb) dan foto berita (newsImg).
+func (s *Server) thumbFile(ctx context.Context, input string, t float64, w int, out string) error {
+	tmp := fmt.Sprintf("%s.%d.tmp.jpg", out, time.Now().UnixNano())
+	err := s.ff.Thumb(ctx, input, t, w, tmp)
+	if err == nil {
+		err = os.Rename(tmp, out)
+	}
+	if err != nil {
+		os.Remove(tmp)
+	}
+	return err
+}
 
 // --- video aktif per akun ---
 //
