@@ -429,6 +429,14 @@ body:has(.screen) {
   border-bottom: 1px solid var(--border);
 }
 .ph-text { flex: 1; min-width: 0; }
+/* Judul + satu ikon di kanannya: judulnya tetap satu baris berelipsis, ikonnya
+   tidak pernah terdorong keluar. */
+.ph-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ph-title h1 { min-width: 0; }
+.ph-open { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); color: var(--text-2); }
+.ph-open:hover { color: var(--text); border-color: var(--border-strong); background: var(--panel2); }
+.ph-open .ico { width: 14px; height: 14px; }
 /* SATU baris, di semua halaman: judul artikel panjang (News) yang membungkus
    jadi dua baris membuat kepala lebih tinggi dan seluruh isi di bawahnya —
    termasuk pratinjau — turun. Judul lengkap ada di title. */

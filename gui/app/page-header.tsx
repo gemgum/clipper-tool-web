@@ -5,17 +5,19 @@
 // tetap — subjudul satu baris dipotong elipsis — supaya isi di bawahnya tidak
 // bergeser saat bahasa atau status berganti.
 export default function PageHeader({
-  title, subtitle, children,
+  title, subtitle, titleAction, children,
 }: {
   title: string;
   subtitle?: string;
+  /** Satu kendali kecil tepat di kanan judul (mis. buka artikel di tab baru). */
+  titleAction?: React.ReactNode;
   /** Aksi utama + status (mis. <RunPanel>). */
   children?: React.ReactNode;
 }) {
   return (
     <header className="page-header">
       <div className="ph-text">
-        <h1 title={title}>{title}</h1>
+        {titleAction ? <div className="ph-title"><h1 title={title}>{title}</h1>{titleAction}</div> : <h1 title={title}>{title}</h1>}
         {subtitle && <p title={subtitle}>{subtitle}</p>}
       </div>
       {children && <div className="ph-actions">{children}</div>}

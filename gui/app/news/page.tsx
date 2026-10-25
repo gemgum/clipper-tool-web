@@ -11,7 +11,7 @@
 //
 // Ikon: lucide-react (ISC) — alasannya di gui/app/page.tsx.
 import { copyText } from "../copy-link";
-import { Check, ChevronLeft, Crop as CropIcon, ChevronRight, Copy, Download, Eye, ImageIcon, ImagePlus, Plus, X, RectangleVertical, Sparkles, Stamp, Type, Bookmark } from "lucide-react";
+import { Check, ChevronLeft, ExternalLink, Crop as CropIcon, ChevronRight, Copy, Download, Eye, ImageIcon, ImagePlus, Plus, X, RectangleVertical, Sparkles, Stamp, Type, Bookmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../page-header";
@@ -507,7 +507,13 @@ export default function News() {
 
   return (
     <div className="screen scroll clips-v2 news-v2">
-      <PageHeader title={headerProps.title} subtitle={headerProps.subtitle}>{headerProps.actions}</PageHeader>
+      <PageHeader title={headerProps.title} subtitle={headerProps.subtitle}
+        titleAction={screen === "compose" && article.url && (
+          // Artikel aslinya di tab baru (ikon saja; nama lengkapnya di title).
+          <a className="ph-open" href={article.url} target="_blank" rel="noopener noreferrer" title={t("ncOpenArticle")} aria-label={t("ncOpenArticle")}>
+            <ExternalLink className="ico" aria-hidden="true" />
+          </a>
+        )}>{headerProps.actions}</PageHeader>
       <MarkFont />
       <Alerts items={[
         error && { kind: "error" as const, text: error },
