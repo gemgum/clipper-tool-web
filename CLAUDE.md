@@ -420,16 +420,17 @@ sama dengan `--stage-in` di CSS. Kartu di kolom terbatas wajib
 | log job | `log-panel.tsx` (`TechNotes`) |
 | siklus job latar (SSE, start, cancel) | `use-job.ts` (`useJob(api, event, setError, onDone)`) |
 | dua bagian sejajar | `tab-card.tsx` (`Split side={…} sideOff`) — jangan menulis `.mc-split` sendiri |
-| sasaran warna headline | `watermark-panel.tsx` (`watermarkColors`) — klip DAN Watermark |
+| sasaran warna judul Mark | `mark.tsx` (`watermarkColors`) — Clips, Mark, DAN News |
 | POST JSON ke engine | `engine.ts` (`post(path, body, fallback?)`) — jangan menulis `fetch(eng(..), {method:"POST"…})` sendiri |
 | salin ke clipboard | `copy-link.tsx` (`copyText`) — `navigator.clipboard` TIDAK ADA lewat alamat IP |
 | nama berkas dari path | `file-list.tsx` (`baseName`) |
 | tema kartu berita (8 warna + Auto) | `themes.tsx` (`ThemePicker`, `THEMES`) — News DAN Watermark |
 | perataan teks (4 ikon) | `clip-steps.tsx` (`AlignPicker`, `Align`) — News DAN Watermark |
-| Mark: state logo/judul + seret | `mark.tsx` (`useMark`) — Watermark DAN News |
+| Mark: state logo/judul + seret | `mark.tsx` (`useMark`; `llm` = judul LLM per klip) — Clips, Watermark, DAN News |
 | Mark: panel Logo / Headline / Template | `mark.tsx` (`MarkLogoGroup`, `MarkHeadline`, `MarkTemplates`, `useTemplates`) |
-| Mark: lapisan di pratinjau | `mark.tsx` (`MarkLayers`, `MarkFont`) |
+| Mark: lapisan di pratinjau, font pratinjau, waktu tampil | `mark.tsx` (`MarkLayers`, `MarkFont({names})`, `MarkTiming`) — dan engine `watermark.ApplyLayers` untuk Mark & klip |
 | jendela "Preview result" | `stage.tsx` (`Shot`) |
+| contoh caption (mode, gerak, bayangan) | `caption-presets.tsx` (`CaptionWords`, `captionShadow`) — kotak preset DAN pratinjau klip; angkanya = `subtitle.animTag`/`assHeader` |
 | baris alat di atas pratinjau (kisi + garis tengah + rasio, + pager News) | `stage.tsx` (`StageBar`) — Mark DAN News |
 | warna bebas (roda hue, S/L, HEX/RGB/CMYK/HSL, warna terakhir) | `color-wheel.tsx`, dibuka dari `ColorPanel` |
 

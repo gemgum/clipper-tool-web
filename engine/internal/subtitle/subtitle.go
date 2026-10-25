@@ -84,6 +84,16 @@ func assHeader(s config.Subtitle, hl config.Headline, withHeadline bool, resY in
 	}
 	borderStyle, shadow := 1, 2
 	back := "&H90000000"
+	// Bayangan preset: soft = jauh & tipis (±22% pekat), hard = pekat. Offset
+	// ikut ukuran huruf supaya rupanya sama di ukuran berapa pun.
+	switch s.Shadow {
+	case "soft":
+		shadow, back = max(2, s.Size/20), "&HC8000000"
+	case "hard":
+		shadow, back = max(3, s.Size/16), "&H00000000"
+	case "none":
+		shadow = 0
+	}
 	if s.Box {
 		borderStyle = 3
 		shadow = 0
@@ -777,6 +787,11 @@ func WriteASS(path string, segs []types.TranscriptSegment, clipStart float64, su
 	pos := fmt.Sprintf("{\\an8\\pos(%d,%d)}", x, y)
 
 	words := collectWords(segs, clipStart)
+	if sub.Uppercase {
+		for i := range words {
+			words[i].Text = strings.ToUpper(words[i].Text)
+		}
+	}
 	var b strings.Builder
 	headlineText = strings.TrimSpace(headlineText)
 	_, resY := watermark.Frame()
@@ -784,19 +799,36 @@ func WriteASS(path string, segs []types.TranscriptSegment, clipStart float64, su
 	writeHeadline(&b, watermark, headlineText, clipDur)
 
 	if sub.Mode == config.SubWord {
-		writeWordMode(&b, words, pos)
+		alt := ""
+		if sub.Alternate {
+			alt = karaokeTag(highlightColor(sub))
+		}
+		writeWordMode(&b, words, pos, animTag(sub), alt)
 		return os.WriteFile(path, []byte(b.String()), 0o644)
 	}
 
 	minDur, maxLines := sub.Pacing()
-	pages := buildPages(words, maxCharsPerLine(sub.Size), maxLines, minDur)
+	maxChars := maxCharsPerLine(sub.Size)
+	if sub.Stack {
+		// Lebar 1 = tiap kata pindah baris; tiga baris = tiga kata per tampilan.
+		maxChars, maxLines = 1, 3
+	}
+	pages := buildPages(words, maxChars, maxLines, minDur)
+	anim := animTag(sub)
 	for _, p := range pages {
-		if sub.Mode == config.SubKaraoke {
-			writeKaraokePage(&b, p, pos, karaokeTag(highlightColor(sub)))
+		switch {
+		case sub.Mode == config.SubKaraoke:
+			writeKaraokePage(&b, p, pos, karaokeTag(highlightColor(sub))+anim, false)
 			continue
-		}
-		if sub.Mode == config.SubHighlight {
-			writeKaraokePage(&b, p, pos, blockTag(highlightColor(sub), sub.Size))
+		case sub.Mode == config.SubHighlight:
+			writeKaraokePage(&b, p, pos, blockTag(highlightColor(sub), sub.Size)+anim, false)
+			continue
+		case sub.Mode == config.SubBuild:
+			writeKaraokePage(&b, p, pos, anim, true)
+			continue
+		case anim != "":
+			// Normal + gerak: kalimat utuh, tiap kata bergerak saat diucapkan.
+			writeKaraokePage(&b, p, pos, anim, false)
 			continue
 		}
 		fmt.Fprintf(&b, "Dialogue: 0,%s,%s,Default,,0,0,0,,%s%s\n", tc(p.start), tc(p.end), pos, renderPlain(p))
@@ -915,11 +947,33 @@ func blockTag(hl string, size int) string {
 	return fmt.Sprintf("{\\1c&H001D1815&\\3c%s&\\bord%d\\shad0}", hl, bord)
 }
 
+// animTag = gerak kata aktif (Subtitle.Anim). Waktu \t relatif terhadap awal
+// Dialogue, dan tiap Dialogue karaoke/word mulai tepat saat katanya diucapkan
+// (kata pertama: p.start = awal kata itu), jadi tak perlu offset. Angkanya
+// dari rekaman preset Opus (60 fps): pop 150%→100% dalam 7 frame, bounce
+// 86/132 → 108/92 → 100 di frame 4/9/14, rise = memudar masuk 7 frame.
+// rise hanya menyentuh isi & garis tepi (\1a \3a): \alpha juga menimpa
+// bayangan, dan bayangan soft justru harus tetap tipis.
+func animTag(s config.Subtitle) string {
+	switch s.Anim {
+	case "pop":
+		return `{\fscx150\fscy150\t(0,117,\fscx100\fscy100)}`
+	case "bounce":
+		return `{\t(0,67,\fscx86\fscy132)\t(67,150,\fscx108\fscy92)\t(150,233,\fscx100\fscy100)}`
+	case "rise":
+		return `{\1a&HFF&\3a&HFF&\t(0,117,\1a&H00&\3a&H00&)}`
+	}
+	return ""
+}
+
+// hideTag = sisa tampilan mode build: tak terlihat, tapi tetap memesan tempat.
+const hideTag = `{\alpha&HFF&}`
+
 // writeKaraokePage menulis satu Dialogue per kata: seluruh tampilan tetap
 // terlihat dalam gaya dasar, hanya kata yang sedang diucapkan yang diberi tag
 // `on`; sesudahnya {\r} mengembalikan gaya dasar. Waktu ganti sorot memakai
-// timestamp kata asli.
-func writeKaraokePage(b *strings.Builder, p page, pos, on string) {
+// timestamp kata asli. build = kata sesudah yang aktif disembunyikan (SubBuild).
+func writeKaraokePage(b *strings.Builder, p page, pos, on string, build bool) {
 	flat := make([]types.Word, 0, p.words())
 	for _, ln := range p.lines {
 		flat = append(flat, ln...)
@@ -937,20 +991,25 @@ func writeKaraokePage(b *strings.Builder, p page, pos, on string) {
 			continue
 		}
 		fmt.Fprintf(b, "Dialogue: 0,%s,%s,Default,,0,0,0,,%s%s\n",
-			tc(start), tc(end), pos, renderHighlighted(p, i, on))
+			tc(start), tc(end), pos, renderHighlighted(p, i, on, build))
 	}
 }
 
-// renderHighlighted membangun teks tampilan dengan kata ke-active disorot.
-func renderHighlighted(p page, active int, on string) string {
+// renderHighlighted membangun teks tampilan dengan kata ke-active disorot;
+// build = kata sesudahnya disembunyikan (hideTag, sekali saja — tag berlaku
+// sampai akhir teks, melewati \N).
+func renderHighlighted(p page, active int, on string, build bool) string {
 	idx := 0
 	rendered := make([]string, len(p.lines))
 	for i, ln := range p.lines {
 		parts := make([]string, len(ln))
 		for j, w := range ln {
-			if idx == active {
+			switch {
+			case idx == active:
 				parts[j] = on + w.Text + "{\\r}"
-			} else {
+			case build && idx == active+1:
+				parts[j] = hideTag + w.Text
+			default:
 				parts[j] = w.Text
 			}
 			idx++
@@ -962,7 +1021,8 @@ func renderHighlighted(p page, active int, on string) string {
 
 // writeWordMode menulis satu Dialogue per kata (satu kata per layar). Tiap kata
 // bertahan sampai kata berikutnya muncul (maks wordHold) agar tidak berkedip.
-func writeWordMode(b *strings.Builder, words []types.Word, pos string) {
+// anim = gerak tiap kata (animTag); alt = tag warna kata ganjil (Alternate).
+func writeWordMode(b *strings.Builder, words []types.Word, pos, anim, alt string) {
 	for i, w := range words {
 		end := w.End + wordHold
 		if i+1 < len(words) && words[i+1].Start < end {
@@ -971,6 +1031,10 @@ func writeWordMode(b *strings.Builder, words []types.Word, pos string) {
 		if end <= w.Start {
 			end = w.Start + 0.12
 		}
-		fmt.Fprintf(b, "Dialogue: 0,%s,%s,Default,,0,0,0,,%s%s\n", tc(w.Start), tc(end), pos, w.Text)
+		tag := anim
+		if alt != "" && i%2 == 1 {
+			tag += alt
+		}
+		fmt.Fprintf(b, "Dialogue: 0,%s,%s,Default,,0,0,0,,%s%s%s\n", tc(w.Start), tc(end), pos, tag, w.Text)
 	}
 }

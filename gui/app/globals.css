@@ -588,45 +588,35 @@ input:disabled, select:disabled { background: var(--sunken); color: var(--muted)
    Zoom. Satu kotak utuh: tombolnya tidak melayang di samping isian melainkan
    menempel jadi satu bingkai, supaya ia sepadan dengan <select> di sebelahnya
    dan barisnya rata. */
-.stepper {
-  display: flex;
-  align-items: center;
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  overflow: hidden;
+.stepper { display: flex; align-items: stretch; gap: 4px; height: 35px; min-width: 0; }
+/* Bingkai milik kotak isiannya; tombol berdiri sendiri di kolom kanan. */
+.step-field {
+  flex: 1; min-width: 0; display: flex; align-items: center;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: var(--r-sm);
 }
-.stepper:focus-within { outline: 2px solid var(--accent); }
-/* Isian tanpa bingkai sendiri: bingkainya milik .stepper. */
+.step-field:focus-within { outline: 2px solid var(--accent); }
 .stepper input {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  text-align: center;
-  padding: 7px 0;
-  min-width: 0;
+  border: none; border-radius: 0; background: transparent;
+  text-align: center; padding: 0; width: 100%; min-width: 0; height: 100%;
   /* Panah naik-turun bawaan browser dimatikan — ia mengulang dua tombol di
-     kiri-kanannya dengan sasaran klik seukuran 8 px. */
+     sebelahnya dengan sasaran klik seukuran 8 px. */
   -moz-appearance: textfield;
   appearance: textfield;
 }
 .stepper input:focus { outline: none; }
 .stepper input::-webkit-outer-spin-button,
 .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.step-suffix { font-size: 13px; color: var(--muted); padding-right: 2px; }
+.step-suffix { font-size: 13px; color: var(--muted); padding-right: 8px; }
+.step-btns { flex: none; width: 24px; display: flex; flex-direction: column; gap: 2px; }
 .step-btn {
-  background: transparent;
-  color: var(--text);
-  border: none;
-  border-radius: 0;
-  padding: 0 10px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  flex: none;
+  flex: 1; min-height: 0; height: auto; padding: 0; margin: 0;
+  display: grid; place-items: center; border: none; border-radius: 4px;
 }
-.step-btn:hover:not(:disabled) { background: var(--border); }
-.step-btn .ico { width: 15px; height: 15px; }
+.step-btn.plus { background: var(--good-soft); color: var(--good-text); }
+.step-btn.minus { background: var(--bad-soft); color: var(--bad-text); }
+.step-btn:hover:not(:disabled) { filter: brightness(1.15); }
+.step-btn:disabled { opacity: .4; }
+.step-btn .ico { width: 12px; height: 12px; }
 
 button {
   background: var(--accent);
@@ -1561,38 +1551,6 @@ label .hint { width: 13px; height: 13px; opacity: 0.55; vertical-align: -2px; }
    berfungsi sebagai pemisah, bukan pengantar bab. */
 .sub-settings .group { margin-bottom: 8px; }
 .sub-settings .group:last-child { margin-bottom: 0; }
-
-/* Nilai posisi + tombol tengah: dibingkai seperti kotak isian di sebelahnya,
-   supaya barisnya rata. Dulu ia teks telanjang yang mengambang, jadi satu sel
-   dalam baris tampak kosong. */
-.position-value {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  /* Padding, BUKAN tinggi tetap: angkanya harus sama persis dengan <input> di
-     sebelahnya (10px + 10px + 1px garis), dan tinggi yang dipaku selalu meleset
-     begitu ukuran huruf disentuh. */
-  /* Padding kiri 8, bukan 10, dan jarak 4, bukan 6: koordinat Y berjumlah
-     EMPAT angka ("540 · 1200") dan pada ukuran lama ia terpotong jadi
-     "540 · 12…" — angka yang terpotong tidak lebih berguna daripada tidak ada
-     angka sama sekali. */
-  padding: 7px 4px 7px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--panel2);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.position-value button.tiny { margin-left: 0; flex: none; }
-/* Yang MENGALAH saat sempit adalah angkanya, bukan tombolnya.
-   Tanpa ini keduanya berebut lebar, dan karena tombolnya flex:none yang
-   terdorong keluar justru lambang sasarannya — terukur 16 px terpotong pada
-   "x 540 · y 960", dan makin parah pada koordinat empat angka. */
-.position-value > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* Bingkai kosong: mengundang aksi, bukan kotak hitam mati. Subtitle contoh
    tetap bisa digeser di atasnya, jadi posisi sudah bisa diatur sebelum
@@ -3402,9 +3360,9 @@ fieldset.wm-timed { margin: 0; padding: 0; border: 0; min-width: 0; }
 .wm-pad button.other { background: var(--muted); }
 .wm-pad button.on { background: var(--accent); }
 /* Stepper ringkas di baris daftar (ukuran logo). */
-.item-list .stepper { flex: none; width: 104px; }
-.item-list .step-btn { height: 28px; padding: 0 7px; }
-.item-list .stepper input { width: 28px; padding: 3px 0; font-size: 13px; }
+.item-list .stepper { flex: none; width: 72px; }
+.item-list .stepper { height: 28px; }
+.item-list .stepper input { font-size: 13px; }
 /* Baris logo: kotak bergaris (gambar, nama, hapus) + kendali di luar kotak, sejajar. */
 .item-list li.logo-row { padding: 0; border: 0; background: none; }
 .logo-box { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px 8px 6px 10px;
@@ -3413,7 +3371,6 @@ fieldset.wm-timed { margin: 0; padding: 0; border: 0; min-width: 0; }
 .logo-ctl { flex: none; display: flex; align-items: center; gap: 6px; }
 /* Tiga kendali setinggi sama (32 px), bingkai & radius sama dengan stepper. */
 .logo-ctl .stepper { height: 32px; }
-.logo-ctl .step-btn { height: 30px; min-height: 0; }
 .logo-ctl > button { height: 32px; min-height: 0; margin: 0; padding: 0 10px; border-radius: var(--r-sm);
   display: inline-flex; align-items: center; justify-content: center; }
 .logo-ctl > button.wm-pin { width: 32px; padding: 0; }
@@ -3541,7 +3498,46 @@ button.mc-cswatch.cp-wand span { display: grid; place-items: center; border: 0;
   background: linear-gradient(135deg, #7c5cff, #3ad1d9); color: #fff; }
 button.mc-cswatch.cp-wand .ico { width: 16px; height: 16px; }
 .cp-custom > .stepper { flex: none; width: 96px; height: 40px; }
-.cp-custom > .stepper .step-btn { width: 26px; padding: 0; }
-.cp-custom > .stepper input { min-width: 0; width: 100%; padding: 0; text-align: center; }
+.mc-combo > .stepper { height: 40px; }
 .cp-custom > .stepper .step-suffix { display: none; }
+.mc-combo { display: grid; grid-template-columns: minmax(0, 1fr) 74px; gap: 8px; align-items: center; width: 100%; }
 .cp-custom .cp-code { min-width: 76px; }
+
+/* Template gaya caption (caption-presets.tsx): tab, kisi kotak contoh 5 kolom. */
+.cp-presets { display: flex; flex-direction: column; gap: 12px; }
+.cp-ptabs { display: flex; gap: 4px; }
+.cp-ptabs button { min-height: 0; height: 34px; padding: 0 14px; border-radius: 8px 8px 0 0; border: 0; background: none; color: var(--text-2); font-weight: 600; font-size: 13px; }
+.cp-ptabs button.on { background: var(--sunken); color: var(--text); }
+.cp-rail { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.cp-arrow { flex: none; width: 26px; height: 26px; min-height: 0; padding: 0; margin-bottom: 18px; }
+.cp-arrow:disabled { opacity: .3; }
+/* Satu baris, digulir ke samping (panah atau geser); batang gulirnya disembunyikan. */
+.cp-grid { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 3px; scroll-padding: 3px; }
+.cp-grid::-webkit-scrollbar { display: none; }
+.cp-grid > .cp-tile, .cp-grid > .cp-tile-wrap { flex: 0 0 76px; min-width: 0; scroll-snap-align: start; }
+.cp-tile-wrap { position: relative; display: flex; }
+.cp-tile { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0; min-height: 0; border: 0; background: none; cursor: pointer; }
+.cp-face { width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; background: #2b2d31; display: grid; place-items: center; text-align: center; line-height: 1.05;
+  border: 2px solid transparent; overflow: hidden; transition: border-color .15s, transform .1s; }
+.cp-tile:hover .cp-face { border-color: var(--border-strong); }
+.cp-tile.on .cp-face { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cp-tile:active .cp-face { transform: scale(.97); }
+.cp-sample { display: inline-block; white-space: nowrap; }
+.cp-name { font-size: 11px; color: var(--text-2); font-weight: 600; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-tile.on .cp-name { color: var(--text); }
+.cp-del { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; min-height: 0; padding: 0; border-radius: 50%; }
+.cp-save { display: flex; gap: 8px; }
+.cp-save input { flex: 1; min-width: 0; }
+/* Gerak kata aktif preset caption: angka sama dengan subtitle.animTag. */
+.cp-a { display: inline-block; transform-origin: 50% 70%; }
+.cp-a-pop { animation: cp-pop .117s ease-out; }
+.cp-a-bounce { animation: cp-bounce .233s ease-out; }
+.cp-a-rise { animation: cp-rise .117s ease-out; }
+@keyframes cp-pop { from { transform: scale(1.5); } }
+@keyframes cp-bounce { 29% { transform: scale(.86, 1.32); } 64% { transform: scale(1.08, .92); } }
+@keyframes cp-rise { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cp-a { animation: none; } }
+.cp-grid .cp-face { overflow: hidden; }
+/* Pilihan cepat + angka (Text size, Outline): angka sempit, label tidak menempel. */
+.mc-combo .segmented { grid-auto-flow: column !important; grid-template-columns: none !important; grid-auto-columns: auto !important; }
+.mc-combo .segmented button { padding: 0 2px; font-size: 12.5px; min-width: 0; }

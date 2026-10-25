@@ -1097,6 +1097,22 @@ var fontCatalog = []struct{ file, bold, name string }{
 	{"Montserrat-Regular.ttf", "Montserrat-Bold.ttf", "Montserrat"},
 	{"Anton.ttf", "", "Anton"},
 	{"BebasNeue.ttf", "", "Bebas Neue"},
+	// Font preset caption: satu bobot statis tiap font (fetch-fonts.sh).
+	// Poppins-Black menyebut dirinya family "Poppins Black", bukan "Poppins".
+	{"Inter-Bold.ttf", "", "Inter"},
+	{"Figtree-SemiBold.ttf", "", "Figtree"},
+	{"LeagueSpartan.ttf", "", "League Spartan"},
+	{"Poppins-Black.ttf", "", "Poppins Black"},
+	{"Oswald-Bold.ttf", "", "Oswald"},
+	{"JetBrainsMono-Bold.ttf", "", "JetBrains Mono"},
+	{"Bangers.ttf", "", "Bangers"},
+	{"PermanentMarker.ttf", "", "Permanent Marker"},
+	{"TitanOne.ttf", "", "Titan One"},
+	{"Bungee.ttf", "", "Bungee"},
+	{"PressStart2P.ttf", "", "Press Start 2P"},
+	{"Pacifico.ttf", "", "Pacifico"},
+	{"ArchivoBlack.ttf", "", "Archivo Black"},
+	{"Caveat-Bold.ttf", "", "Caveat"},
 }
 
 // fontNameOK = format nama font yang diterima: diawali huruf/angka, lalu

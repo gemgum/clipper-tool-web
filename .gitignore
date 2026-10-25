@@ -64,3 +64,5 @@ Thumbs.db
 
 # Worktree agen Claude Code (sementara, bukan bagian proyek)
 /.claude/worktrees/
+
+.ref

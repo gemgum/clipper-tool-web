@@ -7,7 +7,7 @@
 // sini — tidak ada tempat kedua. AI engine hanya ditampilkan: mesin dipilih
 // sekali di Settings (notes/39).
 
-import { Ban, Camera, CaseSensitive, Cpu, Download, Droplet, Highlighter, Mic, Monitor, Move, Music, Smartphone, SquarePlay, Type } from "lucide-react";
+import { Ban, Camera, CaseSensitive, Cpu, Download, Droplet, Highlighter, ListPlus, Mic, Monitor, Move, Music, Smartphone, SquarePlay, Type } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
@@ -20,10 +20,11 @@ import { Segmented, Toggle } from "./clip-steps";
 import { useEngines } from "./engine-picker";
 import { sameModel, useOllama } from "./ollama";
 import type { Font, FontCheck } from "./preview-panel";
-import WatermarkPanel, { watermarkColors } from "./watermark-panel";
+import { MarkHeadline, MarkLogoGroup, MarkTiming, type Mark } from "./mark";
+import CaptionPresets, { NO_FX } from "./caption-presets";
+import type { SubFx } from "./caption-presets";
 import TabCard, { Group as Box, Row, Split } from "./tab-card";
 import ColorPanel from "./color-panel";
-import type { Watermark } from "./watermark-model";
 import { useSticky } from "./persist";
 
 export type WhisperModel = { name: string; size: string; downloaded: boolean };
@@ -38,8 +39,8 @@ const ZOOM_BOUNDS: Record<string, { min: number; natural: number }> = {
 };
 export const zoomBounds = (mode: string) => ZOOM_BOUNDS[mode] ?? ZOOM_BOUNDS.center;
 
-type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "type" | "color"
-  | "platform" | "zoom" | "watermark" | "wmcolor";
+type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "motion" | "type" | "color"
+  | "platform" | "zoom";
 // Semua setelan halaman: lima tab, satu panel selalu terbuka — bentuk halaman
 // Watermark (acuan): tiap tab SATU grup <Split>, kiri = left (baris), kanan =
 // side (panel rincian). row()/sw() yang sama dipakai di kedua sisi; CSS
@@ -48,9 +49,10 @@ export type Group = "ai" | "output" | "text" | "layout" | "watermark";
 const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; title: MessageKey; left: Key[]; side: Key }[] = [
   { key: "ai", icon: Cpu, label: "mcGroupAI", title: "mcSecTranscript", left: ["transcription"], side: "ai" },
   { key: "output", icon: Monitor, label: "mcGroupOutput", title: "mcSecVideo", left: ["quality"], side: "clips" },
-  { key: "text", icon: Type, label: "mcSecType", title: "mcSecType", left: ["style", "type"], side: "color" },
+  { key: "text", icon: Type, label: "mcSecType", title: "mcSecType", left: ["style", "motion", "type"], side: "color" },
   { key: "layout", icon: Move, label: "mcGroupLayout", title: "mcFraming", left: ["zoom"], side: "platform" },
-  { key: "watermark", icon: Droplet, label: "wmLogoTitle", title: "groupWatermark", left: ["watermark"], side: "wmcolor" },
+  // Watermark digambar panel Mark sendiri (lihat render di bawah), bukan left/side.
+  { key: "watermark", icon: Droplet, label: "wmLogoTitle", title: "groupWatermark", left: [], side: "zoom" },
 ];
 // Tebal garis tepi sebagai tiga pilihan; angka lain = Custom (angka persisnya di panel Text).
 const OUTLINES = [{ v: 3, k: "mcThin" }, { v: 5, k: "mcMedium" }, { v: 8, k: "mcThick" }] as const;
@@ -79,6 +81,8 @@ export default function MoreControls(p: {
   subOutline: number; setSubOutline: (v: number) => void;
   subSpeed: string; setSubSpeed: (v: string) => void;
   subBox: boolean; setSubBox: (v: boolean) => void;
+  subUpper: boolean; setSubUpper: (v: boolean) => void;
+  subFx: SubFx; setSubFx: (v: SubFx) => void;
   subMode: string; setSubMode: (v: string) => void;
   // posisi
   platform: string; setPlatform: (v: string) => void;
@@ -86,8 +90,8 @@ export default function MoreControls(p: {
   reframe: string; setReframe: (v: string) => void;
   background: string; setBackground: (v: string) => void;
   zoom: number; setZoom: (v: number) => void;
-  // watermark
-  watermark: Watermark; setWatermark: (patch: Partial<Watermark>) => void; onPickImage: () => void;
+  // watermark = Mark yang sama dengan halaman Mark & News (useMark)
+  m: Mark; timed: boolean; setTimed: (v: boolean) => void; setError: (e: string) => void; onPickLogo: (i: number) => void;
   // gaya, ukuran, sorotan, dan jumlah/panjang klip
   subHighlight: string; setSubHighlight: (v: string) => void; pickSize: (v: number) => void;
   maxClips: number; setMaxClips: (v: number) => void;
@@ -175,6 +179,7 @@ export default function MoreControls(p: {
     <div className="mc-r mc-r-sw">{toggle}{note && <span className="mc-note">{note}</span>}</div>
   );
 
+  const word = p.subMode === "word";
   const body = (part: Key) => {
     switch (part) {
       case "transcription":
@@ -233,13 +238,35 @@ export default function MoreControls(p: {
             { value: "normal", name: t("styleNormalName"), icon: CaseSensitive },
             { value: "highlight", name: t("styleHighlightName"), icon: Highlighter },
             { value: "karaoke", name: t("styleKaraokeName"), icon: Mic },
-          ]} />)}
+            { value: "build", name: t("styleBuildName"), icon: ListPlus },
+          ]} />, undefined, word)}
+          {/* Satu kata sekali tampil tidak punya halaman: gaya, kecepatan, dan
+              tumpuk tidak berlaku — mati, tidak hilang. */}
           {row("subSpeed", <Segmented label={t("subSpeed")} value={p.subSpeed} onChange={p.setSubSpeed} options={[
             { value: "slow", name: t("speedSlow") }, { value: "normal", name: t("speedNormal") }, { value: "dense", name: t("speedDense") },
-          ]} />)}
+          ]} />, undefined, word)}
           {/* Gaya keempat; tiga lainnya di baris Style. */}
           {sw(<Toggle checked={p.subMode === "word"} onChange={(v) => p.setSubMode(v ? "word" : "highlight")} label={t("subWord")} />)}
         </>;
+      case "motion": {
+        const fx = (f: Partial<SubFx>) => p.setSubFx({ ...p.subFx, ...f });
+        return <>
+          {row("mcMotion", <Segmented label={t("mcMotion")} value={p.subFx.anim} onChange={(v) => fx({ anim: v })} options={[
+            { value: "", name: t("fxNone") }, { value: "pop", name: t("fxPop") }, { value: "bounce", name: t("fxBounce") }, { value: "rise", name: t("fxRise") },
+          ]} />)}
+          {/* Kotak latar tidak berbayangan (engine: BorderStyle 3, Shadow 0). */}
+          {row("mcShadow", <Segmented label={t("mcShadow")} value={p.subFx.shadow} onChange={(v) => fx({ shadow: v })} options={[
+            { value: "", name: t("fxDefault") }, { value: "soft", name: t("fxSoft") }, { value: "hard", name: t("fxHard") }, { value: "none", name: t("fxNone") },
+          ]} />, undefined, p.subBox)}
+          {sw(<fieldset className="cp-plain" disabled={word}>
+            <Toggle checked={p.subFx.stack} onChange={(v) => fx({ stack: v })} label={t("mcStack")} />
+          </fieldset>)}
+          {/* Warna berselang hanya berlaku di mode satu kata: mati, tidak hilang. */}
+          {sw(<fieldset className="cp-plain" disabled={!word}>
+            <Toggle checked={p.subFx.alternate} onChange={(v) => fx({ alternate: v })} label={t("mcAlternate")} desc={t("mcAlternateDesc")} />
+          </fieldset>)}
+        </>;
+      }
       case "type":
         return <>
             {row("font", <>
@@ -257,21 +284,26 @@ export default function MoreControls(p: {
                 </span>
               </>}
             </>)}
-            {row("textSize", <Segmented label={t("textSize")} value={p.subSize} onChange={p.pickSize} options={[
-              ...SIZES.map((o) => ({ value: o.v, name: t(o.k) })),
-              ...(SIZES.some((o) => o.v === p.subSize) ? [] : [{ value: p.subSize, name: t("mcCustom", { n: p.subSize }) }]),
-            ]} />)}
-            {row("outline", <Segmented label={t("outline")} value={p.subOutline} onChange={p.setSubOutline} options={[
-              ...OUTLINES.map((o) => ({ value: o.v, name: t(o.k) })),
-              ...(OUTLINES.some((o) => o.v === p.subOutline) ? [] : [{ value: p.subOutline, name: t("mcCustom", { n: p.subOutline }) }]),
-            ]} />)}
+            {/* Tiga pilihan cepat + angka persisnya di sebelah (angka lain = tak
+                ada pilihan yang menyala). */}
+            {row("textSize", <div className="mc-combo">
+              <Segmented label={t("textSize")} value={p.subSize} onChange={p.pickSize} options={SIZES.map((o) => ({ value: o.v, name: t(o.k) }))} />
+              <Stepper value={p.subSize} onChange={p.setSubSize} min={24} max={200} step={2} />
+            </div>)}
+            {row("outline", <div className="mc-combo">
+              <Segmented label={t("outline")} value={p.subOutline} onChange={p.setSubOutline} options={OUTLINES.map((o) => ({ value: o.v, name: t(o.k) }))} />
+              <Stepper value={p.subOutline} onChange={p.setSubOutline} min={0} max={20} />
+            </div>)}
             {sw(<Toggle checked={p.subBox} onChange={p.setSubBox} label={t("mcBox")} />)}
+            {sw(<Toggle checked={p.subUpper} onChange={p.setSubUpper} label={t("mcUpper")} />)}
         </>;
       case "color":
         // Satu palet untuk dua sasaran: warna teks atau warna sorotan.
         return <ColorPanel targets={[
           { key: "text", name: t("mcColText"), value: p.subColor, set: p.setSubColor },
-          { key: "hl", name: t("mcColHl"), value: p.subHighlight, set: p.setSubHighlight },
+          // Sorot hanya dipakai karaoke, sorot kata, dan warna berselang.
+          { key: "hl", name: t("mcColHl"), value: p.subHighlight, set: p.setSubHighlight,
+            off: !(p.subMode === "karaoke" || p.subMode === "highlight" || (word && p.subFx.alternate)) },
         ]} />;
       case "platform":
         return row("postTo", <Segmented label={t("mcSecPlatform")} value={p.platform} onChange={p.setPlatform} options={[
@@ -292,10 +324,6 @@ export default function MoreControls(p: {
             { value: "blur", name: t("backgroundBlur") }, { value: "black", name: t("backgroundBlack") },
           ]} />, undefined, p.zoom >= 100)}
         </>;
-      case "watermark":
-        return <WatermarkPanel watermark={p.watermark} setWatermark={p.setWatermark} onPickImage={p.onPickImage} />;
-      case "wmcolor":
-        return <ColorPanel targets={watermarkColors(p.watermark, p.setWatermark, t)} />;
     }
     return null;
   };
@@ -305,11 +333,31 @@ export default function MoreControls(p: {
       tabs={GROUPS.map(({ key, icon, label }) => ({ key, icon, label: t(label),
         // Peringatan Ollama terlihat walau tab AI tidak dipilih.
         alert: key === "ai" && ollamaWarn ? t("mcAIAlert") : undefined }))}>
-      <Box title={t(item.title)}>
-        <Split side={body(item.side)}>
-          {item.left.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}
-        </Split>
-      </Box>
+      {/* Tab Watermark = panel Logo + Headline + waktu tampil milik Mark
+          (mark.tsx), sama persis dengan halaman Mark; judul boleh dari LLM. */}
+      {/* Tab Text: template gaya caption (kotak contoh, klik = dipakai) di atas
+          setelan rincinya. */}
+      {item.key === "text" && (
+        <Box title={t("cpTitle")}>
+          <CaptionPresets setError={p.setError}
+            value={{ font: p.subFont, size: p.subSize, color: p.subColor, highlight: p.subHighlight, outline: p.subOutline, box: p.subBox, mode: p.subMode, upper: p.subUpper, fx: p.subFx }}
+            onApply={(s) => {
+              p.setFontManual(false); p.setSubFont(s.font); p.setSubSize(s.size); p.setSubColor(s.color); p.setSubHighlight(s.highlight);
+              p.setSubOutline(s.outline); p.setSubBox(s.box); p.setSubMode(s.mode); p.setSubUpper(s.upper); p.setSubFx(s.fx ?? NO_FX);
+            }} />
+        </Box>
+      )}
+      {item.key === "watermark" ? <>
+        <MarkLogoGroup m={p.m} web={p.web} setError={p.setError} openPicker={p.onPickLogo} />
+        <MarkHeadline m={p.m} llm />
+        <Box title={t("wmWhenTitle")}><MarkTiming timed={p.timed} setTimed={p.setTimed} m={p.m} /></Box>
+      </> : (
+        <Box title={t(item.title)}>
+          <Split side={body(item.side)}>
+            {item.left.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}
+          </Split>
+        </Box>
+      )}
     </TabCard>
   );
 }

@@ -3,22 +3,18 @@
 // Ikon: lucide-react (ISC) — alasannya di gui/app/page.tsx.
 import { Eye, RotateCw, X } from "lucide-react";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "./i18n";
 import { eng } from "./engine";
-import { PLAY_H, PLAY_W, CENTER_X, CENTER_Y, useLayerDrag } from "./drag";
+import { PLAY_H, PLAY_W, CENTER_X, CENTER_Y } from "./drag";
 import Guides from "./guides";
-import { headlineAnchor, headlineBox, wrapHeadline } from "./watermark-model";
-import type { Watermark } from "./watermark-model";
+import { MarkLayers, type Mark } from "./mark";
 import Warn from "./warn";
 import Filmstrip from "./filmstrip";
-import { StageFrame } from "./stage";
+import { StageFrame, useStageWidth } from "./stage";
 import { toHex } from "./color-panel";
-
-// Ruang koordinat, titik tengah, dan mesin seret tinggal di ./drag — dipakai
-// bersama halaman watermark. Diekspor ulang dari sini supaya pemanggil lama
-// (page.tsx) tidak perlu tahu ia pindah.
-export { PLAY_W, PLAY_H, CENTER_X, CENTER_Y } from "./drag";
+import { CaptionWords, NO_FX, captionShadow } from "./caption-presets";
+import type { SubFx } from "./caption-presets";
 
 // Area yang tertutup UI tiap aplikasi (fraksi tinggi/lebar frame 9:16).
 // Angka awal hasil pengukuran kasar — sesuaikan bila UI aplikasi berubah.
@@ -54,19 +50,18 @@ const SAMPLE_LINES = ["sampleLine1", "sampleLine2", "sampleLine3"] as const;
 
 // Berapa baris yang mungkin muncul sekaligus — harus sama dengan Pacing() di
 // engine (lambat/normal 2, padat 3; mode word selalu 1 kata per layar).
-export const linesFor = (subMode: string, subSpeed: string) =>
-  subMode === "word" ? 1 : subSpeed === "dense" ? 3 : 2;
+export const linesFor = (subMode: string, subSpeed: string, stack = false) =>
+  subMode === "word" ? 1 : stack ? 3 : subSpeed === "dense" ? 3 : 2;
 
 // Bingkai 9:16 + seretan subtitle, watermark, dan headline. Setelannya ada di
 // kartu More controls (more-controls.tsx).
 export default function PreviewPanel({
   path, reframe, background, zoom, zone,
   fonts, subFont, setSubFont, fontManual, setFontManual, fontCheck, fontChecking,
-  subSize, setSubSize, subColor, setSubColor, subOutline, setSubOutline, subBox, setSubBox,
+  subSize, setSubSize, subColor, setSubColor, subOutline, setSubOutline, subBox, setSubBox, subUpper = false, subFx = NO_FX,
   subMode, setSubMode, subHighlight, setSubHighlight, subSpeed, setSubSpeed,
   subX, setSubX, subY, setSubY, blockH, centerAnchorY,
-  watermark, moveWatermark, moveHeadline,
-  addLog, grid, alwaysGuides, showZones = true, previewTime, setPreviewTime,
+  m, addLog, alwaysGuides, showZones = true, previewTime, setPreviewTime,
 }: {
   path: string; reframe: string; background: string; zoom: number; zone?: Zone;
   fonts: Font[];
@@ -77,18 +72,17 @@ export default function PreviewPanel({
   subColor: string; setSubColor: (v: string) => void;
   subOutline: number; setSubOutline: (v: number) => void;
   subBox: boolean; setSubBox: (v: boolean) => void;
+  subUpper?: boolean; subFx?: SubFx;
   subMode: string; setSubMode: (v: string) => void;
   subHighlight: string; setSubHighlight: (v: string) => void;
   subSpeed: string; setSubSpeed: (v: string) => void;
   subX: number; setSubX: (v: number | ((p: number) => number)) => void;
   subY: number; setSubY: (v: number | ((p: number) => number)) => void;
   blockH: number; centerAnchorY: number;
-  watermark: Watermark;
-  moveWatermark: (x: number, y: number) => void;
-  moveHeadline: (x: number, y: number) => void;
+  // Mark (logo + judul) yang SAMA dengan halaman Mark & News: lapisannya,
+  // bingkai (boxRef), mesin seret & kisinya dipakai juga untuk subtitle.
+  m: Mark;
   addLog: (text: string) => void;
-  // Kisi & garis panduan diatur di panel Position (more-controls.tsx).
-  grid: number;
   alwaysGuides: boolean;
   /** Kotak centang "Tampilkan area yang tertutup UI aplikasi". */
   showZones?: boolean;
@@ -105,7 +99,6 @@ export default function PreviewPanel({
   // Dinaikkan tiap muat ulang manual supaya URL frame berubah — kalau URL-nya
   // sama persis, browser memakai gambar lama meski videonya sudah ditimpa.
   const [previewNonce, setPreviewNonce] = useState(0);
-  const boxRef = useRef<HTMLDivElement | null>(null);
 
   // Tinggi & lebar bingkai datang dari CSS dan HANYA dari tinggi jendela
   // (--pv-w di globals.css). Pengukuran kolom setelan yang dulu ada di sini
@@ -120,8 +113,10 @@ export default function PreviewPanel({
     () => eng(`/api/frame?path=${encodeURIComponent(path)}&t=${previewTime.toFixed(2)}`)
       + `&reframe=${encodeURIComponent(reframe)}&background=${encodeURIComponent(background)}`
       + `&zoom=${zoom}`
+      // Kartu berita (Look): bingkai dipotong engine seperti hasil render — sama dengan Mark.
+      + (m.cardOn ? `&card=1&card_y=${m.frameCardY}` : "")
       + `&n=${previewNonce}`,
-    [path, previewTime, reframe, background, zoom, previewNonce]
+    [path, previewTime, reframe, background, zoom, previewNonce, m.cardOn, m.frameCardY]
   );
 
   // silent = dipicu otomatis oleh video baru; kegagalannya tidak perlu
@@ -166,9 +161,9 @@ export default function PreviewPanel({
     return () => clearTimeout(timer);
   }, [path, resetPreview, loadPreview]);
 
-  // Mesin seret ada di ./drag — satu untuk ketiga lapis, dan halaman watermark
-  // memakai yang sama.
-  const { dragAt, dragProps } = useLayerDrag(boxRef, grid);
+  // Satu mesin seret (useMark → useLayerDrag) untuk subtitle, logo, dan judul.
+  const { dragAt, dragProps, boxRef } = m;
+  const frameH = (useStageWidth() * 16) / 9;
 
   const subDrag = dragProps(
     subX, subY,
@@ -177,28 +172,18 @@ export default function PreviewPanel({
     (x, y) => { setSubX(x); setSubY(y); },
     centerAnchorY, PLAY_H - blockH,
   );
-  const wmDrag = dragProps(watermark.x, watermark.y, moveWatermark, CENTER_Y, PLAY_H);
-  // Headline: koordinat di layar dihitung dari kotaknya, yang disimpan geseran.
-  const hlBox = headlineBox(watermark);
-  const hlLines = wrapHeadline(
-    watermark.hlSource === "llm" ? t("headlineSample") : watermark.hlText,
-    watermark.hlSize, hlBox.w);
-  const hlAt = headlineAnchor(hlLines, watermark.hlSize, watermark.hlDX, watermark.hlDY, hlBox);
-  const headlineDrag = dragProps(hlAt.x, hlAt.y,
-    (x, y) => moveHeadline(x - hlBox.cx, y - hlBox.cy), hlBox.cy, PLAY_H, hlBox.cx);
 
   const atCenterX = (dragAt?.x ?? subX) === CENTER_X;
   const atCenterY = dragAt ? dragAt.y === CENTER_Y || dragAt.y === centerAnchorY : subY === centerAnchorY;
   const guidesVisible = dragAt !== null || alwaysGuides;
 
-  const maxLines = linesFor(subMode, subSpeed);
+  const maxLines = linesFor(subMode, subSpeed, subFx.stack);
   // Piksel CSS per satuan ukuran subtitle, dari engine. 0 = belum tahu (daftar
   // font belum sampai, atau font manual belum lolos cek) — dalam keadaan itu
   // dipakai 1, yang berarti pratinjau menggambar seperti sebelumnya.
   const fontScale =
     (fontManual ? fontCheck?.scale : fonts.find((f) => f.name === subFont)?.scale) || 1;
   const colorHex = toHex(subColor);
-  const highlightHex = toHex(subHighlight);
 
   return (
       <div className="sub-layout pv-only">
@@ -232,60 +217,16 @@ export default function PreviewPanel({
           )}
           {/* Garis tengah: muncul saat digeser (atau dikunci lewat centang).
               Kelas "on" = subtitle sedang menempel di garis itu. */}
-          <Guides grid={grid} visible={guidesVisible} atX={atCenterX} atY={atCenterY} dragAt={dragAt} />
+          <Guides grid={m.grid} visible={guidesVisible} atX={atCenterX} atY={atCenterY} dragAt={dragAt} />
           {/* Video tanpa suara: seluruh pipeline berdiri di atas ucapan, jadi
               ini harus terlihat SEBELUM tombol Mulai ditekan. Lencana melayang
               di atas gambar — tidak menambah baris, tidak menggeser apa pun. */}
           {hasAudio === false && (
             <div className="no-audio"><Warn width={280}>{t("noAudioWarning")}</Warn>{t("noAudio")}</div>
           )}
-          {/* Banner watermark. Digambar SEBELUM subtitle & headline supaya
-              urutan tumpukannya sama dengan hasil render: overlay ffmpeg lebih
-              dulu, .ass (subtitle + headline) dibakar sesudahnya.
-
-              Sumbernya /api/image, bukan path lokal langsung: <img> di browser
-              tidak bisa membuka berkas di disk, dan tanpa gambarnya yang bisa
-              digeser cuma kotak kosong. */}
-          {watermark.image && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img className="wmoverlay" alt="watermark" draggable={false}
-              src={eng(`/api/image?path=${encodeURIComponent(watermark.image)}`)}
-              style={{
-                left: `${(watermark.x / PLAY_W) * 100}%`, top: `${(watermark.y / PLAY_H) * 100}%`,
-                // KOTAK-nya yang diberi ukuran; object-fit: contain (globals.css)
-                // yang memuat gambarnya ke dalam — sama dengan sisi ffmpeg.
-                width: `${watermark.width}%`, height: `${watermark.height}%`,
-              }}
-              {...wmDrag} />
-          )}
-          {/* Headline duduk DI DALAM kotak watermark: jangkarnya tengah kotak,
-              digeser sebanyak hlDX/hlDY, dan dijepit supaya bloknya tidak
-              pernah keluar. Batas kotaknya digambar saat dipegang — janji
-              "tidak melewati watermark" harus TERLIHAT, bukan cuma berlaku. */}
-          {(hlLines.length > 0) && (
-            <>
-              {dragAt && <div className="wmbox" style={{
-                left: `${((hlBox.cx - hlBox.w / 2) / PLAY_W) * 100}%`,
-                top: `${((hlBox.cy - hlBox.h / 2) / PLAY_H) * 100}%`,
-                width: `${(hlBox.w / PLAY_W) * 100}%`,
-                height: `${(hlBox.h / PLAY_H) * 100}%`,
-              }} />}
-              <div className="suboverlay headlineoverlay"
-                style={{
-                  left: `${(hlAt.x / PLAY_W) * 100}%`, top: `${(hlAt.y / PLAY_H) * 100}%`,
-                  fontFamily: `"${subFont}", sans-serif`,
-                  fontSize: `calc(${(watermark.hlSize * fontScale) / PLAY_H} * var(--pvh))`,
-                  lineHeight: 1 / fontScale,
-                  color: toHex(watermark.hlColor),
-                  textShadow: watermark.hlOutline > 0
-                    ? "-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 0 4px #000"
-                    : "none",
-                }}
-                {...headlineDrag}>
-                {hlLines.map((line, i) => <div key={i}>{line}</div>)}
-              </div>
-            </>
-          )}
+          {/* Logo & judul Mark (lapisan yang sama dengan halaman Mark & News),
+              digambar SEBELUM subtitle — urutan tumpukannya sama dengan render. */}
+          <MarkLayers m={m} frameH={frameH} />
           <div className="suboverlay"
             style={{
               left: `${(subX / PLAY_W) * 100}%`, top: `${(subY / PLAY_H) * 100}%`,
@@ -295,40 +236,20 @@ export default function PreviewPanel({
               // atas sudah dikecilkan jadi em-nya. 1/scale mengembalikannya.
               lineHeight: 1 / fontScale,
               color: colorHex,
+              textTransform: subUpper ? "uppercase" : "none",
               background: subBox ? "rgba(0,0,0,0.6)" : "transparent",
               borderRadius: subBox ? 8 : 0,
               padding: subBox ? "4px 14px" : "2px 8px",
-              textShadow: subBox ? "none" : (subOutline > 0
-                ? "-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 0 4px #000"
-                : "none"),
+              textShadow: captionShadow({ size: subSize, outline: subOutline, box: subBox, fx: subFx }),
             }}
             {...subDrag}>
             {/* Contoh ditampilkan sebanyak baris terbanyak yang mungkin
                 muncul, bukan satu baris pendek. Dulu preview selalu 1 baris
                 sehingga pengguna menaruhnya pas, lalu terkejut waktu hasilnya
                 2 baris. */}
-            {subMode === "word" ? (
-              <div style={{ color: highlightHex }}>{t("sampleWord")}</div>
-            ) : (
-              Array.from({ length: maxLines }, (_, i) => {
-                const line = t(SAMPLE_LINES[i]);
-                const isLast = i === maxLines - 1;
-                if ((subMode !== "karaoke" && subMode !== "highlight") || !isLast) return <div key={i}>{line}</div>;
-                // Kata terakhir yang sedang diucapkan: karaoke berganti warna,
-                // "sorot kata" berdiri di atas blok warna (sama dengan blockTag
-                // di engine/internal/subtitle).
-                const words = line.split(" ");
-                const tail = words.pop();
-                const on = subMode === "highlight"
-                  ? { background: highlightHex, color: "#15181D", textShadow: "none", padding: "0 0.18em", borderRadius: "0.12em" }
-                  : { color: highlightHex };
-                return (
-                  <div key={i}>
-                    {words.join(" ")} <span style={on}>{tail}</span>
-                  </div>
-                );
-              })
-            )}
+            {/* Aturan mode, gerak & bayangan = kotak contoh preset (CaptionWords). */}
+            <CaptionWords lines={Array.from({ length: maxLines }, (_, i) => t(SAMPLE_LINES[i]).split(" "))}
+              s={{ font: subFont, size: subSize, color: subColor, highlight: subHighlight, outline: subOutline, box: subBox, mode: subMode, upper: subUpper, fx: subFx }} />
           </div>
         </div>
         </StageFrame>

@@ -35,7 +35,7 @@ import Picker from "../picker";
 import FileCard, { baseName, useFiles } from "../file-list";
 import Select from "../select";
 import { useKeep, useRestore, useSticky } from "../persist";
-import { HL_FONT, MarkFont, MarkHeadline, MarkLayers, MarkLogoGroup, MarkTemplates, useMark, useTemplates } from "../mark";
+import { HL_FONT, MarkFont, MarkTiming, MarkHeadline, MarkLayers, MarkLogoGroup, MarkTemplates, useMark, useTemplates } from "../mark";
 
 type FileResult = { video: string; name: string; output?: string; seconds?: number; error?: string };
 type Probe = { w: number; h: number; dur: number } | "error";
@@ -241,24 +241,7 @@ export default function WatermarkPage() {
                       <Segmented label={t("wmFitTitle")} value={fit} onChange={setFit}
                         options={[{ value: "crop" as const, name: t("wmFitCrop") }, { value: "whole" as const, name: t("wmFitWhole") }]} />
                     </Row>
-                    {/* Waktu tampil = satu baris seperti yang lain; detiknya muncul hanya bila diatur. */}
-                    <Row label={t("wmWhenTitle")}>
-                      <Segmented label={t("wmWhenTitle")} value={timed ? "timed" : "whole"} onChange={(v) => {
-                        const on = v === "timed";
-                        setTimed(on);
-                        if (on && !watermark.dur) setWatermark({ dur: 5 });
-                      }} options={[{ value: "whole", name: t("wmWhenWhole") }, { value: "timed", name: t("wmWhenTimed") }]} />
-                      {/* Selalu ada, mati selagi "Whole video" — barisnya tidak berubah tinggi. */}
-                      <fieldset className="wm-timed" disabled={!timed}>
-                          {t("wmFromA")}
-                          <input type="number" min={0} value={watermark.at} aria-label={t("wmAt")}
-                            onChange={(e) => setWatermark({ at: Math.max(0, Number(e.target.value) || 0) })} />
-                          {t("wmFromB")}
-                          <input type="number" min={1} value={watermark.dur || 5} aria-label={t("wmFor")}
-                            onChange={(e) => setWatermark({ dur: Math.max(1, Number(e.target.value) || 1) })} />
-                          {t("wmFromC")}
-                      </fieldset>
-                    </Row>
+                    <MarkTiming timed={timed} setTimed={setTimed} m={m} />
                 </Split>
               </Group>
             )}

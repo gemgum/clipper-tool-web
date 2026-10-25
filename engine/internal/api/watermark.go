@@ -337,43 +337,55 @@ type watermarkTemplate struct {
 
 var templateMu sync.Mutex
 
-func (s *Server) templateFile() string {
-	return filepath.Join(s.paths.DataDir, "templates", "watermark.json")
+// Satu penyimpan template untuk beberapa jenis (kind): "watermark" = Mark &
+// News, "caption" = gaya subtitle Clips (My templates). Jenis lain ditolak
+// jadi watermark — nama berkasnya tidak pernah datang mentah dari klien.
+func templateKind(r *http.Request) string {
+	if r.URL.Query().Get("kind") == "caption" {
+		return "caption"
+	}
+	return "watermark"
 }
 
-func (s *Server) readTemplates() []watermarkTemplate {
+func (s *Server) templateFile(kind string) string {
+	return filepath.Join(s.paths.DataDir, "templates", kind+".json")
+}
+
+func (s *Server) readTemplates(kind string) []watermarkTemplate {
 	out := []watermarkTemplate{}
-	if b, err := os.ReadFile(s.templateFile()); err == nil {
+	if b, err := os.ReadFile(s.templateFile(kind)); err == nil {
 		_ = json.Unmarshal(b, &out)
 	}
 	return out
 }
 
-func (s *Server) writeTemplates(list []watermarkTemplate) error {
+func (s *Server) writeTemplates(kind string, list []watermarkTemplate) error {
 	b, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(s.templateFile()), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.templateFile(kind)), 0o755); err != nil {
 		return err
 	}
 	// Ditulis ke nama sementara lalu diganti nama: aplikasi yang mati di
 	// tengah penulisan tidak meninggalkan daftar setengah jadi.
-	tmp := s.templateFile() + ".tmp"
+	tmp := s.templateFile(kind) + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.templateFile())
+	return os.Rename(tmp, s.templateFile(kind))
 }
 
 func (s *Server) listTemplates(w http.ResponseWriter, r *http.Request) {
+	kind := templateKind(r)
 	templateMu.Lock()
 	defer templateMu.Unlock()
-	writeJSON(w, 200, map[string]any{"templates": s.readTemplates()})
+	writeJSON(w, 200, map[string]any{"templates": s.readTemplates(kind)})
 }
 
 // saveTemplate menyimpan, atau MENIMPA template bernama sama.
 func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
+	kind := templateKind(r)
 	var req watermarkTemplate
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
@@ -392,7 +404,7 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	req.Saved = time.Now()
 	templateMu.Lock()
 	defer templateMu.Unlock()
-	list := s.readTemplates()
+	list := s.readTemplates(kind)
 	found := false
 	req.Default = false
 	for i := range list {
@@ -405,7 +417,7 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		list = append(list, req)
 	}
-	if err := s.writeTemplates(list); err != nil {
+	if err := s.writeTemplates(kind, list); err != nil {
 		writeErr(w, 500, "could not save the template: "+err.Error())
 		return
 	}
@@ -415,10 +427,11 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 // setDefaultTemplate menjadikan satu template bawaan (yang lain dicabut), atau
 // mencabutnya bila ia sudah bawaan.
 func (s *Server) setDefaultTemplate(w http.ResponseWriter, r *http.Request) {
+	kind := templateKind(r)
 	name := r.PathValue("name")
 	templateMu.Lock()
 	defer templateMu.Unlock()
-	list := s.readTemplates()
+	list := s.readTemplates(kind)
 	found := false
 	for i := range list {
 		on := list[i].Name == name && !list[i].Default
@@ -429,7 +442,7 @@ func (s *Server) setDefaultTemplate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, "no template with that name")
 		return
 	}
-	if err := s.writeTemplates(list); err != nil {
+	if err := s.writeTemplates(kind, list); err != nil {
 		writeErr(w, 500, "could not save the templates: "+err.Error())
 		return
 	}
@@ -437,10 +450,11 @@ func (s *Server) setDefaultTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteTemplate(w http.ResponseWriter, r *http.Request) {
+	kind := templateKind(r)
 	name := r.PathValue("name")
 	templateMu.Lock()
 	defer templateMu.Unlock()
-	list := s.readTemplates()
+	list := s.readTemplates(kind)
 	kept := list[:0]
 	for _, t := range list {
 		if t.Name != name {
@@ -451,7 +465,7 @@ func (s *Server) deleteTemplate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, "no template with that name")
 		return
 	}
-	if err := s.writeTemplates(kept); err != nil {
+	if err := s.writeTemplates(kind, kept); err != nil {
 		writeErr(w, 500, "could not save the templates: "+err.Error())
 		return
 	}

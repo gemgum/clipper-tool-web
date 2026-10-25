@@ -110,23 +110,4 @@ export function GridPicker({
   return inline ? controls : <div className="field"><label>{t("grid")}</label>{controls}</div>;
 }
 
-// Satu titik penempatan sebagai ANGKA, plus tombol kembali ke tengah bidang.
-//
-// Menyeret memberi rasa; angka memberi hal yang bisa diulang. Keduanya perlu:
-// tanpa angka tidak ada cara menaruh watermark di tempat yang sama persis pada
-// job berikutnya, dan tanpa tombol tengah tidak ada jalan pulang.
-// Position = titik (x·y) + tombol kembali ke tengah; labelnya milik Row.
-export function Position({ x, y, onReset }: { x: number; y: number; onReset: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="position-value" title={`x ${x} · y ${y}`}>
-      {/* Tanpa spasi di sekitar titiknya: "1080 · 1920" berspasi terpotong. */}
-      <span>{x}·{y}</span>
-      <button type="button" className="ghost tiny" title={t("resetCentre")} aria-label={t("resetCentre")} onClick={onReset}>
-        <Crosshair className="ico" aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
 export type { Point };

@@ -152,6 +152,28 @@ func Preview(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Pat
 // BurnTo membakar watermark ke SATU bingkai berkas file (foto, atau detik ke-1
 // video) dan menulisnya ke out; ekstensi out menentukan formatnya (.jpg/.png).
 // Dipakai Preview dan kartu News (logo + judul Mark di atas kartu).
+// ApplyLayers = lapis Mark di ffmpeg: logo pertama + logo tambahan (ruang
+// bingkai formatnya), logo di atas kotak judul, dan area gambar kartu berita
+// (Look) bila judulnya ikut dibakar. SATU susunan untuk halaman Mark (BurnTo)
+// dan klip (pipeline) — dulu pipeline hanya mengirim logo pertama.
+func ApplyLayers(enc *ffmpeg.EncodeOpts, w config.Watermark, withHeadline bool) {
+	_, fh := w.Frame()
+	logo := func(img string, x, y, lw, lh int) ffmpeg.Watermark {
+		return ffmpeg.Watermark{Image: img, X: x, Y: y, Width: lw, Height: lh, At: w.At, For: w.For, RefH: fh}
+	}
+	enc.Watermark = logo(w.Image, w.X, w.Y, w.Width, w.Height)
+	enc.Logos = nil
+	for _, l := range w.Logos {
+		enc.Logos = append(enc.Logos, logo(l.Image, l.X, l.Y, l.Width, l.Height))
+	}
+	// Kotak judul buram: logo harus di atasnya, sama dengan pratinjau.
+	enc.LogosOverSubs = w.Headline.Box
+	// Kartu berita: gambar di bagian atas, panel & teksnya dari .ass.
+	if hl := w.Headline; hl.Box && hl.Card && withHeadline {
+		enc.Photo = float64(config.CardPhotoPx(w.Format, hl.CardY)) / float64(fh)
+	}
+}
+
 func BurnTo(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths, file, out string) error {
 	o.Watermark.Headline.Font = o.Subtitle.Font
 	o.Watermark.Headline.FontsDir = paths.FontsDir
@@ -205,14 +227,6 @@ func one(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths,
 	}
 
 	out := outputPath(video, o.OutDir)
-	logo := func(img string, x, y, lw, lh int) ffmpeg.Watermark {
-		return ffmpeg.Watermark{Image: img, X: x, Y: y, Width: lw, Height: lh,
-			At: o.Watermark.At, For: o.Watermark.For, RefH: fh}
-	}
-	var logos []ffmpeg.Watermark
-	for _, l := range o.Watermark.Logos {
-		logos = append(logos, logo(l.Image, l.X, l.Y, l.Width, l.Height))
-	}
 	enc := ffmpeg.EncodeOpts{
 		CRF: crf, Preset: preset, FontsDir: paths.FontsDir,
 		AssPath: assPath,
@@ -220,17 +234,10 @@ func one(ctx context.Context, o Options, ff *ffmpeg.Client, paths config.Paths,
 		// seluruh gambar masuk di atas latar blur. Pada bingkai seukuran
 		// berkasnya sendiri keduanya berarti "biarkan apa adanya".
 		Mode: string(config.ReframeCenter), Background: config.BackgroundBlack, Zoom: config.ZoomMax,
-		Watermark: logo(o.Watermark.Image, o.Watermark.X, o.Watermark.Y, o.Watermark.Width, o.Watermark.Height),
-		Logos:     logos,
-		// Kotak judul buram: logo harus di atasnya, sama dengan pratinjau.
-		LogosOverSubs: o.Watermark.Headline.Box,
 	}
+	ApplyLayers(&enc, o.Watermark, assPath != "")
 	if o.Fit == FitWhole {
 		enc.Mode, enc.Background, enc.Zoom = string(config.ReframeFit), config.BackgroundBlur, 0
-	}
-	// Kartu berita: gambar di bagian atas, panel & teksnya dari .ass.
-	if hl := o.Watermark.Headline; hl.Box && hl.Card && assPath != "" {
-		enc.Photo = float64(config.CardPhotoPx(o.Watermark.Format, hl.CardY)) / float64(fh)
 	}
 	if preview != "" {
 		// Detik ke-1 (atau tengah video yang lebih pendek): frame pembuka

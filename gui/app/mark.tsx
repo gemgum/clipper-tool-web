@@ -17,8 +17,8 @@ import { useLayerDrag } from "./drag";
 import type { Font } from "./preview-panel";
 import { AlignPicker, Segmented, Toggle } from "./clip-steps";
 import { Group, Pad, Row, Split } from "./tab-card";
-import { watermarkColors } from "./watermark-panel";
-import ColorPanel, { isDark, toHex } from "./color-panel";
+import ColorPanel, { isDark, toHex, type ColorTarget } from "./color-panel";
+import type { MessageKey } from "./i18n";
 import { baseName } from "./file-list";
 import Stepper from "./stepper";
 import { useSticky } from "./persist";
@@ -58,10 +58,26 @@ export type LogoItem = { image: string; x: number; y: number; width: number; anc
 // terpasang di kartu News baru.
 export type Template = { name: string; data: Record<string, unknown>; default?: boolean };
 
+// Sasaran warna judul Mark — SATU daftar untuk Mark, News, dan Clips.
+// withBox: "Box" selalu tampil, mati selagi kotak judulnya mati.
+// auto = warna otomatis (tongkat ajaib) untuk Text & Box, dari useMark.autoColor
+// (halaman yang punya gambar dasar). Tebal Outline ikut sasaran Outline.
+export const watermarkColors = (w: Watermark, set: (patch: Partial<Watermark>) => void, t: (k: MessageKey) => string, withBox = false,
+  auto?: (target: "text" | "box") => void): ColorTarget[] => [
+  { key: "text", name: t("mcColText"), value: w.hlColor, set: (c) => set({ hlColor: c }),
+    ...(auto ? { auto: { onClick: () => auto("text"), title: t("cpAutoText") } } : {}) },
+  ...(withBox ? [{ key: "box", name: t("wmColBox"), value: w.hlBoxColor || "white", set: (c: string) => set({ hlBoxColor: c }), off: !w.hlBox,
+    ...(auto ? { auto: { onClick: () => auto("box"), title: t("cpAutoBox") } } : {}) }] : []),
+  { key: "outline", name: t("outline"), value: outlineColor(w), set: (c) => set({ hlOutlineColor: c }),
+    width: { value: w.hlOutline, onChange: (v: number) => set({ hlOutline: v }) } },
+];
+
 // useMark memegang setelan Mark untuk satu bingkai berformat `format`.
-// first = berkas/foto dasar (warna Theme "photo"/"auto"); timed = hanya
-// halaman Mark yang mengenal waktu tampil.
-export function useMark({ format, first, timed = false, grid }: { format: Format; first: string; timed?: boolean; grid: number }) {
+// first = berkas/foto dasar (warna Theme "photo"/"auto"); timed = waktu
+// tampil berlaku (Mark & Clips); llm = judul boleh dari LLM per klip (Clips):
+// pratinjaunya memakai teks contoh.
+export function useMark({ format, first, timed = false, grid, llm = false }: { format: Format; first: string; timed?: boolean; grid: number; llm?: boolean }) {
+  const { t } = useI18n();
   const { w: fw, h: fh } = frameSize(format);
   const [watermark, setWatermarkState] = useState<Watermark>(DEFAULT_WATERMARK);
   const setWatermark = useCallback((patch: Partial<Watermark>) => {
@@ -96,15 +112,18 @@ export function useMark({ format, first, timed = false, grid }: { format: Format
   // dihitung di sini dari DY — rumus yang sama dengan NewsBox — supaya
   // menyeret kotak (dan logo yang terkunci padanya) tidak menunggu jaringan.
   const [layout, setLayout] = useState<NewsLayout | null>(null);
-  const boxOn = !!watermark.hlBox && !!watermark.hlText.trim();
+  // Teks yang dipratinjau: judul LLM baru ada per klip, jadi contohnya yang tampil.
+  const llmOn = llm && watermark.hlSource === "llm";
+  const shownText = llmOn ? t("headlineSample") : watermark.hlText;
+  const boxOn = !!watermark.hlBox && !!shownText.trim();
   useEffect(() => {
     if (!boxOn) { setLayout(null); return; }
     const id = setTimeout(() => {
-      post<NewsLayout>("/api/watermark/layout", { font: HL_FONT, watermark: watermarkToAPI({ ...watermark, format, hlDY: 0, hlCardY: 0 }, HL_FONT) })
+      post<NewsLayout>("/api/watermark/layout", { font: HL_FONT, watermark: watermarkToAPI({ ...watermark, hlText: shownText, format, hlDY: 0, hlCardY: 0 }, HL_FONT) })
         .then(setLayout).catch(() => {});
     }, 120);
     return () => clearTimeout(id);
-  }, [boxOn, watermark.hlText, watermark.hlSize, watermark.hlCredit, watermark.hlSharp, watermark.hlAlign, watermark.hlStyle, format]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [boxOn, shownText, watermark.hlSize, watermark.hlCredit, watermark.hlSharp, watermark.hlAlign, watermark.hlStyle, format]); // eslint-disable-line react-hooks/exhaustive-deps
   // Tampilan kartu (Look): tata letak dari engine dengan card_y 0; geserannya
   // dihitung di sini (cardGeom) supaya seret tidak menunggu jaringan.
   const cardStyle = !!watermark.hlBox && watermark.hlStyle === "look";
@@ -165,7 +184,7 @@ export function useMark({ format, first, timed = false, grid }: { format: Format
     image: placed[0]?.image || "",
     ...(placed[0] ? { x: placed[0].x, y: placed[0].y, width: placed[0].width, height: placed[0].height } : {}),
     logos: placed.slice(1),
-    hlFree: true, hlSource: "text",
+    hlFree: true, hlSource: llmOn ? "llm" : "text",
     at: timed ? watermark.at : 0, dur: timed ? watermark.dur : 0,
   };
 
@@ -213,7 +232,7 @@ export function useMark({ format, first, timed = false, grid }: { format: Format
     setLogo(i, { anchor: PIN, dx: Math.round(p.x - wPx / 2 - nb.left), dy: Math.round(p.y + hPx / 2 - nb.top) });
   };
   const hlBox = headlineBox(eff);
-  const hlLines = wrapHeadline(eff.hlText, eff.hlSize, hlBox.w);
+  const hlLines = wrapHeadline(shownText, eff.hlSize, hlBox.w);
   const hlAt = headlineAnchor(hlLines, eff.hlSize, eff.hlDX, eff.hlDY, hlBox);
   // Kotak berita hanya bisa naik-turun: lebarnya selalu selebar bingkai.
   // Kartu: yang diseret batas gambar–panel (panelnya naik-turun); magnet di bawaan.
@@ -263,7 +282,7 @@ export function useMark({ format, first, timed = false, grid }: { format: Format
   };
 
   return {
-    fw, fh, format, first, watermark, setWatermark, logoOn, setLogoOn, logos, setLogos, setLogo, sel, setSel, cur, putLogo,
+    fw, fh, format, first, grid, watermark, setWatermark, logoOn, setLogoOn, logos, setLogos, setLogo, sel, setSel, cur, putLogo,
     dims, logoURL, onLogoLoad, layout, nb, cardStyle, cardOn, frameCardY, placed, curCell, otherCells, placeAt, eff,
     fontScale, boxRef, dragAt, dragProps, stuck, logoDrag, toggleLock, hlLines, hlAt, headlineDrag, applyLook, applyMark, autoColor,
   };
@@ -271,22 +290,23 @@ export function useMark({ format, first, timed = false, grid }: { format: Format
 export type Mark = ReturnType<typeof useMark>;
 
 // useTemplates = daftar template Mark di server, SATU untuk halaman Mark & News.
-export function useTemplates(setError: (e: string) => void) {
+// kind = jenis daftar di engine: "watermark" (Mark & News) | "caption" (gaya subtitle Clips).
+export function useTemplates(setError: (e: string) => void, kind: "watermark" | "caption" = "watermark") {
   const { t } = useI18n();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [ask, confirmEl] = useConfirm();
   useEffect(() => {
-    fetch(eng("/api/watermark/templates")).then((r) => r.json())
+    fetch(eng(`/api/watermark/templates?kind=${kind}`)).then((r) => r.json())
       .then((d) => setTemplates(d.templates || [])).catch(() => {});
-  }, []);
+  }, [kind]);
   const call = async (p: Promise<{ templates?: Template[] }>) => {
     try { setTemplates((await p).templates || []); return true; } catch (e) { setError(String(e)); return false; }
   };
-  const save = (name: string, data: Record<string, unknown>) => call(post("/api/watermark/templates", { name, data }));
-  const setDefault = (name: string) => call(post(`/api/watermark/templates/${encodeURIComponent(name)}/default`, {}));
+  const save = (name: string, data: Record<string, unknown>) => call(post(`/api/watermark/templates?kind=${kind}`, { name, data }));
+  const setDefault = (name: string) => call(post(`/api/watermark/templates/${encodeURIComponent(name)}/default?kind=${kind}`, {}));
   const remove = async (name: string) => {
     if (!(await ask(t("wmTplDeleteAsk", { name }), t("wmTplDelete")))) return;
-    await call(fetch(eng(`/api/watermark/templates/${encodeURIComponent(name)}`), { method: "DELETE" }).then(async (r) => {
+    await call(fetch(eng(`/api/watermark/templates/${encodeURIComponent(name)}?kind=${kind}`), { method: "DELETE" }).then(async (r) => {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "failed");
       return d;
@@ -390,7 +410,8 @@ export function MarkLogoGroup({ m, web, openPicker, setError }: {
 }
 
 // MarkHeadline = tab Headline halaman Mark.
-export function MarkHeadline({ m }: { m: Mark }) {
+// llm = baris sumber judul (teks sendiri | judul LLM per klip) — hanya Clips.
+export function MarkHeadline({ m, llm = false }: { m: Mark; llm?: boolean }) {
   const { t } = useI18n();
   const { watermark, setWatermark, cardStyle, fh } = m;
   const [fmt, setFmt] = useSticky<string>("mark.fmt", "size");
@@ -439,11 +460,18 @@ export function MarkHeadline({ m }: { m: Mark }) {
             hanya Text yang masih diatur di sini. */}
         <ColorPanel targets={watermarkColors(watermark, setWatermark, t, true, m.first ? m.autoColor : undefined).map((x) => cardStyle && x.key !== "text" ? { ...x, off: true } : x)} />
       </>}>
-        <Row label={t("wmTitleText")}>
+        {llm && (
+          <Row label={t("headlineSource")} title={t("headlineSourceTip")}>
+            <Segmented label={t("headlineSource")} value={watermark.hlSource} onChange={(v) => setWatermark({ hlSource: v })}
+              options={[{ value: "text" as const, name: t("headlineMine") }, { value: "llm" as const, name: t("headlineLLM") }]} />
+          </Row>
+        )}
+        <Row label={t("wmTitleText")} off={llm && watermark.hlSource === "llm"}>
           {/* SATU kolom setinggi tetap di kedua mode (dulu input berganti
               textarea dan panelnya melompat). Enter = baris baru hanya
               di kotak judul; judul biasa dibungkus otomatis. */}
-          <textarea id="wm-title" rows={2} value={watermark.hlText} spellCheck={false} placeholder={t("wmTitlePlaceholder")}
+          <textarea id="wm-title" rows={2} value={watermark.hlText} spellCheck={false}
+            placeholder={llm && watermark.hlSource === "llm" ? t("headlineFromLLM") : t("wmTitlePlaceholder")}
             aria-label={t("wmTitleText")} onChange={(e) => setWatermark({ hlText: e.target.value })}
             onKeyDown={(e) => { if (e.key === "Enter" && !watermark.hlBox) e.preventDefault(); }} />
         </Row>
@@ -620,10 +648,38 @@ export function MarkLayers({ m, frameH }: { m: Mark; frameH: number }) {
   </>;
 }
 
-// MarkFont = font judul asli dimuat supaya pratinjau memakai huruf yang SAMA
-// dengan yang dibakar libass.
-export function MarkFont() {
-  return <style dangerouslySetInnerHTML={{ __html: [400, 700].map((w) =>
-    `@font-face{font-family:"${HL_FONT}";font-weight:${w};src:url("${eng(`/api/font-file?name=${encodeURIComponent(HL_FONT)}&weight=${w}`)}");font-display:swap;}`
-  ).join("") }} />;
+// MarkFont = font asli dimuat supaya pratinjau memakai huruf yang SAMA dengan
+// yang dibakar libass. DUA aturan per font, tegak dan tebal: kalau hanya satu,
+// browser menebalkan sendiri face tegaknya, dan itu tidak sama dengan face
+// tebal sungguhan libass. names = font lain yang ikut dimuat (subtitle Clips).
+export function MarkFont({ names = [HL_FONT] }: { names?: string[] }) {
+  return <style dangerouslySetInnerHTML={{ __html: [...new Set(names)].flatMap((n) => [400, 700].map((w) =>
+    `@font-face{font-family:"${n}";font-weight:${w};src:url("${eng(`/api/font-file?name=${encodeURIComponent(n)}&weight=${w}`)}");font-display:swap;}`
+  )).join("") }} />;
+}
+
+// MarkTiming = baris "kapan tampil" (seluruh video | atur waktu + detiknya).
+// Mark & Clips. Detiknya selalu ada, mati selagi "seluruh video" — barisnya
+// tidak berubah tinggi.
+export function MarkTiming({ timed, setTimed, m }: { timed: boolean; setTimed: (v: boolean) => void; m: Mark }) {
+  const { t } = useI18n();
+  const { watermark, setWatermark } = m;
+  return (
+    <Row label={t("wmWhenTitle")}>
+      <Segmented label={t("wmWhenTitle")} value={timed ? "timed" : "whole"} onChange={(v) => {
+        const on = v === "timed";
+        setTimed(on);
+        if (on && !watermark.dur) setWatermark({ dur: 5 });
+      }} options={[{ value: "whole", name: t("wmWhenWhole") }, { value: "timed", name: t("wmWhenTimed") }]} />
+      <fieldset className="wm-timed" disabled={!timed}>
+          {t("wmFromA")}
+          <input type="number" min={0} value={watermark.at} aria-label={t("wmAt")}
+            onChange={(e) => setWatermark({ at: Math.max(0, Number(e.target.value) || 0) })} />
+          {t("wmFromB")}
+          <input type="number" min={1} value={watermark.dur || 5} aria-label={t("wmFor")}
+            onChange={(e) => setWatermark({ dur: Math.max(1, Number(e.target.value) || 1) })} />
+          {t("wmFromC")}
+      </fieldset>
+    </Row>
+  );
 }

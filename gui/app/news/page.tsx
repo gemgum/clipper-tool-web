@@ -31,10 +31,9 @@ import CropDialog, { type Crop } from "../crop";
 import Select from "../select";
 import { CENTER_X } from "../drag";
 import ColorPanel, { isDark, toHex } from "../color-panel";
-import { watermarkColors } from "../watermark-panel";
 import { outlineColor, watermarkToAPI } from "../watermark-model";
 import type { Format } from "../watermark-model";
-import { HL_FONT, MarkFont, MarkLayers, MarkLogoGroup, MarkTemplates, SIZES, useMark, useTemplates } from "../mark";
+import { HL_FONT, MarkFont, MarkLayers, MarkLogoGroup, MarkTemplates, SIZES, useMark, useTemplates, watermarkColors } from "../mark";
 import { Newspaper, LayoutGrid } from "lucide-react";
 import ThemePicker, { THEMES } from "../themes";
 

@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Crosshair, Eye, Grid3x3, Move, Play, Smartphone } from "lucide-react";
-import Stage from "./stage";
+import Stage, { StageBar } from "./stage";
 import PageHeader from "./page-header";
 import { useAI, useAISettings } from "./ai";
 import { useI18n } from "./i18n";
@@ -33,10 +33,13 @@ import { recall, useKeep, useRestore, useSticky } from "./persist";
 
 import SourceCard from "./source-card";
 import MoreControls, { zoomBounds } from "./more-controls";
-import PreviewPanel, { CENTER_X, CENTER_Y, PLATFORMS, PLAY_H, PLAY_W, linesFor } from "./preview-panel";
+import PreviewPanel, { PLATFORMS, linesFor } from "./preview-panel";
+import { CENTER_X, CENTER_Y, PLAY_H, PLAY_W } from "./drag";
 import type { Font, FontCheck } from "./preview-panel";
-import { DEFAULT_WATERMARK, watermarkToAPI } from "./watermark-model";
-import type { Watermark } from "./watermark-model";
+import { watermarkToAPI } from "./watermark-model";
+import { HL_FONT, MarkFont, useMark } from "./mark";
+import { NO_FX } from "./caption-presets";
+import type { SubFx } from "./caption-presets";
 import type { WhisperModel } from "./more-controls";
 import RunView from "./run-view";
 import ResultView, { downloadAllURL } from "./result-view";
@@ -79,31 +82,19 @@ export default function Home() {
   const [subY, setSubY] = useState(960);
   const [subOutline, setSubOutline] = useState(5);
   const [subBox, setSubBox] = useState(false);
-  const [subMode, setSubMode] = useState("highlight");    // normal | highlight | karaoke | word
+  const [subUpper, setSubUpper] = useState(false);       // huruf kapital (template caption)
+  const [subFx, setSubFx] = useState<SubFx>(NO_FX);       // gerak & bayangan preset caption
+  const [subMode, setSubMode] = useState("highlight");    // normal | highlight | karaoke | word | build
   const [subHighlight, setSubHighlight] = useState("#FFD400");
   const [subSpeed, setSubSpeed] = useState("normal");     // slow | normal | dense
   const [platform, setPlatform] = useState("tiktok");     // "off" = tanpa pembatas
   const [saveMode, setSaveMode] = useState("both");       // burn | clean | both
 
-  // Watermark (banner + headline). Satu objek, bukan belasan state: ia melintasi
-  // tiga berkas dan diteruskan utuh ke pratinjau maupun panel setelannya.
-  const [watermark, setWatermarkState] = useState<Watermark>(DEFAULT_WATERMARK);
-  const setWatermark = useCallback((patch: Partial<Watermark>) => {
-    setWatermarkState((b) => ({ ...b, ...patch }));
-  }, []);
-  // Menggeser watermark otomatis membawa headline-nya, dan itu TIDAK butuh kode
-  // lagi: posisi headline disimpan sebagai geseran dari tengah kotak, jadi ia
-  // ikut ke mana pun kotaknya pergi. Dulu keduanya koordinat mutlak dan
-  // selisihnya dijumlahkan sendiri di sini — dan itu pula yang membuat teksnya
-  // tidak pernah benar-benar terikat pada gambarnya.
-  const moveWatermark = useCallback((x: number, y: number) => {
-    setWatermarkState((b) => ({ ...b, x, y }));
-  }, []);
-  // Geseran dari tengah kotak, bukan koordinat mutlak — pemanggilnya yang
-  // mengurangi titik tengah kotaknya.
-  const moveHeadline = useCallback((dx: number, dy: number) => {
-    setWatermarkState((b) => ({ ...b, hlDX: dx, hlDY: dy }));
-  }, []);
+  // Watermark = Mark yang SAMA dengan halaman Mark & News (useMark): banyak
+  // logo, kotak judul/kartu, seret + kisi, kunci logo. llm = judul boleh dari
+  // judul LLM tiap klip. Hook-nya dipanggil di bawah, setelah path & kisi ada.
+  const [timed, setTimed] = useState(false);
+  const [logoTarget, setLogoTarget] = useState(-1);
 
   // Font manual (di luar daftar bawaan) + hasil pengecekannya di engine.
   // Tinggal di sini, bukan di <PreviewPanel>: start() menolak job yang fontnya
@@ -139,9 +130,11 @@ export default function Home() {
   const [subKey, setSubKey] = useState(0);
   const stageRef = useRef("");
   stageRef.current = stage;
-  const [grid, setGrid] = useState<number>(20);
-  const [alwaysGuides, setAlwaysGuides] = useState(false);
-  const [showZones, setShowZones] = useState(true);
+  // Kisi, garis bantu, dan area tertutup UI = setelan lihat, diingat browser.
+  const [grid, setGrid] = useSticky<number>("clips.grid", 20);
+  const [alwaysGuides, setAlwaysGuides] = useSticky("clips.gridAlways", false);
+  const [showZones, setShowZones] = useSticky("clips.zones", true);
+  const m = useMark({ format: "short", first: path, timed, grid, llm: true });
   const router = useRouter();
   // Mesin AI dari Pengaturan (global, atau pengecualian alat "clips"). Ia
   // MENANG atas isian lama yang tersimpan: pemilihnya sudah tidak ada di sini.
@@ -242,6 +235,8 @@ export default function Home() {
       if (s.subColor) setSubColor(s.subColor);
       if (typeof s.subOutline === "number") setSubOutline(s.subOutline);
       if (typeof s.subBox === "boolean") setSubBox(s.subBox);
+      if (typeof s.subUpper === "boolean") setSubUpper(s.subUpper);
+      if (s.subFx) setSubFx({ ...NO_FX, ...s.subFx });
       if (s.subMode) setSubMode(s.subMode);
       else if (typeof s.subKaraoke === "boolean" && s.subKaraoke) setSubMode("karaoke"); // preset lama
       if (s.subHighlight) setSubHighlight(s.subHighlight);
@@ -253,9 +248,9 @@ export default function Home() {
 
   // Simpan preset setiap kali setelan berubah.
   useEffect(() => {
-    const preset = { resolution, quality, reframe, background, zoom, fps, engine, llmModel, transcriptFix, terms, durationPreset, maxClips, subFont, subSize, subColor, subOutline, subBox, subMode, subHighlight, subSpeed, platform, saveMode };
+    const preset = { resolution, quality, reframe, background, zoom, fps, engine, llmModel, transcriptFix, terms, durationPreset, maxClips, subFont, subSize, subColor, subOutline, subBox, subUpper, subFx, subMode, subHighlight, subSpeed, platform, saveMode };
     try { localStorage.setItem("clipper.preset", JSON.stringify(preset)); } catch {}
-  }, [resolution, quality, reframe, background, zoom, fps, engine, llmModel, transcriptFix, terms, durationPreset, maxClips, subFont, subSize, subColor, subOutline, subBox, subMode, subHighlight, subSpeed, platform, saveMode]);
+  }, [resolution, quality, reframe, background, zoom, fps, engine, llmModel, transcriptFix, terms, durationPreset, maxClips, subFont, subSize, subColor, subOutline, subBox, subUpper, subFx, subMode, subHighlight, subSpeed, platform, saveMode]);
 
   // Pulihkan log job TERAKHIR, lalu sambung ulang bila ia masih berjalan.
   //
@@ -319,8 +314,8 @@ export default function Home() {
     outputDir, model, resolution, quality, reframe, background, zoom, fps,
     durationPreset, maxClips, saveMode, transcriptFix, terms,
     engine, llmModel,
-    subFont, subSize, subX, subY, subColor, subOutline, subBox, subMode, subHighlight, subSpeed,
-    watermark,
+    subFont, subSize, subX, subY, subColor, subOutline, subBox, subUpper, subFx, subMode, subHighlight, subSpeed,
+    timed, mark: { watermark: m.watermark, logos: m.logos, logoOn: m.logoOn },
   });
   useRestore<Record<string, unknown>>("clips", (v) => {
     const set = <T,>(fn: (x: T) => void, val: unknown) => {
@@ -348,16 +343,16 @@ export default function Home() {
     set(setSubColor, v.subColor);
     set(setSubOutline, v.subOutline);
     set(setSubBox, v.subBox);
+    set(setSubUpper, v.subUpper);
+    if (v.subFx) setSubFx({ ...NO_FX, ...(v.subFx as SubFx) });
     set(setSubMode, v.subMode);
     set(setSubHighlight, v.subHighlight);
     set(setSubSpeed, v.subSpeed);
-    // Watermark disimpan utuh sebagai satu objek, lalu digabung ke bawaan:
-    // isian tersimpan dari versi sebelum sebuah field ada tidak boleh
-    // meninggalkan field itu undefined — Stepper yang menerima undefined
-    // menghasilkan NaN, dan NaN tidak bisa dikembalikan lewat antarmuka.
-    if (v.watermark && typeof v.watermark === "object") {
-      setWatermarkState({ ...DEFAULT_WATERMARK, ...(v.watermark as Partial<Watermark>) });
-    }
+    set(setTimed, v.timed);
+    // Mark tersimpan (logo + judul); simpanan lama = satu objek watermark
+    // dengan satu gambar — applyMark mengubahnya jadi daftar logo.
+    if (v.mark && typeof v.mark === "object") m.applyMark(v.mark as Record<string, unknown>);
+    else if (v.watermark && typeof v.watermark === "object") m.applyMark({ watermark: v.watermark });
   });
 
   const uploadFile = useCallback((file: File) => {
@@ -482,15 +477,15 @@ export default function Home() {
             subtitle_output: saveMode,
             subtitle: {
               font: subFont, size: Number(subSize), x: subX, y: subY, color: subColor, bold: true,
-              outline: Number(subOutline), box: subBox,
-              mode: subMode, highlight_color: subHighlight, speed: subSpeed,
+              outline: Number(subOutline), box: subBox, uppercase: subUpper,
+              mode: subMode, highlight_color: subHighlight, speed: subSpeed, ...subFx,
             },
-            watermark: watermarkToAPI(watermark, subFont),
+            watermark: watermarkToAPI({ ...m.eff, format: "short" }, HL_FONT),
           },
       }, t("errCreateJob"));
       setJobId(data.id); addLog(t("logJobCreated", { id: data.id }));
     } catch (e: any) { setError(e.message); setBusy(false); addLog(`⚠ ${e.message}`); }
-  }, [path, engine, llmModel, model, transcriber, resolution, quality, reframe, background, zoom, fps, engine, llmModel, transcriptFix, terms, durationPreset, maxClips, outputDir, subFont, subSize, subX, subY, subColor, subOutline, subBox, subMode, subHighlight, subSpeed, saveMode, watermark, addLog, fontManual, fontCheck, t]);
+  }, [path, engine, llmModel, model, transcriber, resolution, quality, reframe, background, zoom, fps, engine, llmModel, transcriptFix, terms, durationPreset, maxClips, outputDir, subFont, subSize, subX, subY, subColor, subOutline, subBox, subUpper, subFx, subMode, subHighlight, subSpeed, saveMode, m.eff, addLog, fontManual, fontCheck, t]);
 
   const cancel = useCallback(async () => {
     if (!jobId) return;
@@ -595,7 +590,7 @@ export default function Home() {
   // diukur: dua baris pada ukuran 72 berjarak 72 px. Faktor 1,17 yang dulu ada
   // di sini diukur saat font bawaan tidak pernah benar-benar dipakai libass
   // (notes/29), jadi ia mengukur font cadangan sistem, bukan Montserrat.
-  const blockH = Math.round(subSize * linesFor(subMode, subSpeed));
+  const blockH = Math.round(subSize * linesFor(subMode, subSpeed, subFx.stack));
   // Jangkar ada di tepi atas blok, jadi supaya blok terlihat di tengah bidang
   // titiknya harus setengah tinggi blok di atas garis tengah.
   const centerAnchorY = Math.round(CENTER_Y - blockH / 2);
@@ -620,10 +615,10 @@ export default function Home() {
   };
   // Operator tidak pernah mengetik koordinat (DESIGN.md §4.2): ganti platform,
   // ukuran, atau gaya → subtitle ditaruh lagi tepat di atas area caption.
-  // Posisi manual (seret di pratinjau, panel Position) berlaku sampai pilihan berikutnya.
+  // Posisi manual (seret di pratinjau) berlaku sampai pilihan berikutnya.
   const placeRef = useRef(placeSafe);
   placeRef.current = placeSafe;
-  useEffect(() => { placeRef.current(); }, [platform, subSize, subMode, subSpeed]);
+  useEffect(() => { placeRef.current(); }, [platform, subSize, subMode, subSpeed, subFx.stack]);
 
   // Ukuran huruf sebagai tiga pilihan; garis tepi mengikuti (≈ ukuran/18 —
   // setara text-stroke ukuran/9 di mockup, yang separuhnya jatuh di dalam huruf).
@@ -644,7 +639,7 @@ export default function Home() {
   const canStart = !busy && !!path && !modelMissing;
   const preview = (
     <PreviewPanel
-      grid={grid} alwaysGuides={alwaysGuides}
+      alwaysGuides={alwaysGuides}
       showZones={showZones}
       path={path} reframe={reframe} background={background} zoom={zoom} zone={zone}
       fonts={fonts} subFont={subFont} setSubFont={setSubFont}
@@ -653,13 +648,13 @@ export default function Home() {
       subSize={subSize} setSubSize={setSubSize}
       subColor={subColor} setSubColor={setSubColor}
       subOutline={subOutline} setSubOutline={setSubOutline}
-      subBox={subBox} setSubBox={setSubBox}
+      subBox={subBox} setSubBox={setSubBox} subUpper={subUpper} subFx={subFx}
       subMode={subMode} setSubMode={setSubMode}
       subHighlight={subHighlight} setSubHighlight={setSubHighlight}
       subSpeed={subSpeed} setSubSpeed={setSubSpeed}
       subX={subX} setSubX={setSubX} subY={subY} setSubY={setSubY}
       blockH={blockH} centerAnchorY={centerAnchorY}
-      watermark={watermark} moveWatermark={moveWatermark} moveHeadline={moveHeadline}
+      m={m}
       addLog={addLog}
       previewTime={previewTime} setPreviewTime={setPreviewTime}
     />
@@ -692,19 +687,9 @@ export default function Home() {
   return (
     <div className="screen scroll clips-v2">
       <PageHeader title={t("tabClips")} subtitle={headerSub}>{actions}</PageHeader>
-      {/* Muat font asli agar preview akurat — termasuk font manual yang lolos cek.
-          DUA aturan per font, tegak dan tebal: kalau hanya satu yang dipasang,
-          browser menebalkan sendiri face tegaknya, dan penebalan buatan itu tidak
-          sama dengan face tebal sungguhan yang dipakai libass saat merender.
-          Font satu-bobot (Anton, Bebas Neue) dilayani berkas yang sama untuk
-          kedua aturan — engine yang menentukan, GUI tidak perlu tahu. */}
-      <style dangerouslySetInnerHTML={{ __html: previewFonts.flatMap((n) => {
-        const src = (w: string) => eng(`/api/font-file?name=${encodeURIComponent(n)}&weight=${w}`);
-        return [
-          `@font-face{font-family:"${n}";font-weight:400;src:url("${src("400")}");font-display:swap;}`,
-          `@font-face{font-family:"${n}";font-weight:700;src:url("${src("700")}");font-display:swap;}`,
-        ];
-      }).join("") }} />
+      {/* Font asli untuk pratinjau: subtitle (termasuk font manual yang lolos
+          cek) + judul Mark — satu pemuat, sama dengan Mark & News. */}
+      <MarkFont names={[...previewFonts, HL_FONT]} />
 
       {/* Galat & peringatan MELAYANG (alerts.tsx), tidak lagi disisipkan sebagai
           kepala halaman: kepala yang muncul-hilang menggeser seluruh isi di
@@ -727,10 +712,10 @@ export default function Home() {
       {picker && (
         <Picker
           mode={picker === "out" ? "folder" : "file"}
-          start={picker === "out" ? outputDir : picker === "banner" ? watermark.image : path}
+          start={picker === "out" ? outputDir : picker === "banner" ? m.logos[logoTarget]?.image || "" : path}
           onPick={(p) => {
             if (picker === "out") setOutputDir(p);
-            else if (picker === "banner") setWatermark({ image: p });
+            else if (picker === "banner") m.putLogo(p, logoTarget);
             else setPath(p);
             setPicker(null);
           }}
@@ -755,10 +740,12 @@ export default function Home() {
               subColor={subColor} setSubColor={setSubColor} subSize={subSize} setSubSize={setSubSize}
               subOutline={subOutline} setSubOutline={setSubOutline} subSpeed={subSpeed} setSubSpeed={setSubSpeed}
               subBox={subBox} setSubBox={setSubBox} subMode={subMode} setSubMode={setSubMode}
+              subUpper={subUpper} setSubUpper={setSubUpper} subFx={subFx} setSubFx={setSubFx}
               platform={platform} setPlatform={setPlatform}
               reframe={reframe} setReframe={changeReframe} background={background} setBackground={setBackground}
               zoom={zoom} setZoom={setZoom}
-              watermark={watermark} setWatermark={setWatermark} onPickImage={() => setPicker("banner")}
+              m={m} timed={timed} setTimed={setTimed} setError={setError}
+              onPickLogo={(i) => { setLogoTarget(i); setPicker("banner"); }}
               subHighlight={subHighlight} setSubHighlight={setSubHighlight} pickSize={pickSize}
               maxClips={maxClips} setMaxClips={setMaxClips}
               durationPreset={durationPreset} setDurationPreset={setDurationPreset}
@@ -768,21 +755,20 @@ export default function Home() {
 
           {/* Pratinjau: kolom baku yang menempel di kanan (stage.tsx). Alat
               posisi & bantu-lihat di bawahnya, tempat subtitlenya diseret. */}
-          <Stage title={t("previewTitle")} badge="9:16" bad={inUnsafe} help={inUnsafe ? t("unsafeWarning") : t("dragHint")}
-            tools={
-              <fieldset className="pv-tools" disabled={!path}>
-                <button type="button" className="pv-tool" onClick={() => { setSubX(CENTER_X); setSubY(centerAnchorY); }}>
-                  <Crosshair className="ico" aria-hidden="true" /> {t("mcCentre")}</button>
-                <button type="button" className="pv-tool" title={t("mcSafe")} disabled={!zone} onClick={placeSafe}>
-                  <Smartphone className="ico" aria-hidden="true" /> {t("toolClear")}</button>
-                <button type="button" className={"pv-tool" + (grid ? " on" : "")} aria-pressed={!!grid} onClick={() => setGrid(grid ? 0 : 20)}>
-                  <Grid3x3 className="ico" aria-hidden="true" /> {t("toolGrid")}</button>
-                <button type="button" className={"pv-tool" + (alwaysGuides ? " on" : "")} aria-pressed={alwaysGuides} onClick={() => setAlwaysGuides(!alwaysGuides)}>
-                  <Move className="ico" aria-hidden="true" /> {t("toolGuides")}</button>
-                <button type="button" className={"pv-tool" + (showZones ? " on" : "")} aria-pressed={showZones} onClick={() => setShowZones(!showZones)}>
-                  <Eye className="ico" aria-hidden="true" /> {t("toolAreas")}</button>
-              </fieldset>
-            }>
+          <Stage title={t("previewTitle")} badge="9:16" bad={inUnsafe} help={inUnsafe ? t("unsafeWarning") : t("dragHint")}>
+            {/* Satu baris alat di atas pratinjau (StageBar, sama dengan Mark & News):
+                tengah · area aman · area tertutup UI, lalu kisi + garis bantu. */}
+            <StageBar grid={{ grid, setGrid, always: alwaysGuides, setAlways: setAlwaysGuides }}
+              lead={
+                <fieldset className="pv-tools" disabled={!path}>
+                  <button type="button" className="ghost tiny icon-only" title={t("mcCentre")} aria-label={t("mcCentre")}
+                    onClick={() => { setSubX(CENTER_X); setSubY(centerAnchorY); }}><Crosshair className="ico" aria-hidden="true" /></button>
+                  <button type="button" className="ghost tiny icon-only" title={t("mcSafe")} aria-label={t("mcSafe")} disabled={!zone} onClick={placeSafe}>
+                    <Smartphone className="ico" aria-hidden="true" /></button>
+                  <button type="button" className={"ghost tiny icon-only" + (showZones ? " active" : "")} aria-pressed={showZones}
+                    title={t("toolAreas")} aria-label={t("toolAreas")} onClick={() => setShowZones(!showZones)}><Eye className="ico" aria-hidden="true" /></button>
+                </fieldset>
+              } />
             {preview}
           </Stage>
         </div>

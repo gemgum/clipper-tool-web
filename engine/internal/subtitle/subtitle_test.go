@@ -2,6 +2,7 @@ package subtitle
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -344,5 +345,46 @@ func TestHighlightModeDrawsBlockBehindActiveWord(t *testing.T) {
 	}
 	if n := strings.Count(body, `\bord18`); n != 3 {
 		t.Errorf("blok muncul %d kali, ingin tepat 1 per Dialogue", n)
+	}
+}
+
+// Uppercase: kata subtitle ditulis kapital, headline & waktu tidak berubah.
+func TestUppercaseSubtitle(t *testing.T) {
+	dir := t.TempDir()
+	segs := []types.TranscriptSegment{{Start: 0, End: 2, Text: "halo dunia", Words: []types.Word{{Start: 0, End: 1, Text: "halo"}, {Start: 1, End: 2, Text: "dunia"}}}}
+	p := filepath.Join(dir, "a.ass")
+	if err := WriteASS(p, segs, 0, config.Subtitle{Font: "Montserrat", Size: 80, Mode: config.SubNormal, Uppercase: true}, config.Watermark{}, "", 2); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	if !strings.Contains(string(b), "HALO DUNIA") || strings.Contains(string(b), "halo") {
+		t.Fatalf("subtitle harus kapital:\n%s", b)
+	}
+}
+
+// Preset caption: build menyembunyikan kata yang belum diucapkan, stack = satu
+// kata per baris, anim ikut di kata aktif, alternate mewarnai kata ganjil.
+func TestCaptionPresetModes(t *testing.T) {
+	segs := []types.TranscriptSegment{{Start: 0, End: 3, Text: "satu dua tiga", Words: []types.Word{
+		{Start: 0, End: 1, Text: "satu"}, {Start: 1, End: 2, Text: "dua"}, {Start: 2, End: 3, Text: "tiga"}}}}
+	ass := func(s config.Subtitle) string {
+		p := filepath.Join(t.TempDir(), "a.ass")
+		s.Font, s.Size = "Inter", 80
+		if err := WriteASS(p, segs, 0, s, config.Watermark{}, "", 3); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(p)
+		return string(b)
+	}
+	got := ass(config.Subtitle{Mode: config.SubBuild, Anim: "pop", Stack: true})
+	if !strings.Contains(got, `{\fscx150\fscy150\t(0,117,\fscx100\fscy100)}satu{\r}\N{\alpha&HFF&}dua\Ntiga`) {
+		t.Fatalf("build+stack+pop salah:\n%s", got)
+	}
+	if !strings.Contains(got, `satu\N{\fscx150`) || strings.Contains(got, `tiga{\r}\N`) {
+		t.Fatalf("kata yang sudah diucapkan harus tetap tampil:\n%s", got)
+	}
+	got = ass(config.Subtitle{Mode: config.SubWord, Alternate: true, HighlightColor: "#ffe600", Shadow: "hard"})
+	if !strings.Contains(got, "}satu\n") || !strings.Contains(got, `{\c&H0000E6FF&}dua`) || !strings.Contains(got, ",1,0,5,5,") {
+		t.Fatalf("word+alternate+hard salah:\n%s", got)
 	}
 }

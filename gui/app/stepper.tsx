@@ -7,7 +7,7 @@
 import { Minus, Plus } from "lucide-react";
 import { useI18n } from "./i18n";
 
-// Angka dengan tombol −/+.
+// Angka dengan tombol +/− bertumpuk di kanan isian.
 //
 // Menggantikan <input type="range"> untuk Ukuran, Garis tepi, dan Zoom (6
 // Agustus 2026). Penggeser melar selebar kolomnya, jadi tiga di antaranya
@@ -36,17 +36,23 @@ export default function Stepper({
 
   return (
     <div className="stepper">
-      <button type="button" className="step-btn" aria-label={t("decrease")}
-        disabled={value <= min} onClick={() => onChange(clamp(value - step))}>
-        <Minus className="ico" aria-hidden="true" />
-      </button>
-      <input type="number" value={value} min={min} max={max} step={step}
-        onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(quantise(n)); }} />
-      {suffix && <span className="step-suffix">{suffix}</span>}
-      <button type="button" className="step-btn" aria-label={t("increase")}
-        disabled={value >= max} onClick={() => onChange(clamp(value + step))}>
-        <Plus className="ico" aria-hidden="true" />
-      </button>
+      <span className="step-field">
+        <input type="number" value={value} min={min} max={max} step={step}
+          onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(quantise(n)); }} />
+        {suffix && <span className="step-suffix">{suffix}</span>}
+      </span>
+      {/* Plus di atas, minus di bawah (rancangan 25 Oktober 2026): isiannya
+          selebar mungkin, tombolnya satu kolom kecil di kanan. */}
+      <span className="step-btns">
+        <button type="button" className="step-btn plus" aria-label={t("increase")}
+          disabled={value >= max} onClick={() => onChange(clamp(value + step))}>
+          <Plus className="ico" aria-hidden="true" />
+        </button>
+        <button type="button" className="step-btn minus" aria-label={t("decrease")}
+          disabled={value <= min} onClick={() => onChange(clamp(value - step))}>
+          <Minus className="ico" aria-hidden="true" />
+        </button>
+      </span>
     </div>
   );
 }

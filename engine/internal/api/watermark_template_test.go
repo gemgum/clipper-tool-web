@@ -29,7 +29,7 @@ func TestWatermarkTemplates(t *testing.T) {
 	req := httptest.NewRequest("DELETE", "/api/watermark/templates/TIMES", nil)
 	req.SetPathValue("name", "TIMES")
 	s.deleteTemplate(rec, req)
-	if len(s.readTemplates()) != 0 {
+	if len(s.readTemplates("watermark")) != 0 {
 		t.Fatalf("template tidak terhapus: %s", rec.Body.String())
 	}
 }
@@ -47,7 +47,7 @@ func TestDefaultTemplate(t *testing.T) {
 		s.setDefaultTemplate(httptest.NewRecorder(), req)
 	}
 	which := func() (out string) {
-		for _, t := range s.readTemplates() {
+		for _, t := range s.readTemplates("watermark") {
 			if t.Default {
 				out += t.Name
 			}

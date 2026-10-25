@@ -22,6 +22,7 @@ import (
 	"github.com/gemgum/clipper/engine/internal/subtitle"
 	"github.com/gemgum/clipper/engine/internal/transcribe"
 	"github.com/gemgum/clipper/engine/internal/types"
+	"github.com/gemgum/clipper/engine/internal/watermark"
 )
 
 // clipLeadIn adalah ancang-ancang (detik) sebelum awal ucapan saat memotong
@@ -527,11 +528,9 @@ func (p *Pipeline) renderClip(ctx context.Context, input, outDir, tmpDir string,
 			return err
 		}
 		enc.AssPath = assPath
-		enc.Watermark = ffmpeg.Watermark{
-			Image: p.Opts.Watermark.Image, X: p.Opts.Watermark.X, Y: p.Opts.Watermark.Y,
-			Width: p.Opts.Watermark.Width, Height: p.Opts.Watermark.Height,
-			At: p.Opts.Watermark.At, For: p.Opts.Watermark.For,
-		}
+		// Lapis Mark (logo-logo, kotak judul, kartu) — susunan yang sama dengan
+		// halaman Mark, jadi klip = pratinjau Mark di halaman Clips.
+		watermark.ApplyLayers(&enc, p.Opts.Watermark, strings.TrimSpace(headline) != "")
 		outMP4 := filepath.Join(outDir, cl.ID+".mp4")
 		if err := p.ff.ClipReframe(ctx, input, cl.Start, cl.End, tw, th, enc, outMP4); err != nil {
 			return err

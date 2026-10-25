@@ -135,6 +135,17 @@ type Subtitle struct {
 	Mode           string `json:"mode"`
 	HighlightColor string `json:"highlight_color"` // warna sorot untuk karaoke/word
 	Speed          string `json:"speed"`           // slow | normal | dense
+	// Uppercase = subtitle ditulis HURUF KAPITAL semua (gaya template caption
+	// ala Opus Clip). Hanya .ass yang dibakar; .srt & .txt tetap apa adanya.
+	Uppercase bool `json:"uppercase"`
+	// Gaya preset caption (notes/45). Anim = gerak kata aktif saat muncul:
+	// "" | pop | bounce | rise. Shadow = bayangan teks: "" (bawaan) | soft |
+	// hard | none. Stack = satu kata per baris, tiga baris per tampilan.
+	// Alternate = mode word: kata ganjil memakai HighlightColor.
+	Anim      string `json:"anim"`
+	Shadow    string `json:"shadow"`
+	Stack     bool   `json:"stack"`
+	Alternate bool   `json:"alternate"`
 }
 
 // Mode subtitle yang dikenali.
@@ -143,6 +154,10 @@ const (
 	SubKaraoke   = "karaoke"
 	SubHighlight = "highlight"
 	SubWord      = "word"
+	// SubBuild = kata muncul satu per satu dan bertahan sampai tampilannya
+	// habis (kata yang belum diucapkan tak terlihat tapi tetap memesan tempat,
+	// jadi baris tidak bergeser).
+	SubBuild = "build"
 )
 
 // Kecepatan tampil subtitle yang dikenali.
@@ -362,7 +377,7 @@ func (o *Options) Validate() error {
 		o.Subtitle.OutlineColor = ds.OutlineColor
 	}
 	switch o.Subtitle.Mode {
-	case SubNormal, SubKaraoke, SubHighlight, SubWord:
+	case SubNormal, SubKaraoke, SubHighlight, SubWord, SubBuild:
 	default:
 		o.Subtitle.Mode = SubNormal
 	}

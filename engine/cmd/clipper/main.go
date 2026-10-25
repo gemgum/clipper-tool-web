@@ -157,7 +157,7 @@ Usage:
                              point, and the only direction is down
                          5 = the centre crop shrinks inside the frame
                Defaults to the starting point of the mode you chose.
-  -sub-mode    normal|karaoke|highlight|word: subtitle style (default normal)
+  -sub-mode    normal|karaoke|highlight|word|build: subtitle style (default normal)
   -sub-speed   slow|normal|dense — subtitle pacing (default normal)
   -save        burn|clean|both — burned-in / clean / both (default burn)
   -duration    auto|30|60|90|120|180 — clip length (default auto)

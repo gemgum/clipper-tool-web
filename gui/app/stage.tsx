@@ -63,19 +63,22 @@ export default function Stage({ title, action, badge, tools, help, bad, children
 // StageBar = SATU baris alat DI ATAS bingkai, sama untuk Mark & News
 // (keputusan pemilik 25 Oktober 2026): [lead] · kisi + garis tengah · rasio.
 // Di atas bingkai, jadi tidak bergeser saat rasio berganti. lead = alat milik
-// halaman (pager carousel di News).
+// halaman (pager carousel di News, alat posisi subtitle di Clips). ratio
+// kosong = bingkai berukuran tetap (Clips selalu 9:16).
 export function StageBar({ lead, grid, ratio }: {
   lead?: React.ReactNode;
   grid: { grid: number; setGrid: (v: number) => void; always: boolean; setAlways: (v: boolean) => void };
-  ratio: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void };
+  ratio?: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void };
 }) {
   return (
     <div className="stage-bar">
       {lead}
       <GridPicker inline {...grid} />
-      <div className="stage-bar-sel">
-        <Select value={ratio.value} onChange={ratio.onChange} ariaLabel={ratio.label} title={ratio.label} options={ratio.options} />
-      </div>
+      {ratio && (
+        <div className="stage-bar-sel">
+          <Select value={ratio.value} onChange={ratio.onChange} ariaLabel={ratio.label} title={ratio.label} options={ratio.options} />
+        </div>
+      )}
     </div>
   );
 }
