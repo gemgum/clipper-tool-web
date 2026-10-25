@@ -59,7 +59,7 @@ seperti desktop; tersimpan di `.env` server dan dipakai seluruh tim.
 
 ## Terpasang: klip.sarthlutions.id (8 Oktober 2026)
 
-VPS 203.194.113.228 (Ubuntu 22.04, 2 vCPU, dipakai bersama situs lain di nginx).
+VPS produksi (Ubuntu 22.04, 2 vCPU, dipakai bersama situs lain di nginx).
 Bentuknya BUKAN checkout: semua di `/var/www/clipper`, folder ditunjuk lewat env
 di unit systemd (`deploy/clipper-vps.service`), situs nginx di
 `deploy/nginx-clipper.conf`.

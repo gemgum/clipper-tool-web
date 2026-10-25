@@ -123,7 +123,7 @@ cmake untuk worker. Buang.
 | `build.sh` | buang blok cmake |
 | `setup.sh` | buang tahap worker (3/4) |
 | `CLAUDE.md` | peta arsitektur & tabel paket |
-| `notes/01-arsitektur.md` | diagram tiga lapis ikut berubah |
+| `notes/01-arsitektur.md` | diagram tiga lapis ikut berubah (catatan itu dibuang 25 Oktober 2026; arsitektur terkini di `CLAUDE.md`) |
 
 Satu hal yang ikut hilang: pemeriksaan `Available()`. Dulu perlu, karena biner
 bisa saja belum dibangun. Sekarang kodenya menyatu — tidak ada yang bisa hilang.
@@ -179,9 +179,9 @@ saat membandingkan dua berkas panjang.
 ## Kalau nanti butuh C++ lagi
 
 Rencana face-follow dengan OpenCV memang butuh C++. Menghapus worker sekarang
-tidak menutup jalan itu — kontrak stdin/NDJSON-nya sudah tercatat di
-`notes/01-arsitektur.md` dan di komentar `main.cpp` yang bisa kamu lihat lagi
-lewat riwayat git.
+tidak menutup jalan itu — kontrak stdin/NDJSON-nya tercatat di
+`notes/01-arsitektur.md` dan di komentar `main.cpp`, keduanya kini hanya ada di
+riwayat git.
 
 Menahan sebuah bahasa "untuk jaga-jaga" itu biaya yang dibayar setiap hari demi
 manfaat yang belum tentu datang. Kalau nanti benar-benar dikerjakan, worker bisa

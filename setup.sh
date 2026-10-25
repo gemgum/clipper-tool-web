@@ -43,7 +43,7 @@ fi
 echo "    model -> $MODEL_PATH"
 
 echo "==> 3/3 subtitle fonts"
-# Alamatnya ada di fetch-fonts.sh, dipakai bersama alur GitHub Actions.
+# Alamatnya ada di fetch-fonts.sh, yang juga dijalankan saat memasang di server.
 "$ROOT/fetch-fonts.sh"
 
 echo "Done. Next: ./build.sh && ./bin/clipper run <video>"
