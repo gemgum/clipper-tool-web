@@ -460,6 +460,19 @@ export default function News() {
     job.catch(() => {});
   };
   const openShot = (p: number) => { setError(""); setShotPage(p); };
+  // Render otomatis (keputusan pemilik 25 Oktober 2026): di layar Susun kartu,
+  // setelah setelan DIAM 3 detik, seluruh carousel dirender di latar, jadi
+  // "Pratinjau hasil" biasanya sudah siap saat ditekan. Hanya saat tab
+  // terlihat dan tidak sedang menyimpan; setelan yang berubah lagi = kunci
+  // baru, hasil lama tidak dipakai. Ongkosnya CPU server di tiap jeda edit.
+  const autoBody = screen === "compose" && article.title && (layout === "box" || config?.has_browser) ? renderBody(ratio, true) : "";
+  useEffect(() => {
+    if (!autoBody) return;
+    const id = setTimeout(() => {
+      if (document.visibilityState === "visible" && !saving) renderAll();
+    }, 3000);
+    return () => clearTimeout(id);
+  }, [autoBody, pages]); // eslint-disable-line react-hooks/exhaustive-deps
   const previewResult = () => openShot(page);
   // Render dipicu EFEK, bukan klik: data artikel bisa masih berubah sesudah
   // jendela dibuka (badan artikel baru selesai dibaca) — kunci ikut berubah,
