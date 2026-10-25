@@ -182,6 +182,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/card", s.makeCard)
 	mux.HandleFunc("POST /api/card/html", s.cardHTML)
 	mux.HandleFunc("GET /api/card/fonts", s.cardFonts)
+	mux.HandleFunc("GET /api/news/img", s.newsImg)
 	mux.HandleFunc("GET /api/card/{id}/file", s.cardFile)
 	mux.HandleFunc("GET /api/card/{id}/zip", s.cardZip)
 	mux.HandleFunc("GET /api/cards", s.listCards)
@@ -508,15 +509,19 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Lang = firstNonEmpty(req.Lang, lang(r))
 	original := req.Article.Image
-	img, err := s.inlineCardImage(req.Article.Image)
+	// Chrome memakai salinan lokal foto berita (renderImage), bukan mengunduh
+	// ulang dari situs berita tiap render.
+	img, err := s.renderImage(r.Context(), req.Article.Image)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
 	req.Article.Image = img
-	if err := s.inlineIllustrations(&req.Request); err != nil {
-		writeErr(w, 400, err.Error())
-		return
+	for i := range req.Illustrations {
+		if req.Illustrations[i].Image, err = s.renderImage(r.Context(), req.Illustrations[i].Image); err != nil {
+			writeErr(w, 400, err.Error())
+			return
+		}
 	}
 	id := previewID
 	if !req.Preview {

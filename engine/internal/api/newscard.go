@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/gemgum/clipper/engine/internal/httpx"
 
@@ -111,10 +114,10 @@ func (s *Server) burnCardMark(ctx context.Context, mark config.Watermark, font, 
 	return 0, nil
 }
 
-// cardPhotoFile = berkas lokal untuk sebuah gambar kartu: alamat web diunduh
-// ke berkas sementara .jpg (dihapus cleanup; ekstensi itulah yang membuat
-// watermark.IsImage membacanya sebagai foto — ffmpeg sendiri membaca isinya);
-// path lokal dipakai apa adanya bila ia PNG kartu kita atau unggahan kartu.
+// cardPhotoFile = berkas lokal untuk sebuah gambar kartu: alamat web lewat
+// salinan di cache server (newsPhoto, diunduh sekali); path lokal dipakai apa
+// adanya bila ia PNG kartu kita atau unggahan kartu. cleanup kini selalu kosong
+// — salinannya dibersihkan sweepNewsPhotos, bukan per render.
 func (s *Server) cardPhotoFile(ctx context.Context, src string) (string, func(), error) {
 	none := func() {}
 	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
@@ -129,26 +132,132 @@ func (s *Server) cardPhotoFile(ctx context.Context, src string) (string, func(),
 		}
 		return "", none, fmt.Errorf("the card image must be a web address or an image uploaded for cards")
 	}
-	raw, _, err := httpx.GetImage(ctx, src, 25<<20)
-	if err != nil {
-		return "", none, fmt.Errorf("could not download the article photo: %v", err)
+	file, err := s.newsPhoto(ctx, src)
+	return file, none, err
+}
+
+// Foto berita (alamat web) disimpan SEKALI di data/newsimg/<sha url>/:
+// photo.jpg = aslinya (ekstensi .jpg supaya watermark.IsImage membacanya
+// sebagai foto; ffmpeg sendiri membaca isinya), w240.jpg / w1080.jpg = versi
+// kecil untuk GUI. Gambar mini & pratinjau tidak lagi diunduh browser dalam
+// ukuran penuh dari situs berita, dan Chrome tidak mengunduh ulang tiap render.
+const newsPhotoKeep = 7 * 24 * time.Hour
+
+func (s *Server) newsPhotoDir(url string) string {
+	sum := sha256.Sum256([]byte(url))
+	return filepath.Join(s.paths.DataDir, "newsimg", hex.EncodeToString(sum[:10]))
+}
+
+// newsPhoto = path salinan lokal foto berita url (diunduh bila belum ada).
+func (s *Server) newsPhoto(ctx context.Context, url string) (string, error) {
+	dir := s.newsPhotoDir(url)
+	file := filepath.Join(dir, "photo.jpg")
+	if _, err := os.Stat(file); err == nil {
+		return file, nil
 	}
-	f, err := os.CreateTemp(filepath.Join(s.paths.DataDir, "cache"), "card-photo-*.jpg")
+	raw, _, err := httpx.GetImage(ctx, url, 25<<20)
 	if err != nil {
-		if err = os.MkdirAll(filepath.Join(s.paths.DataDir, "cache"), 0o755); err == nil {
-			f, err = os.CreateTemp(filepath.Join(s.paths.DataDir, "cache"), "card-photo-*.jpg")
+		return "", fmt.Errorf("could not download the article photo: %v", err)
+	}
+	// Situs yang membalas halaman HTML (404, dinding login) tidak boleh masuk
+	// cache sebagai "foto": ia akan disajikan rusak sampai seminggu.
+	if mime := http.DetectContentType(raw); strings.HasPrefix(mime, "text/") {
+		return "", fmt.Errorf("the article photo address did not return an image (%s)", mime)
+	}
+	if err := writeFileAtomic(dir, file, raw); err != nil {
+		return "", err
+	}
+	go s.sweepNewsPhotos()
+	return file, nil
+}
+
+// newsImg menyajikan foto berita yang diperkecil (lebar 240 untuk gambar mini,
+// 1080 untuk pratinjau) dari cache server. Satu alamat = isi tetap, jadi
+// browser boleh menyimpannya seminggu.
+func (s *Server) newsImg(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.Query().Get("url")
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		writeErr(w, 400, "'url' must be a web address")
+		return
+	}
+	width := 240
+	if r.URL.Query().Get("w") == "1080" {
+		width = 1080
+	}
+	photo, err := s.newsPhoto(r.Context(), url)
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
+	}
+	out := filepath.Join(filepath.Dir(photo), fmt.Sprintf("w%d.jpg", width))
+	if _, err := os.Stat(out); err != nil {
+		tmp := fmt.Sprintf("%s.%d.tmp.jpg", out, time.Now().UnixNano())
+		if err := s.ff.Thumb(r.Context(), photo, 0, width, tmp); err != nil {
+			os.Remove(tmp)
+			writeErr(w, 422, fmt.Sprintf("could not read the article photo: %v", err))
+			return
 		}
-		if err != nil {
-			return "", none, err
+		if err := os.Rename(tmp, out); err != nil {
+			writeErr(w, 500, err.Error())
+			return
 		}
 	}
-	_, err = f.Write(raw)
-	f.Close()
-	if err != nil {
-		os.Remove(f.Name())
-		return "", none, err
+	w.Header().Set("Cache-Control", "private, max-age=604800")
+	http.ServeFile(w, r, out)
+}
+
+// renderImage = gambar kartu untuk Chrome (Pratinjau hasil / Simpan): alamat
+// web diganti salinan lokalnya sebagai data URI, unggahan lewat inlineCardImage.
+// Pratinjau di bingkai TIDAK memakai ini — HTML-nya harus tetap kecil.
+func (s *Server) renderImage(ctx context.Context, img string) (string, error) {
+	if !strings.HasPrefix(img, "http://") && !strings.HasPrefix(img, "https://") {
+		return s.inlineCardImage(img)
 	}
-	return f.Name(), func() { os.Remove(f.Name()) }, nil
+	file, err := s.newsPhoto(ctx, img)
+	if err != nil {
+		return img, nil // tidak terunduh: biarkan Chrome mencobanya sendiri
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return img, nil
+	}
+	mime := http.DetectContentType(raw)
+	if _, ok := cardImageTypes[mime]; !ok {
+		return img, nil
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(raw), nil
+}
+
+// sweepNewsPhotos membuang salinan foto berita yang lebih tua dari seminggu
+// (paling sering sejam sekali).
+func (s *Server) sweepNewsPhotos() {
+	now := time.Now().Unix()
+	last := newsPhotoSwept.Load()
+	if now-last < 3600 || !newsPhotoSwept.CompareAndSwap(last, now) {
+		return
+	}
+	root := filepath.Join(s.paths.DataDir, "newsimg")
+	entries, _ := os.ReadDir(root)
+	for _, e := range entries {
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > newsPhotoKeep {
+			os.RemoveAll(filepath.Join(root, e.Name()))
+		}
+	}
+}
+
+var newsPhotoSwept atomic.Int64
+
+// writeFileAtomic menulis ke nama sementara lalu mengganti nama: dua permintaan
+// yang sama sekaligus tidak pernah membaca berkas setengah jadi.
+func writeFileAtomic(dir, file string, raw []byte) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp := fmt.Sprintf("%s.%d.tmp", file, time.Now().UnixNano())
+	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, file)
 }
 
 func (s *Server) inlineCardImage(img string) (string, error) {

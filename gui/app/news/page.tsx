@@ -42,6 +42,13 @@ const FONT_STEPS = 10;
 const CARD_TOP_MAX = 400;
 // Penanda CSS font di HTML pratinjau kartu — sama dengan api.CardFontMark.
 const CARD_FONT_MARK = "/*clipper-fonts*/";
+// photoURL = SATU-SATUNYA cara menampilkan foto kartu: foto berita (alamat web)
+// lewat salinan kecil di server (/api/news/img: 240 px gambar mini, 1080 px
+// pratinjau) — bukan ukuran penuh langsung dari situs berita; unggahan lewat
+// /api/image.
+const photoURL = (src: string, w: 240 | 1080 = 240) => src.startsWith("http")
+  ? eng(`/api/news/img?url=${encodeURIComponent(src)}&w=${w}`)
+  : eng(`/api/image?path=${encodeURIComponent(src)}`);
 // Berapa artikel diminta tiap "Muat lebih banyak".
 // Kelipatan 5: satu baris kartu berisi lima artikel.
 const PAGE = 25;
@@ -129,7 +136,6 @@ export default function News() {
   const [selIll, setSelIll] = useState(-1);
   // cropIll = foto lanjutan yang sedang di-crop (jendela CropDialog), -1 = tidak ada.
   const [cropIll, setCropIll] = useState(-1);
-  const illSrc = (image: string) => (image.startsWith("http") ? image : eng(`/api/image?path=${encodeURIComponent(image)}`));
   // boxPhoto = gaya box: foto artikel di belakang kartu lanjutan; mati = tampilan kartu berwarna kotak.
   const [boxPhoto, setBoxPhoto] = useState(true);
   const setIll = (i: number, patch: Partial<Ill>) => setIlls((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -402,7 +408,7 @@ export default function News() {
     new ResizeObserver(() => setCardW(el.clientWidth)).observe(el);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const frameH = Math.round((cardW * m.fh) / m.fw);
-  const photoSrc = !article.image ? "" : article.image.startsWith("http") ? article.image : eng(`/api/image?path=${encodeURIComponent(article.image)}`);
+  const photoSrc = article.image ? photoURL(article.image, 1080) : "";
   const geo = live?.geometry;
   const k = geo && cardW ? cardW / geo.width : 1;
   // Seret isi = batas foto–isi (CardY) lewat fungsi seret yang SAMA dengan Mark
@@ -569,7 +575,7 @@ export default function News() {
                 const on = picked === a.url;
                 return (
                   <article key={a.url} className={"nc-article" + (on ? " on" : "")}>
-                    <div className="nc-thumb">{a.image && /* eslint-disable-next-line @next/next/no-img-element */ <img src={a.image} alt="" loading="lazy" />}</div>
+                    <div className="nc-thumb">{a.image && /* eslint-disable-next-line @next/next/no-img-element */ <img src={photoURL(a.image)} alt="" loading="lazy" />}</div>
                     <div className="nc-body">
                       <div className="nc-meta">
                         {a.source && <span className="nc-badge">{a.source}</span>}
@@ -665,7 +671,7 @@ export default function News() {
                                 aria-pressed={article.image === src} aria-label={t("ncPhotoN", { n: i + 1 })}
                                 onClick={() => setArticle((a) => ({ ...a, image: src }))}>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img alt="" src={src.startsWith("http") ? src : eng(`/api/image?path=${encodeURIComponent(src)}`)} />
+                                <img alt="" src={photoURL(src)} loading="lazy" />
                               </button>
                               {/* Pakai juga sebagai foto lanjutan carousel (kartu 2 dst.). */}
                               <button type="button" className="ghost tiny icon-only photo-add" aria-label={t("ncIllUse")} title={t("ncIllUse")}
@@ -702,7 +708,7 @@ export default function News() {
                           {ills.map((x, i) => (
                             <li key={i} className={i === selIll ? "on" : ""} onClick={() => setSelIll(i)}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img className="nc-ill-thumb" alt="" src={illSrc(x.image)} />
+                              <img className="nc-ill-thumb" alt="" src={photoURL(x.image)} />
                               <div className="nc-ill-page">
                                 <Select value={String(x.page)} ariaLabel={t("ncIllPage")} onChange={(v) => { setIll(i, { page: Number(v) }); setPage(Number(v) - 1); }}
                                   options={Array.from({ length: Math.max(pages, x.page) - 1 }, (_, k) => ({ value: String(k + 2), label: t("ncIllPageN", { n: k + 2 }) }))} />
@@ -1011,7 +1017,7 @@ export default function News() {
         </div>
       )}
       {cropIll >= 0 && ills[cropIll] && (
-        <CropDialog src={illSrc(ills[cropIll].image)} crop={ills[cropIll].crop}
+        <CropDialog src={photoURL(ills[cropIll].image, 1080)} crop={ills[cropIll].crop}
           onApply={(c) => { setIll(cropIll, { crop: c }); setCropIll(-1); }} onClose={() => setCropIll(-1)} />
       )}
       {shot && <Shot src={shot} label={t("wmPreviewResult")} onClose={() => setShot("")} />}

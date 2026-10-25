@@ -640,14 +640,19 @@ func escapeFilterPath(p string) string {
 }
 
 // Thumb menulis satu frame kecil (lebar w, rasio asli) pada detik t ke out (JPEG).
+// t <= 0 = tanpa -ss: masukannya boleh FOTO (foto berita, api.newsImg). ffmpeg 6
+// tidak mengeluarkan satu frame pun dari gambar yang diberi -ss di depan -i,
+// tapi tetap keluar dengan kode 0 — berkasnya diam-diam tidak ada.
 func (c *Client) Thumb(ctx context.Context, input string, t float64, w int, out string) error {
-	return c.run(ctx, "thumbnail", []string{
-		"-y", "-v", "error",
-		"-ss", fmt.Sprintf("%.3f", t),
+	args := []string{"-y", "-v", "error"}
+	if t > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", t))
+	}
+	return c.run(ctx, "thumbnail", append(args,
 		"-i", CLIPath(input),
 		"-frames:v", "1",
 		"-vf", fmt.Sprintf("scale=%d:-2", w),
 		"-q:v", "5",
 		out,
-	})
+	))
 }
