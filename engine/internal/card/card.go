@@ -865,24 +865,37 @@ func (b *Builder) themeFor(ctx context.Context, req Request, hasImage bool) *the
 // persis di komputer siapa pun, terlepas dari font yang terpasang di sana.
 func (b *Builder) FontCSS() template.CSS {
 	b.once.Do(func() {
-		var sb strings.Builder
-		embed := func(file, family string) {
-			raw, err := os.ReadFile(filepath.Join(b.fontsDir, file))
-			if err != nil {
-				return // font tidak ada → jatuh ke font sistem lewat daftar cadangan
-			}
-			fmt.Fprintf(&sb,
-				"@font-face{font-family:'%s';src:url(data:font/ttf;base64,%s) format('truetype');font-weight:100 900;font-display:block}\n",
-				family, base64.StdEncoding.EncodeToString(raw))
-		}
-		embed("Montserrat.ttf", "Clipper Sans")
-		embed("Anton.ttf", "Clipper Display")
-		embed("BebasNeue.ttf", "Clipper Condensed")
-		b.fontCSS = template.CSS(sb.String())
+		css, _ := b.fontFaces(func(raw []byte) (string, error) {
+			return "data:font/ttf;base64," + base64.StdEncoding.EncodeToString(raw), nil
+		})
+		b.fontCSS = template.CSS(css)
 		sum := sha256.Sum256([]byte(b.fontCSS))
 		b.fontKey = fmt.Sprintf("%x", sum[:8])
 	})
 	return b.fontCSS
+}
+
+// cardFonts = font kartu: berkas di fontsDir → nama family di CSS.
+var cardFonts = [][2]string{{"Montserrat.ttf", "Clipper Sans"}, {"Anton.ttf", "Clipper Display"}, {"BebasNeue.ttf", "Clipper Condensed"}}
+
+// fontFaces menyusun @font-face tiap font kartu; src mengubah isi berkas font
+// jadi alamat url(): data URI (FontCSS, satu halaman mandiri) atau berkas
+// sementara (lembar shootSheet — satu salinan untuk semua halaman). Font yang
+// tidak ada dilewati: jatuh ke font sistem lewat daftar cadangan.
+func (b *Builder) fontFaces(src func(raw []byte) (string, error)) (string, error) {
+	var sb strings.Builder
+	for _, f := range cardFonts {
+		raw, err := os.ReadFile(filepath.Join(b.fontsDir, f[0]))
+		if err != nil {
+			continue
+		}
+		u, err := src(raw)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&sb, "@font-face{font-family:'%s';src:url(%s) format('truetype');font-weight:100 900;font-display:block}\n", f[1], u)
+	}
+	return sb.String(), nil
 }
 
 // FontKey = sidik jari CSS font: berubah hanya bila berkas fontnya berubah,

@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"html"
 	"html/template"
+	"image"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -354,7 +357,13 @@ func isImageURL(s string) bool {
 //
 // only >= 2 = hanya halaman itu yang dirender (Pratinjau hasil: satu halaman
 // lewat Chrome, bukan seluruh carousel); 0 = semua. Jumlah halaman tetap total.
-func (b *Builder) BuildPages(ctx context.Context, req Request, dir string, only int) (int, error) {
+//
+// Banyak halaman dirender dalam SATU kali Chrome per lembar (shootSheet):
+// menyalakan Chrome adalah bagian terbesar ongkos render — diukur ±1,7 detik
+// per halaman di VPS 2 CPU, sementara menggambar halamannya sendiri murah.
+// first = kartu pertama (card.png, sama dengan Build tanpa berkas pendamping)
+// ikut di lembar yang sama: Simpan carousel cukup satu kali Chrome.
+func (b *Builder) BuildPages(ctx context.Context, req Request, dir string, only int, first bool) (int, error) {
 	old, _ := filepath.Glob(filepath.Join(dir, "card-*.png"))
 	for _, f := range old {
 		os.Remove(f)
@@ -362,25 +371,147 @@ func (b *Builder) BuildPages(ctx context.Context, req Request, dir string, only 
 	width, height := Dims(req.Ratio)
 	pages := Pages(req, width, height)
 	total := len(pages) + 1
+	var shots []sheetShot
+	if first {
+		if strings.TrimSpace(req.Article.Title) == "" {
+			return 0, fmt.Errorf("the title is empty: a card needs the article title")
+		}
+		doc, _, err := b.render(ctx, req, width, height)
+		if err != nil {
+			return 0, err
+		}
+		shots = append(shots, sheetShot{doc, FilePNG})
+	}
 	for i, text := range pages {
 		if only >= 2 && i+2 != only {
 			continue
 		}
-		page, _, err := b.renderPage(ctx, req, width, height, i+2, total, text)
+		doc, _, err := b.renderPage(ctx, req, width, height, i+2, total, text)
 		if err != nil {
 			return 0, err
 		}
-		url, cleanup, err := b.cap.WriteTempFile(page, ".html")
-		if err != nil {
-			return 0, err
-		}
-		err = b.cap.Screenshot(ctx, url, filepath.Join(dir, PageFile(i+2)), capture.Options{Width: width, Height: height, Scale: 1, WaitMS: 5000})
-		cleanup()
-		if err != nil {
+		shots = append(shots, sheetShot{doc, PageFile(i + 2)})
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return 0, err
+	}
+	per := max(1, sheetMaxPx/height)
+	for start := 0; start < len(shots); start += per {
+		if err := b.shootSheet(ctx, dir, width, height, shots[start:min(len(shots), start+per)]); err != nil {
 			return 0, err
 		}
 	}
 	return total, nil
+}
+
+// sheetShot = satu dokumen HTML kartu dan nama berkas PNG-nya di dir.
+type sheetShot struct {
+	doc  []byte
+	file string
+}
+
+// sheetMaxPx = tinggi lembar tangkapan paling banyak: di bawah batas tekstur
+// 16384 px milik Chrome. 9:16 = 8 halaman per lembar, 1:1 = 14.
+const sheetMaxPx = 15360
+
+// shootSheet merender beberapa kartu dalam satu kali Chrome: tiap kartu satu
+// <iframe srcdoc> (dokumennya sendiri, jadi CSS-nya tidak saling tabrak),
+// ditumpuk dalam satu lembar setinggi height*len(shots), dipotret sekali, lalu
+// dipotong per kartu (splitSheet). Satu kartu = langsung, tanpa lembar.
+// WaitMS 15000 seperti Build: foto yang gagal ditanam dimuat dari CDN-nya.
+func (b *Builder) shootSheet(ctx context.Context, dir string, width, height int, shots []sheetShot) error {
+	opts := capture.Options{Width: width, Height: height, Scale: 1, WaitMS: 15000}
+	if len(shots) == 1 {
+		url, cleanup, err := b.cap.WriteTempFile(shots[0].doc, ".html")
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		return b.cap.Screenshot(ctx, url, filepath.Join(dir, shots[0].file), opts)
+	}
+	// Font SEKALI untuk seluruh lembar: tiap halaman membawa font tertanam
+	// (±1,25 MB), dan 8 salinan membuat HTML lembar 10 MB yang diurai Chrome
+	// 5 detik di VPS. Di lembar, font ditulis sebagai berkas sementara dan
+	// semua halaman merujuk berkas yang sama.
+	var cleanups []func()
+	defer func() {
+		for _, c := range cleanups {
+			c()
+		}
+	}()
+	shared, err := b.fontFaces(func(raw []byte) (string, error) {
+		u, cleanup, err := b.cap.WriteTempFile(raw, ".ttf")
+		if err == nil {
+			cleanups = append(cleanups, cleanup)
+		}
+		return u, err
+	})
+	if err != nil {
+		return err
+	}
+	inline := []byte(b.FontCSS())
+	var sb strings.Builder
+	fmt.Fprintf(&sb, `<!doctype html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:%dpx;overflow:hidden}iframe{display:block;border:0;width:%dpx;height:%dpx}</style></head><body>`, width, width, height)
+	for _, s := range shots {
+		doc := s.doc
+		if len(inline) > 0 {
+			doc = bytes.Replace(doc, inline, []byte(shared), 1)
+		}
+		fmt.Fprintf(&sb, `<iframe srcdoc="%s"></iframe>`, html.EscapeString(string(doc)))
+	}
+	sb.WriteString(`</body></html>`)
+	url, cleanup, err := b.cap.WriteTempFile([]byte(sb.String()), ".html")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	sheet := filepath.Join(dir, "sheet.png")
+	defer os.Remove(sheet)
+	opts.Height = height * len(shots)
+	if err := b.cap.Screenshot(ctx, url, sheet, opts); err != nil {
+		return err
+	}
+	files := make([]string, len(shots))
+	for i, s := range shots {
+		files[i] = s.file
+	}
+	return splitSheet(sheet, dir, files, width, height)
+}
+
+// splitSheet memotong lembar tangkapan jadi PNG per halaman. BestSpeed: PNG
+// ini bahan bakar Mark & unduhan, bukan arsip — kompresi penuh memakan
+// ratusan ms per halaman di VPS kecil.
+func splitSheet(sheet, dir string, files []string, width, height int) error {
+	f, err := os.Open(sheet)
+	if err != nil {
+		return err
+	}
+	img, err := png.Decode(f)
+	f.Close()
+	if err != nil {
+		return fmt.Errorf("could not read the rendered pages: %v", err)
+	}
+	sub, ok := img.(interface {
+		SubImage(image.Rectangle) image.Image
+	})
+	if !ok || img.Bounds().Dy() < height*len(files) {
+		return fmt.Errorf("the rendered pages came out %dx%d, expected %dx%d", img.Bounds().Dx(), img.Bounds().Dy(), width, height*len(files))
+	}
+	enc := png.Encoder{CompressionLevel: png.BestSpeed}
+	for i, name := range files {
+		out, err := os.Create(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		err = enc.Encode(out, sub.SubImage(image.Rect(0, i*height, width, (i+1)*height)))
+		if cerr := out.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Nomor halaman duduk di SEBELAH sumber (kiri bawah), bukan di pojok kanan:

@@ -391,12 +391,12 @@ export default function News() {
   // - tiap gambar disimpan di browser (blob) dengan kunci isi permintaan +
   //   halaman: membuka lagi tanpa mengubah apa pun = langsung tampil, dan
   //   setelan yang berubah otomatis berkunci lain;
-  // - begitu jendela dibuka, SEMUA halaman ikut masuk antrean render (folder
-  //   pratinjau per halaman di server): halaman yang dilihat lebih dulu, lalu
-  //   sesudahnya, sebelumnya, sisanya. Berapa yang berjalan bersamaan = jumlah
-  //   slot dari engine (preview_slots, ikut jumlah CPU: di VPS 2 CPU = 1,
-  //   sebab render paralel di sana hanya memperlambat halaman yang dilihat).
-  //   Halaman yang dibuka saat slot penuh menyerobot antrean.
+  // - begitu jendela dibuka, halaman yang dilihat dirender sendiri lebih dulu
+  //   (folder pratinjau per halaman di server), lalu SEMUA halaman sekaligus
+  //   dalam satu permintaan (renderAll: engine memotret seluruh carousel
+  //   dengan satu kali Chrome — 8 halaman ±5 dtk di VPS, bukan ±14 dtk).
+  //   Berapa yang berjalan bersamaan = slot dari engine (preview_slots, ikut
+  //   jumlah CPU). Halaman yang dibuka saat slot penuh menyerobot antrean.
   // Hanya halaman itu yang dirender (page) dan dilihat sebagai JPEG (jpg=1);
   // Simpan tetap merender semua halaman PNG.
   const shotCache = useRef(new Map<string, string>());
@@ -419,6 +419,7 @@ export default function News() {
     const job = (async () => {
       await shotSlot(urgent);
       try {
+        if (shotCache.current.has(key)) return; // sudah datang lewat renderAll
         const d = await post(`/api/card`, { ...JSON.parse(body), page: p + 1 }, t("errBuildCard"));
         const blob = await fetch(eng(`${d.file}?page=${p + 1}&jpg=1&v=${Date.now()}`)).then((r) => r.blob());
         if (shotCache.current.size > 30) { shotCache.current.forEach((u) => URL.revokeObjectURL(u)); shotCache.current.clear(); }
@@ -432,6 +433,32 @@ export default function News() {
     shotJobs.current.set(key, job);
     return job;
   };
+  // renderAll = seluruh carousel dalam satu permintaan (page 0), lalu JPEG tiap
+  // halaman yang belum ada diambil dari folder pratinjaunya.
+  const renderAll = () => {
+    const body = renderBody(ratio, true);
+    const missing = Array.from({ length: pages }, (_, p) => p).filter((p) => !shotCache.current.has(shotKey(body, p)));
+    const key = `all|${body}`;
+    if (missing.length === 0 || shotJobs.current.has(key)) return;
+    const job = (async () => {
+      await shotSlot(false);
+      try {
+        const left = missing.filter((p) => !shotCache.current.has(shotKey(body, p)));
+        if (left.length === 0) return;
+        const d = await post(`/api/card`, { ...JSON.parse(body), page: 0 }, t("errBuildCard"));
+        await Promise.all(left.map(async (p) => {
+          const blob = await fetch(eng(`${d.file}?page=${p + 1}&jpg=1&v=${Date.now()}`)).then((r) => r.blob());
+          if (!shotCache.current.has(shotKey(body, p))) shotCache.current.set(shotKey(body, p), URL.createObjectURL(blob));
+        }));
+        setShotTick((x) => x + 1);
+      } finally {
+        shotActive.current--; shotWait.current.shift()?.();
+        shotJobs.current.delete(key);
+      }
+    })();
+    shotJobs.current.set(key, job);
+    job.catch(() => {});
+  };
   const openShot = (p: number) => { setError(""); setShotPage(p); };
   const previewResult = () => openShot(page);
   // Render dipicu EFEK, bukan klik: data artikel bisa masih berubah sesudah
@@ -442,8 +469,8 @@ export default function News() {
     if (shotPage < 0) return;
     const p = shotPage;
     renderShot(p, true).catch((e) => { setError(e.message); setShotPage(-1); });
-    // Sisanya langsung menyusul: sesudahnya, sebelumnya, lalu yang lebih jauh.
-    for (let d = 1; d < pages; d++) for (const n of [p + d, p - d]) if (n >= 0 && n < pages) renderShot(n).catch(() => {});
+    // Sisanya sekaligus, satu permintaan (satu kali Chrome di server).
+    if (pages > 1) renderAll();
   }, [shotPage, shotBody]); // eslint-disable-line react-hooks/exhaustive-deps
   const curShot = shotPage >= 0 ? shotCache.current.get(shotKey(shotBody, shotPage)) || "" : "";
   // Gambar yang terakhir tampil tetap terlihat (diredupkan) selama halaman lain dirender.

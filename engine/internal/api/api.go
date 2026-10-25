@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gemgum/clipper/engine/internal/caption"
@@ -550,6 +551,14 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 	if req.Preview {
 		only = req.Page
 	}
+	// whole = carousel lengkap (Simpan, atau pratinjau semua halaman): semua
+	// kartu dirender sekaligus di cabang kartu di bawah.
+	pages := 1
+	whole := req.Whole && only == 0 && !box
+	if whole && s.paths.Chrome == "" {
+		writeErr(w, 503, "browser not found: the article pages of a carousel need Chrome/Chromium")
+		return
+	}
 	// Pratinjau halaman lanjutan tidak butuh kartu pertama sama sekali.
 	if only >= 2 {
 		os.Remove(png)
@@ -563,7 +572,19 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if err := s.cards.Build(r.Context(), req.Request, dir, req.Preview); err != nil {
+		// Carousel lengkap: kartu pertama + semua halaman lanjutan dalam SATU
+		// kali Chrome (card.BuildPages first); kartu tunggal lewat Build.
+		if whole {
+			n, err := s.cards.BuildPages(r.Context(), req.Request, dir, 0, true)
+			if err == nil && !req.Preview {
+				err = card.WriteSidecars(dir, req.Request)
+			}
+			if err != nil {
+				writeErr(w, 500, err.Error())
+				return
+			}
+			pages = n
+		} else if err := s.cards.Build(r.Context(), req.Request, dir, req.Preview); err != nil {
 			writeErr(w, 500, err.Error())
 			return
 		}
@@ -577,7 +598,6 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 	}
 	// Carousel: halaman lanjutan berisi badan artikel (Chrome), lalu logo Mark
 	// di SETIAP halaman — judul/kotak judul Mark hanya milik kartu pertama.
-	pages := 1
 	if req.Whole && only == 1 {
 		// Pratinjau kartu pertama: jumlah halaman dihitung, tidak dirender.
 		width, height := card.Dims(req.Ratio)
@@ -587,23 +607,45 @@ func (s *Server) makeCard(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 503, "browser not found: the article pages of a carousel need Chrome/Chromium")
 			return
 		}
-		n, err := s.cards.BuildPages(r.Context(), req.Request, dir, only)
-		if err != nil {
-			writeErr(w, 500, err.Error())
-			return
+		if !whole { // sudah dirender bersama kartu pertama di atas
+			n, err := s.cards.BuildPages(r.Context(), req.Request, dir, only, false)
+			if err != nil {
+				writeErr(w, 500, err.Error())
+				return
+			}
+			pages = n
 		}
-		pages = n
 		if req.Mark != nil {
 			logos := *req.Mark
 			logos.Headline.Text = ""
+			// Satu ffmpeg per halaman (±0,37 dtk di VPS), jadi dibakar paralel
+			// sebanyak CPU; tiap halaman berkas sementaranya sendiri.
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			var failCode int
+			var failErr error
+			slots := make(chan struct{}, runtime.NumCPU())
 			for i := 2; i <= pages && logos.On(); i++ {
 				if only >= 2 && i != only {
 					continue
 				}
-				if code, err := s.markInPlace(r.Context(), logos, req.Font, req.Ratio, filepath.Join(dir, card.PageFile(i))); err != nil {
-					writeErr(w, code, err.Error())
-					return
-				}
+				wg.Add(1)
+				slots <- struct{}{}
+				go func(file string) {
+					defer func() { <-slots; wg.Done() }()
+					if code, err := s.markInPlace(r.Context(), logos, req.Font, req.Ratio, file); err != nil {
+						mu.Lock()
+						if failErr == nil {
+							failCode, failErr = code, err
+						}
+						mu.Unlock()
+					}
+				}(filepath.Join(dir, card.PageFile(i)))
+			}
+			wg.Wait()
+			if failErr != nil {
+				writeErr(w, failCode, failErr.Error())
+				return
 			}
 		}
 	}
