@@ -96,7 +96,9 @@ export function CaptionWords({ s, lines, active }: { s: CaptionStyle; lines: str
   const rows = f.stack ? lines.flat().slice(0, 3).map((w) => [w]) : lines;
   const n = rows.flat().length;
   const a = active === undefined ? n - 1 : active % n;
-  const hl = toHex(s.highlight);
+  // Sama dengan subtitle.highlightColor: sorot yang sama dengan warna teks
+  // diganti kuning (atau putih bila teksnya kuning) supaya tetap terlihat.
+  const hl = toHex(s.highlight) !== toHex(s.color) ? toHex(s.highlight) : toHex(s.color) === toHex("yellow") ? "#ffffff" : toHex("yellow");
   const anim = f.anim ? "cp-a cp-a-" + f.anim : undefined;
   if (s.mode === "word") {
     const w = rows.flat()[a];

@@ -32,7 +32,7 @@ import Picker from "./picker";
 import { recall, useKeep, useRestore, useSticky } from "./persist";
 
 import SourceCard from "./source-card";
-import MoreControls, { zoomBounds } from "./more-controls";
+import MoreControls, { durationMax, zoomBounds } from "./more-controls";
 import PreviewPanel, { PLATFORMS, linesFor } from "./preview-panel";
 import { CENTER_X, CENTER_Y, PLAY_H, PLAY_W } from "./drag";
 import type { Font, FontCheck } from "./preview-panel";
@@ -474,6 +474,8 @@ export default function Home() {
             transcript_fix: transcriptFix ? "on" : "off",
             terms: terms.split(/[,;\n]/).map((v) => v.trim()).filter(Boolean),
             duration_preset: durationPreset, max_clips: Number(maxClips), output_dir: outputDir,
+            // Batas manual (bukan auto/30/60): klip incar 60–100% batasnya.
+            ...(["auto", "30", "60"].includes(durationPreset) ? {} : { target_max: durationMax(durationPreset), target_min: Math.round(durationMax(durationPreset) * 0.6) }),
             subtitle_output: saveMode,
             subtitle: {
               font: subFont, size: Number(subSize), x: subX, y: subY, color: subColor, bold: true,
@@ -609,9 +611,20 @@ export default function Home() {
   // baris tambahan tumbuh ke bawah dari titik ini. X tetap di tengah bidang:
   // subtitle ditulis rata tengah terhadap titik ini, jadi menengahkannya ke
   // lebar sisa (di luar kolom tombol kanan) justru membuatnya miring ke kiri.
+  // Subtitle yang menimpa judul Mark (kotak berita atau teks judul).
+  const band = m.hlBand;
+  const hits = (y: number) => !!band && y < band.bottom && y + blockH > band.top;
+  const overHeadline = hits(subY);
+  // Kalau tempat bawaannya menimpa judul: pindah ke atas judul, dan bila di
+  // atas tidak muat (zona atas), ke bawahnya.
   const placeSafe = () => {
     setSubX(CENTER_X);
-    setSubY(zone ? Math.round(PLAY_H * (1 - zone.bottom) - blockH - 40) : centerAnchorY);
+    let y = zone ? Math.round(PLAY_H * (1 - zone.bottom) - blockH - 40) : centerAnchorY;
+    if (band && hits(y)) {
+      const above = Math.round(band.top - blockH - 48);
+      y = above >= PLAY_H * (zone?.top ?? 0) ? above : Math.round(band.bottom + 48);
+    }
+    setSubY(y);
   };
   // Operator tidak pernah mengetik koordinat (DESIGN.md §4.2): ganti platform,
   // ukuran, atau gaya → subtitle ditaruh lagi tepat di atas area caption.
@@ -619,6 +632,10 @@ export default function Home() {
   const placeRef = useRef(placeSafe);
   placeRef.current = placeSafe;
   useEffect(() => { placeRef.current(); }, [platform, subSize, subMode, subSpeed, subFx.stack]);
+  // Judul berpindah/berubah tinggi: subtitle dipindah HANYA bila kini tertimpa.
+  const overRef = useRef(overHeadline);
+  overRef.current = overHeadline;
+  useEffect(() => { if (overRef.current) placeRef.current(); }, [band?.top, band?.bottom]);
 
   // Ukuran huruf sebagai tiga pilihan; garis tepi mengikuti (≈ ukuran/18 —
   // setara text-stroke ukuran/9 di mockup, yang separuhnya jatuh di dalam huruf).
@@ -632,7 +649,7 @@ export default function Home() {
     { label: t("textSize"), value: subSize >= 120 ? t("sizeLarge") : subSize >= 94 ? t("sizeMedium") : subSize <= 72 ? t("sizeSmall") : `${subSize}` },
     { label: t("sumPlatform"), value: platformName },
     { label: t("clipCountLabel"), value: String(maxClips) },
-    { label: t("clipLength"), value: durationPreset === "30" ? t("lenShort") : durationPreset === "60" ? t("lenMedium") : t("lenAuto") },
+    { label: t("clipLength"), value: durationPreset === "30" ? t("lenShort") : durationPreset === "60" ? t("lenMedium") : durationPreset === "auto" ? t("lenAuto") : `≤ ${durationMax(durationPreset)}s` },
     { label: t("sumClean"), value: saveMode === "burn" ? t("no") : t("yes") },
   ];
 
@@ -755,7 +772,7 @@ export default function Home() {
 
           {/* Pratinjau: kolom baku yang menempel di kanan (stage.tsx). Alat
               posisi & bantu-lihat di bawahnya, tempat subtitlenya diseret. */}
-          <Stage title={t("previewTitle")} badge="9:16" bad={inUnsafe} help={inUnsafe ? t("unsafeWarning") : t("dragHint")}>
+          <Stage title={t("previewTitle")} badge="9:16" bad={inUnsafe || overHeadline} help={inUnsafe ? t("unsafeWarning") : overHeadline ? t("subOverHeadline") : t("dragHint")}>
             {/* Satu baris alat di atas pratinjau (StageBar, sama dengan Mark & News):
                 area aman · area tertutup UI, lalu kisi + garis bantu (tombol "tengah"
                 dibuang: kembar dengan garis bantu, subtitle tetap menempel di tengah saat digeser). */}

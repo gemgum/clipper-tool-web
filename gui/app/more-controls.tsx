@@ -7,8 +7,9 @@
 // sini — tidak ada tempat kedua. AI engine hanya ditampilkan: mesin dipilih
 // sekali di Settings (notes/39).
 
-import { Ban, Camera, CaseSensitive, Cpu, Download, Droplet, Highlighter, ListPlus, Mic, Monitor, Move, Music, Smartphone, SquarePlay, Type } from "lucide-react";
+import { CaseSensitive, Cpu, Download, Droplet, Highlighter, ListPlus, Mic, Monitor, Move, Type } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./i18n";
 import type { MessageKey } from "./i18n";
@@ -57,6 +58,10 @@ const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; title: MessageK
 // Tebal garis tepi sebagai tiga pilihan; angka lain = Custom (angka persisnya di panel Text).
 const OUTLINES = [{ v: 3, k: "mcThin" }, { v: 5, k: "mcMedium" }, { v: 8, k: "mcThick" }] as const;
 const SIZES = [{ v: 72, k: "sizeS" }, { v: 94, k: "sizeM" }, { v: 120, k: "sizeL" }] as const;
+// Batas atas panjang klip (detik) yang ditunjukkan kotak angka: preset = batas
+// atas labelnya (Auto = 120, ujung rentang auto di config.durationRange), angka
+// lain = batas manual itu sendiri.
+export const durationMax = (preset: string) => preset === "auto" ? 120 : Number(preset) || 120;
 
 export default function MoreControls(p: {
   disabled?: boolean;
@@ -99,6 +104,7 @@ export default function MoreControls(p: {
   saveMode: string; setSaveMode: (v: string) => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   const { engines } = useEngines();
   const [open, setOpen] = useSticky<Group>("clips.group", "ai");
   const item = GROUPS.find((g) => g.key === open)!;
@@ -197,21 +203,26 @@ export default function MoreControls(p: {
         </>;
       case "ai":
         return <>
-          {row("mcEngineRow", <>
-            <span className="mc-val">{engineName}{engine !== "heuristic" && llmModel && <> · {llmModel}</>}</span>
-            {/* Warn cuma lambang + popup: menempel di baris mesinnya, bukan baris sendiri. */}
-            {ollamaWarn}
-            <a className="mc-link" href="/requirements">{t("aiChangeInSettings")} →</a>
-          </>)}
+          {/* Kartu mesin: nama + titik siap, model di bawahnya, tombol ke Setelan
+              (mesin dipilih di sana, notes/39). Warn menempel di nama. */}
+          {row("mcEngineRow", <div className="mc-engine">
+            <span className="mc-engine-name">
+              <span className={"mc-engine-dot" + (engine === "heuristic" || engines.find((e) => e.id === engine)?.ready ? " on" : "")} aria-hidden="true" />
+              {engineName}{ollamaWarn}
+            </span>
+            {engine !== "heuristic" && llmModel && <span className="mc-engine-model">{llmModel}</span>}
+            <button type="button" className="ghost tiny mc-engine-go" onClick={() => router.push("/requirements")}>{t("aiChangeInSettings")}</button>
+          </div>)}
         </>;
       case "clips":
         return <>
           {row("clipCountLabel", <Stepper value={p.maxClips} onChange={p.setMaxClips} min={1} max={40} />)}
-          {row("clipLength", <Segmented label={t("clipLength")}
-            value={["auto", "30", "60"].includes(p.durationPreset) ? p.durationPreset : "auto"}
-            onChange={p.setDurationPreset} options={[
-              { value: "auto", name: t("lenAutoName") }, { value: "30", name: "15–30 s" }, { value: "60", name: "30–60 s" },
-            ]} />)}
+          {/* Tiga pilihan cepat, lalu batas manual (detik) di baris sendiri; angka
+              sendiri = tak ada pilihan yang menyala, engine memakai target_min/max. */}
+          {row("clipLength", <div className="seg-fit"><Segmented label={t("clipLength")} value={p.durationPreset} onChange={p.setDurationPreset} options={[
+            { value: "auto", name: t("lenAutoName") }, { value: "30", name: "15–30s" }, { value: "60", name: "30–60s" },
+          ]} /></div>)}
+          {row("clipMax", <Stepper value={durationMax(p.durationPreset)} onChange={(v) => p.setDurationPreset(String(v))} min={15} max={180} step={5} suffix="s" />)}
           {sw(<Toggle checked={p.saveMode !== "burn"} onChange={(v) => p.setSaveMode(v ? "both" : "burn")} label={t("keepClean")} />)}
         </>;
       case "quality":
@@ -234,12 +245,12 @@ export default function MoreControls(p: {
         </>;
       case "style":
         return <>
-          {row("mcSecStyle", <Segmented label={t("step2Title")} value={p.subMode === "word" ? "normal" : p.subMode} onChange={p.setSubMode} options={[
+          {row("mcSecStyle", <div className="seg-fit"><Segmented label={t("step2Title")} value={p.subMode === "word" ? "normal" : p.subMode} onChange={p.setSubMode} options={[
             { value: "normal", name: t("styleNormalName"), icon: CaseSensitive },
             { value: "highlight", name: t("styleHighlightName"), icon: Highlighter },
             { value: "karaoke", name: t("styleKaraokeName"), icon: Mic },
             { value: "build", name: t("styleBuildName"), icon: ListPlus },
-          ]} />, undefined, word)}
+          ]} /></div>, undefined, word)}
           {/* Satu kata sekali tampil tidak punya halaman: gaya, kecepatan, dan
               tumpuk tidak berlaku — mati, tidak hilang. */}
           {row("subSpeed", <Segmented label={t("subSpeed")} value={p.subSpeed} onChange={p.setSubSpeed} options={[
@@ -306,12 +317,13 @@ export default function MoreControls(p: {
             off: !(p.subMode === "karaoke" || p.subMode === "highlight" || (word && p.subFx.alternate)) },
         ]} />;
       case "platform":
-        return row("postTo", <Segmented label={t("mcSecPlatform")} value={p.platform} onChange={p.setPlatform} options={[
-          { value: "tiktok", name: "TikTok", icon: Music },
-          { value: "reels", name: "Reels", icon: Camera },
-          { value: "shorts", name: "Shorts", icon: SquarePlay },
-          { value: "generic", name: t("platformGeneric"), icon: Smartphone },
-          { value: "off", name: t("platformNone"), icon: Ban },
+        // Lima pilihan = daftar (Select), bukan segmen yang terpecah jadi dua baris.
+        return row("postTo", <Select value={p.platform} onChange={p.setPlatform} ariaLabel={t("mcSecPlatform")} options={[
+          { value: "tiktok", label: "TikTok" },
+          { value: "reels", label: "Instagram Reels" },
+          { value: "shorts", label: "YouTube Shorts" },
+          { value: "generic", label: t("platformGeneric") },
+          { value: "off", label: t("platformNone") },
         ]} />);
       case "zoom":
         return <>
@@ -349,8 +361,7 @@ export default function MoreControls(p: {
       )}
       {item.key === "watermark" ? <>
         <MarkLogoGroup m={p.m} web={p.web} setError={p.setError} openPicker={p.onPickLogo} />
-        <MarkHeadline m={p.m} llm />
-        <Box title={t("wmWhenTitle")}><MarkTiming timed={p.timed} setTimed={p.setTimed} m={p.m} /></Box>
+        <MarkHeadline m={p.m} llm timing={<MarkTiming timed={p.timed} setTimed={p.setTimed} m={p.m} />} />
       </> : (
         <Box title={t(item.title)}>
           <Split side={body(item.side)} mid={item.mid?.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}>

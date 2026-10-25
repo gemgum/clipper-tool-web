@@ -68,7 +68,7 @@ export const watermarkColors = (w: Watermark, set: (patch: Partial<Watermark>) =
     ...(auto ? { auto: { onClick: () => auto("text"), title: t("cpAutoText") } } : {}) },
   ...(withBox ? [{ key: "box", name: t("wmColBox"), value: w.hlBoxColor || "white", set: (c: string) => set({ hlBoxColor: c }), off: !w.hlBox,
     ...(auto ? { auto: { onClick: () => auto("box"), title: t("cpAutoBox") } } : {}) }] : []),
-  { key: "outline", name: t("outline"), value: outlineColor(w), set: (c) => set({ hlOutlineColor: c }),
+  { key: "outline", name: t("colOutline"), value: outlineColor(w), set: (c) => set({ hlOutlineColor: c }),
     width: { value: w.hlOutline, onChange: (v: number) => set({ hlOutline: v }) } },
 ];
 
@@ -234,6 +234,12 @@ export function useMark({ format, first, timed = false, grid, llm = false }: { f
   const hlBox = headlineBox(eff);
   const hlLines = wrapHeadline(shownText, eff.hlSize, hlBox.w);
   const hlAt = headlineAnchor(hlLines, eff.hlSize, eff.hlDX, eff.hlDY, hlBox);
+  // hlBand = rentang tegak judul di bingkai (px): kotak berita/kartu, atau blok
+  // teks judul biasa (hlAt = titik tengahnya). null = tanpa judul. Clips
+  // memakainya supaya subtitle tidak ditaruh di bawah judul.
+  const hlBand = !shownText.trim() ? null
+    : nb ? { top: nb.top, bottom: nb.top + nb.h }
+    : hlLines.length ? { top: hlAt.y - (hlLines.length * eff.hlSize) / 2, bottom: hlAt.y + (hlLines.length * eff.hlSize) / 2 } : null;
   // Kotak berita hanya bisa naik-turun: lebarnya selalu selebar bingkai.
   // Kartu: yang diseret batas gambar–panel (panelnya naik-turun); magnet di bawaan.
   const headlineDrag = nb?.photo && layout?.photo ? dragProps(fw / 2, nb.photo, (_x, y) => setWatermark({ hlCardY: cardGeom(layout, Math.round(y) - layout.photo!).photo - layout.photo! }), layout.photo, fh)
@@ -284,7 +290,7 @@ export function useMark({ format, first, timed = false, grid, llm = false }: { f
   return {
     fw, fh, format, first, grid, watermark, setWatermark, logoOn, setLogoOn, logos, setLogos, setLogo, sel, setSel, cur, putLogo,
     dims, logoURL, onLogoLoad, layout, nb, cardStyle, cardOn, frameCardY, placed, curCell, otherCells, placeAt, eff,
-    fontScale, boxRef, dragAt, dragProps, stuck, logoDrag, toggleLock, hlLines, hlAt, headlineDrag, applyLook, applyMark, autoColor,
+    fontScale, boxRef, dragAt, dragProps, stuck, logoDrag, toggleLock, hlLines, hlAt, hlBand, headlineDrag, applyLook, applyMark, autoColor,
   };
 }
 export type Mark = ReturnType<typeof useMark>;
@@ -411,7 +417,8 @@ export function MarkLogoGroup({ m, web, openPicker, setError }: {
 
 // MarkHeadline = tab Headline halaman Mark.
 // llm = baris sumber judul (teks sendiri | judul LLM per klip) — hanya Clips.
-export function MarkHeadline({ m, llm = false }: { m: Mark; llm?: boolean }) {
+// timing = baris "kapan muncul" (Clips) di kolom tengah, di bawah Gaya & Sudut.
+export function MarkHeadline({ m, llm = false, timing }: { m: Mark; llm?: boolean; timing?: React.ReactNode }) {
   const { t } = useI18n();
   const { watermark, setWatermark, cardStyle, fh } = m;
   const [fmt, setFmt] = useSticky<string>("mark.fmt", "size");
@@ -459,6 +466,21 @@ export function MarkHeadline({ m, llm = false }: { m: Mark; llm?: boolean }) {
         {/* Kartu: warna panel datang dari Theme, dan kartu tidak bergaris tepi —
             hanya Text yang masih diatur di sini. */}
         <ColorPanel targets={watermarkColors(watermark, setWatermark, t, true, m.first ? m.autoColor : undefined).map((x) => cardStyle && x.key !== "text" ? { ...x, off: true } : x)} />
+      </>} mid={<>
+          {/* Gaya: Box (sudut diatur sendiri) atau Look (tampilan jadi kartu
+              berita). Keduanya selalu tampil — yang tidak berlaku dimatikan.
+              */}
+          <Row label={t("wmStyle")} off={!watermark.hlBox}>
+            <Segmented label={t("wmStyle")} value={watermark.hlStyle || "box"} onChange={(v) => {
+              setWatermark({ hlStyle: v });
+              if (v === "look" && !watermark.hlLook) m.applyLook("photo");
+            }} options={[{ value: "box" as const, name: t("wmStyleBox") }, { value: "look" as const, name: t("wmStyleLook") }]} />
+          </Row>
+          <Row label={t("wmCorner")} off={!watermark.hlBox || watermark.hlStyle === "look"}>
+            <Segmented label={t("wmCorner")} value={watermark.hlSharp ? "sharp" : "round"} onChange={(v) => setWatermark({ hlSharp: v === "sharp" })}
+              options={[{ value: "round", name: t("wmCornerRound") }, { value: "sharp", name: t("wmCornerSharp") }]} />
+          </Row>
+          {timing}
       </>}>
         {llm && (
           <Row label={t("headlineSource")} title={t("headlineSourceTip")}>
@@ -479,25 +501,13 @@ export function MarkHeadline({ m, llm = false }: { m: Mark; llm?: boolean }) {
             <input id="wm-credit" value={watermark.hlCredit || ""} spellCheck={false} placeholder={t("wmCreditPlaceholder")}
               aria-label={t("wmCredit")} onChange={(e) => setWatermark({ hlCredit: e.target.value })} />
           </Row>
-          {/* Gaya: Box (sudut diatur sendiri) atau Look (tampilan jadi kartu
-              berita). Keduanya selalu tampil — yang tidak berlaku dimatikan.
-              */}
-          <Row label={t("wmStyle")} off={!watermark.hlBox}>
-            <Segmented label={t("wmStyle")} value={watermark.hlStyle || "box"} onChange={(v) => {
-              setWatermark({ hlStyle: v });
-              if (v === "look" && !watermark.hlLook) m.applyLook("photo");
-            }} options={[{ value: "box" as const, name: t("wmStyleBox") }, { value: "look" as const, name: t("wmStyleLook") }]} />
-          </Row>
-          <Row label={t("wmCorner")} off={!watermark.hlBox || watermark.hlStyle === "look"}>
-            <Segmented label={t("wmCorner")} value={watermark.hlSharp ? "sharp" : "round"} onChange={(v) => setWatermark({ hlSharp: v === "sharp" })}
-              options={[{ value: "round", name: t("wmCornerRound") }, { value: "sharp", name: t("wmCornerSharp") }]} />
-          </Row>
+      </Split>
+      {/* Tema selalu di dasar grup, selebar kartu (8 warna + Auto butuh ruang). */}
           <Row label={t("wmTheme")} off={!watermark.hlBox || watermark.hlStyle !== "look"}>
             {/* Auto: engine mencari warna panel yang menyambung dasar gambar. */}
             <ThemePicker label={t("wmTheme")} value={watermark.hlLook || ""} onChange={m.applyLook}
               auto={{ onClick: () => m.applyLook("auto"), disabled: !m.first }} />
           </Row>
-      </Split>
     </Group>
   );
 }
