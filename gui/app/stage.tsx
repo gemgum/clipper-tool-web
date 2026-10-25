@@ -13,7 +13,7 @@
 //   - kolomnya sticky, jadi tetap terlihat saat setelan di kiri digulir.
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useI18n } from "./i18n";
 import { GridPicker } from "./guides";
 import Select from "./select";
@@ -89,13 +89,38 @@ export function StageFrame({ children }: { children: React.ReactNode }) {
 
 // Shot = hasil render sungguhan (tombol "Preview result") di atas layar penuh;
 // klik di mana saja atau Escape menutupnya. SATU jendela untuk Watermark & News.
-export function Shot({ src, label, onClose }: { src: string; label: string; onClose: () => void }) {
+// pager (carousel News) = ‹ › + "3 / 8" di dalam jendela, juga panah keyboard;
+// busy = halaman itu sedang dirender (gambar lama diredupkan, bukan dikosongkan).
+export function Shot({ src, label, onClose, pager }: {
+  src: string; label: string; onClose: () => void;
+  pager?: { page: number; pages: number; onPage: (p: number) => void; busy?: boolean };
+}) {
   const { t } = useI18n();
   useEscape(onClose);
+  useEffect(() => {
+    if (!pager) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft" && pager.page > 0) pager.onPage(pager.page - 1);
+      if (e.key === "ArrowRight" && pager.page < pager.pages - 1) pager.onPage(pager.page + 1);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [pager]);
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
-    <div className="stage-shot" role="dialog" aria-label={label} onClick={onClose}>
+    <div className={"stage-shot" + (pager && pager.pages > 1 ? " paged" : "")} role="dialog" aria-label={label} onClick={onClose}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={label} />
+      {src ? <img src={src} alt={label} className={pager?.busy ? "busy" : ""} /> : <span className="stage-shot-wait">{t("wmPreviewing")}</span>}
+      {pager?.busy && src && <span className="stage-shot-wait over">{t("wmPreviewing")}</span>}
+      {pager && pager.pages > 1 && (
+        <div className="stage-shot-pager" onClick={stop}>
+          <button type="button" className="ghost icon-only" aria-label={t("ncPagePrev")} disabled={pager.page === 0} onClick={() => pager.onPage(pager.page - 1)}>
+            <ChevronLeft className="ico" aria-hidden="true" /></button>
+          <span>{pager.page + 1} / {pager.pages}</span>
+          <button type="button" className="ghost icon-only" aria-label={t("ncPageNext")} disabled={pager.page >= pager.pages - 1} onClick={() => pager.onPage(pager.page + 1)}>
+            <ChevronRight className="ico" aria-hidden="true" /></button>
+        </div>
+      )}
       <button type="button" className="ghost stage-shot-close" aria-label={t("close")} title={t("close")}><X className="ico" aria-hidden="true" /></button>
     </div>
   );

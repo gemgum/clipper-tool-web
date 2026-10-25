@@ -3594,3 +3594,12 @@ button.mc-cswatch.cp-wand .ico { width: 16px; height: 16px; }
 .mc-engine-go { align-self: flex-start; margin-top: 4px; }
 .mc-split-r > .mc-r .mc-engine { width: 100%; box-sizing: border-box; }
 .ok-text { color: var(--good-text); font-weight: 600; }
+/* Pratinjau hasil: pager di dalam jendela, status render di atas gambar. */
+.stage-shot-pager { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+  padding: 6px 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 14px; font-weight: 600; cursor: default; }
+.stage-shot-pager button { color: #fff; border-color: rgba(255, 255, 255, 0.4); width: 36px; height: 36px; min-height: 0; padding: 0; border-radius: 50%; }
+.stage-shot-pager button:disabled { opacity: .3; }
+.stage-shot img.busy { opacity: .45; transition: opacity .15s; }
+.stage-shot-wait { color: #fff; font-weight: 600; font-size: 15px; }
+.stage-shot-wait.over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 8px 16px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); }
+.stage-shot.paged img { max-height: calc(100vh - 120px); margin-bottom: 56px; }

@@ -203,8 +203,9 @@ export default function News() {
   // artikel. page = halaman yang sedang dipratinjau (0 = kartu pertama).
   const [whole, setWhole] = useState(false);
   const [page, setPage] = useState(0);
-  const [shot, setShot] = useState("");
-  const [shooting, setShooting] = useState(false);
+  // Pratinjau hasil: shotPage = halaman yang dibuka di jendelanya (-1 = tertutup).
+  const [shotPage, setShotPage] = useState(-1);
+  const [, setShotTick] = useState(0);
   // Geseran batas foto–isi (card.Request.CardY), diseret di pratinjau.
   const [cardY, setCardY] = useState(0);
   // Layar 3.
@@ -241,7 +242,7 @@ export default function News() {
   const useArticle = useCallback((a: Article) => {
     setArticle({ ...EMPTY, ...a, images: a.images?.length ? a.images : (a.image ? [a.image] : []) });
     setCaption(""); setHashtags(""); setStory(""); setIlls([]); setSelIll(-1); setChecks({ summary: [], caption: [], story: [] }); setWriteError("");
-    setShot(""); setSaved(null);
+    setShotPage(-1); setSaved(null);
     if (a.title) applyDefault.current();
   }, []);
 
@@ -386,16 +387,50 @@ export default function News() {
     if (article.body?.length && !story) setStory(tidy(article.body.join("\n")));
   }, [article.body]); // eslint-disable-line react-hooks/exhaustive-deps
   const pages = live?.geometry.pages || 1;
-  const previewResult = async () => {
-    setShooting(true); setError("");
-    try {
-      // Hanya halaman yang sedang dilihat yang dirender (page), dan gambarnya
-      // dilihat sebagai JPEG (jpg=1) — Simpan tetap merender semua halaman PNG.
-      const d = await post(`/api/card`, { ...JSON.parse(renderBody(ratio, true)), page: page + 1 }, t("errBuildCard"));
-      setShot(eng(`${d.file}?page=${page + 1}&jpg=1&v=${Date.now()}`));
-    } catch (e: any) { setError(e.message); }
-    setShooting(false);
+  // Pratinjau hasil = Chrome di server (±2 detik per halaman di VPS), jadi:
+  // - tiap gambar disimpan di browser (blob) dengan kunci isi permintaan +
+  //   halaman: membuka lagi tanpa mengubah apa pun = langsung tampil, dan
+  //   setelan yang berubah otomatis berkunci lain;
+  // - render BERURUTAN (shotQueue) — server memakai satu folder pratinjau;
+  // - setelah halaman yang dilihat siap, halaman sebelahnya dirender di latar,
+  //   jadi menggeser di jendela biasanya sudah siap.
+  // Hanya halaman itu yang dirender (page) dan dilihat sebagai JPEG (jpg=1);
+  // Simpan tetap merender semua halaman PNG.
+  const shotCache = useRef(new Map<string, string>());
+  const shotQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const shotKey = (body: string, p: number) => `${p}|${body}`;
+  const renderShot = (p: number) => {
+    const body = renderBody(ratio, true), key = shotKey(body, p);
+    if (shotCache.current.has(key)) return Promise.resolve();
+    const job = shotQueue.current.then(async () => {
+      if (shotCache.current.has(key)) return;
+      const d = await post(`/api/card`, { ...JSON.parse(body), page: p + 1 }, t("errBuildCard"));
+      const blob = await fetch(eng(`${d.file}?page=${p + 1}&jpg=1&v=${Date.now()}`)).then((r) => r.blob());
+      if (shotCache.current.size > 30) { shotCache.current.forEach((u) => URL.revokeObjectURL(u)); shotCache.current.clear(); }
+      shotCache.current.set(key, URL.createObjectURL(blob));
+      setShotTick((x) => x + 1);
+    });
+    shotQueue.current = job.catch(() => {});
+    return job;
   };
+  const openShot = (p: number) => { setError(""); setShotPage(p); };
+  const previewResult = () => openShot(page);
+  // Render dipicu EFEK, bukan klik: data artikel bisa masih berubah sesudah
+  // jendela dibuka (badan artikel baru selesai dibaca) — kunci ikut berubah,
+  // dan halaman itu dirender ulang untuk isi barunya.
+  const shotBody = shotPage >= 0 ? renderBody(ratio, true) : "";
+  useEffect(() => {
+    if (shotPage < 0) return;
+    const p = shotPage;
+    renderShot(p).then(() => {
+      for (const n of [p + 1, p - 1]) if (n >= 0 && n < pages) renderShot(n).catch(() => {});
+    }).catch((e) => { setError(e.message); setShotPage(-1); });
+  }, [shotPage, shotBody]); // eslint-disable-line react-hooks/exhaustive-deps
+  const curShot = shotPage >= 0 ? shotCache.current.get(shotKey(shotBody, shotPage)) || "" : "";
+  // Gambar yang terakhir tampil tetap terlihat (diredupkan) selama halaman lain dirender.
+  const lastShot = useRef("");
+  if (curShot) lastShot.current = curShot;
+  const shooting = shotPage >= 0 && !curShot;
 
   // Seret di pratinjau (delta, piksel layar → piksel kanvas): foto = geser
   // OffsetX/Y dalam batas engine (offset_w/h); isi = Header (ruang 1920).
@@ -1020,7 +1055,8 @@ export default function News() {
         <CropDialog src={photoURL(ills[cropIll].image, 1080)} crop={ills[cropIll].crop}
           onApply={(c) => { setIll(cropIll, { crop: c }); setCropIll(-1); }} onClose={() => setCropIll(-1)} />
       )}
-      {shot && <Shot src={shot} label={t("wmPreviewResult")} onClose={() => setShot("")} />}
+      {shotPage >= 0 && <Shot src={curShot || lastShot.current} label={t("wmPreviewResult")} onClose={() => { setShotPage(-1); lastShot.current = ""; }}
+        pager={{ page: shotPage, pages, busy: !curShot, onPage: (p) => { setPage(p); openShot(p); } }} />}
       {tpl.confirmEl}
       {logoPicker !== null && (
         <Picker mode="file" start={m.logos[logoPicker]?.image || m.logos[0]?.image}
