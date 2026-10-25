@@ -40,6 +40,8 @@ import ThemePicker, { THEMES } from "../themes";
 // Harus sama dengan card.FontSteps / HeaderMax / CardTopMax di engine.
 const FONT_STEPS = 10;
 const CARD_TOP_MAX = 400;
+// Penanda CSS font di HTML pratinjau kartu — sama dengan api.CardFontMark.
+const CARD_FONT_MARK = "/*clipper-fonts*/";
 // Berapa artikel diminta tiap "Muat lebih banyak".
 // Kelipatan 5: satu baris kartu berisi lima artikel.
 const PAGE = 25;
@@ -334,12 +336,25 @@ export default function News() {
   });
 
   // Pratinjau seketika: tanpa Chrome, jadi cukup jeda pendek (juga saat diseret).
+  // Font tertanam (±1,25 MB) dikirim engine SEKALI lalu disimpan di fontCSS;
+  // permintaan berikutnya ?fonts=cached dan HTML-nya membawa penanda saja.
+  // Halaman yang sudah pernah dibuat disimpan per setelan (pageCache), jadi
+  // bolak-balik pager tidak menunggu jaringan.
   const fingerprint = cardBody(ratio, true);
+  const fontCSS = useRef("");
+  const pageCache = useRef(new Map<string, { html: string; geometry: Geometry }>());
   useEffect(() => {
     if (screen !== "compose" || !article.title) return;
+    const key = `${page}|${fingerprint}`;
+    const hit = pageCache.current.get(key);
+    if (hit) { setLive(hit); return; }
     const id = setTimeout(() => {
-      post<{ html: string; geometry: Geometry }>(`/api/card/html`, { ...JSON.parse(fingerprint), page }, t("errBuildCard")).then((d) => {
-        setLive(d);
+      post<{ html: string; geometry: Geometry; fonts?: string }>(`/api/card/html${fontCSS.current ? "?fonts=cached" : ""}`, { ...JSON.parse(fingerprint), page }, t("errBuildCard")).then((d) => {
+        if (d.fonts) fontCSS.current = d.fonts;
+        const v = { html: d.html.replace(CARD_FONT_MARK, fontCSS.current), geometry: d.geometry };
+        if (pageCache.current.size > 40) pageCache.current.clear();
+        pageCache.current.set(key, v);
+        setLive(v);
         // Halaman yang tidak ada lagi (badan dipecah ulang) → kembali ke halaman terakhir.
         if (page >= d.geometry.pages) setPage(Math.max(0, d.geometry.pages - 1));
       }).catch((e) => setError(e.message));
@@ -347,10 +362,14 @@ export default function News() {
     return () => clearTimeout(id);
   }, [fingerprint, screen, page]); // eslint-disable-line react-hooks/exhaustive-deps
   // Badan artikel diambil SEKALI saat carousel dinyalakan, lalu ikut tersimpan.
+  // bodyLoading = status di bawah sakelar Carousel selama artikel dibaca.
+  const [bodyLoading, setBodyLoading] = useState(false);
   useEffect(() => {
     if (!whole || !article.url || article.body) return;
+    setBodyLoading(true);
     post<{ paragraphs: string[] }>(`/api/news/body`, { url: article.url, lang }, t("errReadArticle"))
-      .then((d) => setArticle((a) => (a.url === article.url ? { ...a, body: d.paragraphs } : a))).catch((e) => setError(e.message));
+      .then((d) => setArticle((a) => (a.url === article.url ? { ...a, body: d.paragraphs } : a))).catch((e) => setError(e.message))
+      .finally(() => setBodyLoading(false));
   }, [whole, article.url, article.body]); // eslint-disable-line react-hooks/exhaustive-deps
   // Begitu badan artikel ada, kotak Carousel text berisi paragraf ASLI-nya;
   // tombol AI lalu menceritakan ulang teks itu.
@@ -593,7 +612,10 @@ export default function News() {
                         options={[{ value: "card" as const, name: t("wmStyleLook") }, { value: "box" as const, name: t("wmStyleBox") }]} />
                     </Row>
                     {/* Carousel: kartu pertama + badan artikel di halaman lanjutan. */}
-                    <Row label={t("ncWhole")} note={t("ncWholeNote")} off={!article.url}>
+                    {/* Catatannya jadi status selama carousel menyala: membaca artikel →
+                        siap dengan jumlah kartunya. */}
+                    <Row label={t("ncWhole")} off={!article.url}
+                      note={!whole ? t("ncWholeNote") : bodyLoading ? t("ncWholeLoading") : <span className="ok-text">✓ {t("ncWholeReady", { n: pages })}</span>}>
                       <Toggle checked={whole} onChange={(on) => { setWhole(on); setPage(0); }} label={t("ncWholeOn")} />
                     </Row>
                     {/* Gaya box di kartu lanjutan: foto artikel di belakang, atau

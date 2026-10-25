@@ -630,8 +630,25 @@ func (s *Server) cardHTML(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"html": string(page), "geometry": geo})
+	// Font tertanam (±1,25 MB base64) tidak dikirim ulang tiap halaman/setelan:
+	// HTML membawa penanda CardFontMark, CSS fontnya ikut sekali di "fonts", dan
+	// GUI yang sudah menyimpannya meminta ?fonts=cached. Lewat internet, 1,3 MB
+	// per pindah halaman itulah yang membuat pager carousel lambat.
+	html, fonts := string(page), string(s.cards.FontCSS())
+	out := map[string]any{"geometry": geo}
+	if fonts != "" {
+		html = strings.Replace(html, fonts, CardFontMark, 1)
+		if r.URL.Query().Get("fonts") != "cached" {
+			out["fonts"] = fonts
+		}
+	}
+	out["html"] = html
+	writeJSON(w, 200, out)
 }
+
+// CardFontMark = pengganti CSS font di HTML pratinjau kartu (cardHTML); GUI
+// menukarnya kembali dengan CSS font yang disimpannya.
+const CardFontMark = "/*clipper-fonts*/"
 
 func (s *Server) cardDir(id string) string {
 	return filepath.Join(s.layout.CardsRoot(), id)

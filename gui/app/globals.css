@@ -3585,3 +3585,4 @@ button.mc-cswatch.cp-wand .ico { width: 16px; height: 16px; }
 .mc-engine-model { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--muted); padding-left: 16px; }
 .mc-engine-go { align-self: flex-start; margin-top: 4px; }
 .mc-split-r > .mc-r .mc-engine { width: 100%; box-sizing: border-box; }
+.ok-text { color: var(--good-text); font-weight: 600; }

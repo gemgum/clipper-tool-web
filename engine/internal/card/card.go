@@ -782,7 +782,7 @@ func (b *Builder) render(ctx context.Context, req Request, width, height int) ([
 		Context:   context,
 		Domain:    a.Domain,
 		Date:      a.Date,
-		FontCSS:   b.fonts(),
+		FontCSS:   b.FontCSS(),
 		PhotoX:    clamp(req.Photo.OffsetX, limitW),
 		PhotoY:    clamp(req.Photo.OffsetY, limitH),
 		PhotoFit:  fitCSS,
@@ -856,12 +856,12 @@ func (b *Builder) themeFor(ctx context.Context, req Request, hasImage bool) *the
 	return nil
 }
 
-// fonts menanam font bawaan proyek sebagai data URI.
+// FontCSS menanam font bawaan proyek sebagai data URI.
 //
 // Ditanam, bukan dirujuk lewat path, karena Chrome bisa saja berjalan di sisi
 // Windows sementara fontnya ada di sisi Linux — dan supaya kartu tampil sama
 // persis di komputer siapa pun, terlepas dari font yang terpasang di sana.
-func (b *Builder) fonts() template.CSS {
+func (b *Builder) FontCSS() template.CSS {
 	b.once.Do(func() {
 		var sb strings.Builder
 		embed := func(file, family string) {

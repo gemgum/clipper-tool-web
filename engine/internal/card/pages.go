@@ -309,7 +309,7 @@ func (b *Builder) renderPage(ctx context.Context, req Request, width, height, n,
 	m := metricsFor(req, width, height)
 	d := pageData{
 		Width: width, Height: height, BodyPx: m.bodyPx, SmallPx: m.smallPx, Pad: m.pad, Top: m.top, Bottom: m.bottom,
-		FontCSS: b.fonts(), Lang: langAttr(req.Lang), Align: align, RuleMargin: ruleMargin,
+		FontCSS: b.FontCSS(), Lang: langAttr(req.Lang), Align: align, RuleMargin: ruleMargin,
 		Source: firstNonEmpty(a.Domain, a.Source),
 		Panel:  theme.Panel, Title: theme.Title, Body: theme.Body, Badge: theme.Badge, OnBadge: theme.OnBadge,
 		Text: text, N: n, Total: total,
