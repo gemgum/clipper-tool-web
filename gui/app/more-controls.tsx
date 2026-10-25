@@ -46,10 +46,10 @@ type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "motion" | "
 // side (panel rincian). row()/sw() yang sama dipakai di kedua sisi; CSS
 // memindah labelnya ke atas di panel kanan.
 export type Group = "ai" | "output" | "text" | "layout" | "watermark";
-const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; title: MessageKey; left: Key[]; side: Key }[] = [
+const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; title: MessageKey; left: Key[]; mid?: Key[]; side: Key }[] = [
   { key: "ai", icon: Cpu, label: "mcGroupAI", title: "mcSecTranscript", left: ["transcription"], side: "ai" },
   { key: "output", icon: Monitor, label: "mcGroupOutput", title: "mcSecVideo", left: ["quality"], side: "clips" },
-  { key: "text", icon: Type, label: "mcSecType", title: "mcSecType", left: ["style", "motion", "type"], side: "color" },
+  { key: "text", icon: Type, label: "mcSecType", title: "mcSecType", left: ["style", "motion"], mid: ["type"], side: "color" },
   { key: "layout", icon: Move, label: "mcGroupLayout", title: "mcFraming", left: ["zoom"], side: "platform" },
   // Watermark digambar panel Mark sendiri (lihat render di bawah), bukan left/side.
   { key: "watermark", icon: Droplet, label: "wmLogoTitle", title: "groupWatermark", left: [], side: "zoom" },
@@ -353,7 +353,7 @@ export default function MoreControls(p: {
         <Box title={t("wmWhenTitle")}><MarkTiming timed={p.timed} setTimed={p.setTimed} m={p.m} /></Box>
       </> : (
         <Box title={t(item.title)}>
-          <Split side={body(item.side)}>
+          <Split side={body(item.side)} mid={item.mid?.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}>
             {item.left.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}
           </Split>
         </Box>

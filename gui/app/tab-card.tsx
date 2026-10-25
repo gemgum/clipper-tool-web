@@ -60,10 +60,14 @@ export function Row({ label, title, note, off, children }: {
 // kiri = baris/daftar utama, kanan = panel rincian (label di atas kendali).
 // Panel kanan SELALU ada; sideOff mematikannya, tidak menyembunyikannya —
 // memilih atau menambah sesuatu tidak pernah menggeser isi.
-export function Split({ side, sideOff, children }: { side: React.ReactNode; sideOff?: boolean; children: React.ReactNode }) {
+// mid = kolom tengah opsional: di jendela lebar berdiri sendiri di antara
+// kiri & kanan (label di atas kendali), di jendela lebih sempit turun ke bawah
+// kolom kiri dengan baris yang sama bentuknya.
+export function Split({ side, sideOff, mid, children }: { side: React.ReactNode; sideOff?: boolean; mid?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="mc-split">
+    <div className={"mc-split" + (mid ? " three" : "")}>
       <div className="mc-split-l">{children}</div>
+      {mid && <div className="mc-split-m">{mid}</div>}
       <fieldset className="mc-split-r" disabled={sideOff}>{side}</fieldset>
     </div>
   );

@@ -2615,6 +2615,18 @@ button.mc-tab.on .mc-tab-ic { background: var(--accent); border-color: var(--acc
 /* Teks: kiri baris, kanan palet warna. */
 .mc-split { display: grid; grid-template-columns: minmax(0, 1fr) 264px; }
 .mc-split-l { min-width: 0; }
+.mc-split.three { grid-template-areas: "l r" "m r"; }
+.mc-split.three > .mc-split-l { grid-area: l; }
+.mc-split.three > .mc-split-m { grid-area: m; min-width: 0; }
+.mc-split.three > .mc-split-r { grid-area: r; }
+.mc-split-m > .mc-r { grid-template-columns: 110px minmax(0, 1fr); }
+.mc-split-m .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+@media (min-width: 1400px) {
+  .mc-split.three { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 264px; grid-template-areas: "l m r"; }
+  .mc-split.three > .mc-split-m { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; border-left: 1px solid var(--border); }
+  .mc-split-m > .mc-r { grid-template-columns: minmax(0, 1fr); gap: 8px; min-height: 0; padding: 0; border-top: 0; }
+  .mc-split-m > .mc-r-pad { padding: 0; }
+}
 .mc-split-r { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; border-left: 1px solid var(--border); }
 .mc-cdot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgb(127 127 127 / 50%); flex: none; }
 .mc-cdots { display: grid; grid-template-columns: repeat(5, 40px); gap: 8px; justify-content: space-between; }
@@ -2623,7 +2635,8 @@ button.mc-cswatch span { display: block; width: 100%; height: 100%; border-radiu
 button.mc-cswatch:hover { border-color: var(--text-2); }
 button.mc-cswatch.on { border-color: var(--accent); }
 @media (max-width: 900px) {
-  .mc-split { grid-template-columns: 1fr; }
+  .mc-split, .mc-split.three { grid-template-columns: 1fr; }
+  .mc-split.three { grid-template-areas: "l" "m" "r"; }
   .mc-split-r { border-left: 0; border-top: 1px solid var(--border); }
   .mc-cdots { justify-content: start; }
 }
@@ -3242,7 +3255,7 @@ video:fullscreen { object-fit: contain !important; background: #000; }
   .mc-tab-ic { display: none; }
   .mc-r { grid-template-columns: 120px minmax(0, 1fr); }
   .mc-rows .segmented button { white-space: normal; line-height: 1.2; }
-  .mc-split { grid-template-columns: minmax(0, 1fr); }
+  .mc-split, .mc-split.three { grid-template-columns: minmax(0, 1fr); }
   .mc-split-r { border-left: 0; border-top: 1px solid var(--border); }
 }
 
