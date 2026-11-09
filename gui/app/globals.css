@@ -2845,6 +2845,8 @@ a.btn-dark {
 .nc-search .nc-field.grow { flex: 999 1 380px; }
 .nc-field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
 .nc-search input { height: 48px; font-size: 15px; }
+.nc-pair { display: flex; gap: 8px; }
+.nc-pair input { flex: 1; min-width: 0; }
 .nc-search button { min-height: 48px; padding: 0 22px; font-size: 15px; }
 .nc-or { height: 48px; display: flex; align-items: center; font-size: 14px; color: var(--text-2); }
 .nc-link-error { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--bad-text); }
@@ -3109,6 +3111,8 @@ a.src-chip:hover { background: var(--accent); color: var(--on-accent); }
 .cap-videos li .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cap-add-row { display: flex; gap: 8px; margin-top: 14px; }
 button.cap-add { flex: 1; min-height: 44px; border-style: dashed; }
+/* Dua tombol berbagi lebar sama dan tidak pernah patah dua baris. */
+.cap-add-row > button { flex: 1 1 0; min-width: 0; padding: 0 10px; white-space: nowrap; }
 .cap-drop.over { border-color: var(--accent); background: var(--accent-soft); }
 .cap-hint { margin: 8px 0 0; }
 .io-in .stepper { max-width: 200px; }
@@ -3216,7 +3220,8 @@ button.wm-preview-btn:disabled { opacity: 0.5; }
 .rail-dot.ok { background: var(--good); }
 .rail-dot.idle { background: var(--muted); }
 .rail-dot.bad { background: var(--bad); }
-.rail-ai { position: relative; display: grid; place-items: center; width: 28px; height: 20px; border-radius: 6px; }
+/* Titik + kata pendek: titik saja tidak terbaca artinya (10 November 2026). */
+.rail-ai { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 6px; height: 20px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-2); white-space: nowrap; text-decoration: none; }
 .rail-ai:hover { background: var(--nav-hover); }
 .rail-account-btn { display: grid; place-items: center; padding: 2px; border: 0; border-radius: 50%; background: transparent; color: var(--nav-strong); cursor: pointer; }
 .rail-account-btn:hover { background: var(--nav-hover); }

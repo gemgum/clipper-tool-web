@@ -170,7 +170,7 @@ export default function CaptionsPage() {
           <button type="button" className="danger" onClick={cancel}>{t("cancelRun")}</button>
         ) : (
           <button type="button" className="primary big" onClick={start} disabled={videos.length === 0}>
-            {files.length ? t("capRedo") : videos.length === 1 ? t("capStartOne") : t("capStart", { n: videos.length })}
+            {videos.length === 0 ? t("capNeedVideo") : files.length ? t("capRedo") : videos.length === 1 ? t("capStartOne") : t("capStart", { n: videos.length })}
           </button>
         )}
       </PageHeader>

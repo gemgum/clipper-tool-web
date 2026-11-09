@@ -630,17 +630,21 @@ export default function News() {
           <section className="card nc-search">
             <div className="nc-field grow">
               <label htmlFor="nc-q">{t("ncSearchLabel")}</label>
-              <input id="nc-q" type="search" value={typed} onChange={(e) => setTyped(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }} placeholder={t("searchPlaceholder")} />
+              <div className="nc-pair">
+                <input id="nc-q" type="search" value={typed} onChange={(e) => setTyped(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }} placeholder={t("searchPlaceholder")} />
+                <button type="button" className="dark" onClick={runSearch} disabled={listBusy}>{t("ncSearchBtn")}</button>
+              </div>
             </div>
-            <button type="button" className="dark" onClick={runSearch} disabled={listBusy}>{t("ncSearchBtn")}</button>
             <span className="nc-or">{t("ncOr")}</span>
             <div className="nc-field">
               <label htmlFor="nc-link">{t("ncPasteLabel")}</label>
-              <input id="nc-link" type="url" value={link} placeholder="https://…" onChange={(e) => setLink(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") fetchLink(); }} />
+              <div className="nc-pair">
+                <input id="nc-link" type="url" value={link} placeholder="https://…" onChange={(e) => setLink(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") fetchLink(); }} />
+                <button type="button" className="ghost" onClick={fetchLink} disabled={!link.trim() || fetching}>{fetching ? t("fetching") : t("ncFetchBtn")}</button>
+              </div>
             </div>
-            <button type="button" className="ghost" onClick={fetchLink} disabled={!link.trim() || fetching}>{fetching ? t("fetching") : t("ncFetchBtn")}</button>
             {linkError && (
               <div className="nc-link-error" role="alert">
                 <p>{linkError}</p>

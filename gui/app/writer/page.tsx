@@ -171,7 +171,7 @@ export default function WriterPage() {
           <button type="button" className="danger" onClick={cancel}>{t("cancelRun")}</button>
         ) : (
           <button type="button" className="primary big" onClick={start} disabled={basket.length === 0}>
-            <PenLine className="ico" aria-hidden="true" /> {basket.length === 1 ? t("wrStartOne") : t("wrStart", { n: basket.length })}
+            <PenLine className="ico" aria-hidden="true" /> {basket.length === 0 ? t("wrNeedSource") : basket.length === 1 ? t("wrStartOne") : t("wrStart", { n: basket.length })}
           </button>
         )}
       </PageHeader>

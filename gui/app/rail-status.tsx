@@ -58,6 +58,7 @@ export function RailAI() {
   return (
     <Link href="/requirements" className={"rail-ai " + state} aria-label={`${line1}. ${line2}`} data-tip={`${line1} · ${line2}`}>
       <span className={"rail-dot " + state} aria-hidden="true" />
+      <span className="rail-ai-lb" aria-hidden="true">{t(state === "ok" ? "railAIShortOk" : state === "idle" ? "railAIShortIdle" : "railAIShortBad")}</span>
     </Link>
   );
 }

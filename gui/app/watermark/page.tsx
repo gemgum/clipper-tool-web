@@ -166,7 +166,7 @@ export default function WatermarkPage() {
         ) : (
           <button type="button" className="primary big" onClick={start} disabled={ready.length === 0 || nothing}
             title={nothing ? t("wmNothing") : undefined}>
-            {files.length ? t("wmRedo") : ready.length === 1 ? t("wmStartOne") : t("wmStart", { n: ready.length })}
+            {ready.length === 0 ? t("wmNeedFile") : files.length ? t("wmRedo") : ready.length === 1 ? t("wmStartOne") : t("wmStart", { n: ready.length })}
           </button>
         )}
       </PageHeader>
