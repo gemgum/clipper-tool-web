@@ -333,10 +333,20 @@ Sebelum menyerahkan perubahan tampilan, periksa:
 Keputusan pemilik 24 Oktober 2026: Mark satu-satunya halaman yang memakai SEMUA
 komponen bersama sekaligus, jadi halaman lain dicocokkan ke sana.
 
-**Navigasi kiri = SATU rail 84px** di semua lebar (rancangan 14 Oktober 2026):
-ikon + label pendek (Clips, News, Write, Caption, Mark), garis, History; kaki =
-Settings, titik status AI, avatar (tema & bahasa di popup akun). Pekerjaan
-berjalan tampil sebagai lencana di History. Item 48px karena 900×600 hanya punya
+**Navigasi kiri = sidebar buka/tutup** (10 November 2026, pola "Claude Phone"):
+TERTUTUP (bawaan) = kolom ikon 72 px + tooltip, logo di atas berganti jadi
+tombol buka saat mouse ada di sidebar; TERBUKA = 216 px, logo + "Clipper" + tombol tutup,
+kelompok "Tools" (Video clips, News cards, Articles, Captions, Watermark), garis,
+History; kaki = Settings + status AI (tanpa menu akun). Pilihan diingat browser
+(`useSticky("nav.open")`). Di jendela < 1400 px sidebar terbuka MELAYANG di atas
+halaman; ≥ 1400 px ia mendorong halaman (`.app:has(> .rail.open)`). Tiga kolom
+tab Subtitle bergantung pada lebar kartu (`@container mc`), bukan jendela. Tema, bahasa, &
+Sign out di Settings → Appearance. Pekerjaan berjalan tampil sebagai lencana di
+History. **Satu nama per alat** (rancangan 10 November 2026): rail, tooltip,
+judul halaman, dan saringan Riwayat memakai kunci `nav*` yang sama. **Satu warna
+penanda per alat** (`.k-<kind>`, token `--tool-*` di globals.css): hanya ikon
+rail, ikon kepala halaman (`PageHeader kind`), lencana & chip Riwayat — tombol
+utama tetap warna aksen (palet "Putih netral", 10 November 2026). Item 44px karena 900×600 hanya punya
 505 px tinggi — ukur ulang bila menambah item. Tidak ada bilah ikon di atas.
 
 **Satu `.page-header` per halaman** (`DESIGN.md` §5.2): `<h1>` judul (satu

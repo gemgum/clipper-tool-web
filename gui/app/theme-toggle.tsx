@@ -7,7 +7,7 @@ import { useI18n } from "./i18n";
 export type Theme = "light" | "dark";
 export const THEME_KEY = "clipper.theme";
 
-// Pilihan terang/gelap di popup akun.
+// Pilihan terang/gelap di Pengaturan → Tampilan.
 //
 // Temanya dipasang sebagai atribut `data-theme` di <html>, dan SELURUH
 // perbedaannya cuma nilai token warna di globals.css — tidak ada satu pun

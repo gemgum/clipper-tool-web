@@ -106,14 +106,14 @@ func (p *Pipeline) cloudClient() (*ollama.Client, string, error) {
 		name = p.Opts.Provider
 	}
 	if p.Opts.LLMBase == "" {
-		return nil, "", fmt.Errorf("unknown score engine %q: pick one on the Requirements page, or choose ollama or heuristic", p.Opts.Provider)
+		return nil, "", fmt.Errorf("unknown score engine %q: pick one in Settings → AI engine, or choose ollama or heuristic", p.Opts.Provider)
 	}
 	key := ""
 	if p.Opts.LLMKeyEnv != "" {
 		key = os.Getenv(p.Opts.LLMKeyEnv)
 	}
 	if key == "" {
-		return nil, "", fmt.Errorf("%s has no API key yet: add it on the Requirements page", name)
+		return nil, "", fmt.Errorf("%s has no API key yet: add it in Settings → AI engine", name)
 	}
 	c := ollama.New(p.Opts.LLMBase, p.Opts.LLMModel)
 	c.Kind, c.APIKey = ollama.KindOpenAI, key

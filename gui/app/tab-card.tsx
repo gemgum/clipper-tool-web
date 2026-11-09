@@ -15,7 +15,7 @@ export default function TabCard<K extends string>({ tabs, open, setOpen, label, 
   return (
     <section className={"step-card mc" + (disabled ? " off" : "")} aria-disabled={disabled || undefined}>
       <fieldset className="step-body" disabled={disabled}>
-        <div className="mc-tabs" role="tablist" aria-label={label} style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+        <div className={"mc-tabs" + (tabs.length > 5 ? " many" : "")} role="tablist" aria-label={label} style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
           {tabs.map(({ key, icon: Icon, label, alert }) => (
             <button key={key} type="button" role="tab" className={"mc-tab" + (open === key ? " on" : "")}
               aria-selected={open === key} onClick={() => setOpen(key)}>

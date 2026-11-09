@@ -162,7 +162,7 @@ export default function CaptionsPage() {
 
   return (
     <div className="screen scroll clips-v2 captions-v2">
-      <PageHeader title={t("tabCaptions")} subtitle={t("subCaptions")}>
+      <PageHeader kind="captions" title={t("tabCaptions")} subtitle={t("subCaptions")}>
         {doneFiles.length > 0 && !busy && (
           <button type="button" className="ghost" onClick={copyAll}><Copy className="ico" aria-hidden="true" /> {copied === "all" ? t("copied") : t("capCopyAll")}</button>
         )}

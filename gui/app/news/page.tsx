@@ -607,7 +607,7 @@ export default function News() {
 
   return (
     <div className="screen scroll clips-v2 news-v2">
-      <PageHeader title={headerProps.title} subtitle={headerProps.subtitle}
+      <PageHeader kind="cards" title={headerProps.title} subtitle={headerProps.subtitle}
         titleAction={screen === "compose" && article.url && (
           // Artikel aslinya di tab baru (ikon saja; nama lengkapnya di title).
           <a className="ph-open" href={article.url} target="_blank" rel="noopener noreferrer" title={t("ncOpenArticle")} aria-label={t("ncOpenArticle")}>

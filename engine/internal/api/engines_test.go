@@ -129,7 +129,7 @@ func TestEngineForTanpaKunci(t *testing.T) {
 			t.Errorf("%s: mau galat karena kunci kosong", id)
 			continue
 		}
-		if !strings.Contains(err.Error(), "Requirements") {
+		if !strings.Contains(err.Error(), "Settings → AI engine") {
 			t.Errorf("%s: pesan tidak menyebut ke mana harus pergi: %v", id, err)
 		}
 	}

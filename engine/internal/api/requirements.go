@@ -195,7 +195,7 @@ func (s *Server) missingRequirement() error {
 	if len(missing) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%s is not installed yet: open the Requirements page to install it",
+	return fmt.Errorf("%s is not installed yet: open Settings → Programs & models to install it",
 		strings.Join(missing, " and "))
 }
 

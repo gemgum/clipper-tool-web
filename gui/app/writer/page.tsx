@@ -166,7 +166,7 @@ export default function WriterPage() {
 
   return (
     <div className="screen scroll clips-v2 writer-v2">
-      <PageHeader title={t("tabWriter")} subtitle={t("wrSub")}>
+      <PageHeader kind="writer" title={t("tabWriter")} subtitle={t("wrSub")}>
         {busy ? (
           <button type="button" className="danger" onClick={cancel}>{t("cancelRun")}</button>
         ) : (

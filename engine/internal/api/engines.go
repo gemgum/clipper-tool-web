@@ -289,7 +289,7 @@ func EngineFor(id, model string) (writer.Completer, string, error) {
 // tombol Test memakainya untuk isian yang belum disimpan.
 func engineFor(d engineDef, e Engine, key, model string) (writer.Completer, string, error) {
 	if e.Use == useTranscribe {
-		return nil, "", fmt.Errorf("%s is set up for transcription only: pick a chat engine, or change its use on the Requirements page", d.Name)
+		return nil, "", fmt.Errorf("%s is set up for transcription only: pick a chat engine, or change its use in Settings → AI engine", d.Name)
 	}
 	if model = strings.TrimSpace(model); model == "" {
 		model = e.Model
@@ -298,7 +298,7 @@ func engineFor(d engineDef, e Engine, key, model string) (writer.Completer, stri
 	switch d.Kind {
 	case kindAnthropic:
 		if key == "" {
-			return nil, "", fmt.Errorf("%s has no API key yet: add it on the Requirements page", d.Name)
+			return nil, "", fmt.Errorf("%s has no API key yet: add it in Settings → AI engine", d.Name)
 		}
 		c := llm.New(key, model)
 		c.BaseURL = e.BaseURL
@@ -309,10 +309,10 @@ func engineFor(d engineDef, e Engine, key, model string) (writer.Completer, stri
 
 	case kindOpenAI:
 		if e.BaseURL == "" {
-			return nil, "", fmt.Errorf("%s has no address yet: add it on the Requirements page", d.Name)
+			return nil, "", fmt.Errorf("%s has no address yet: add it in Settings → AI engine", d.Name)
 		}
 		if key == "" {
-			return nil, "", fmt.Errorf("%s has no API key yet: add it on the Requirements page", d.Name)
+			return nil, "", fmt.Errorf("%s has no API key yet: add it in Settings → AI engine", d.Name)
 		}
 		c := ollama.New(e.BaseURL, model)
 		c.Kind, c.APIKey = ollama.KindOpenAI, key

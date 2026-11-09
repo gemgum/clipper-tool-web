@@ -13,8 +13,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import PageHeader from "../page-header";
-import { useI18n } from "../i18n";
-import { eng, engineURL, useWeb, post } from "../engine";
+import { LANGUAGES, useI18n } from "../i18n";
+import ThemeToggle from "../theme-toggle";
+import { Group, Row } from "../tab-card";
+import { eng, engineURL, useWeb, useMe, post } from "../engine";
 import Picker from "../picker";
 import Alerts from "../alerts";
 import EngineSettings from "./engines";
@@ -72,7 +74,12 @@ type Install = {
 };
 
 export default function RequirementsPage() {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
+  const me = useMe();
+  const signOut = async () => {
+    const d = await post("/auth/logout").catch(() => ({ url: "" }));
+    window.location.href = d.url || "/";
+  };
   // Mode web: komponen & folder server diurus admin lewat setup.sh, bukan dari
   // browser — tombolnya disembunyikan, statusnya tetap terlihat (notes/42).
   const web = useWeb();
@@ -87,7 +94,13 @@ export default function RequirementsPage() {
   // Pesan hasil per komponen (selesai / gagal), hilang saat dicoba lagi.
   const [notes, setNotes] = useState<Record<string, string>>({});
   const abort = useRef<AbortController | null>(null);
-  const [tab, setTab] = useSticky<"ai" | "news" | "programs" | "files">("settings.tab", "ai");
+  const [tab, setTab] = useSticky<"ai" | "news" | "programs" | "files" | "look">("settings.tab", "ai");
+  // ?tab=programs dsb.: tombol di Riwayat membuka tab yang tepat, bukan tab terakhir.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("tab");
+    if (q && ["ai", "news", "programs", "files", "look"].includes(q)) setTab(q as typeof tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { data: ai } = useAISettings();
   const { engines } = useEngines();
 
@@ -279,7 +292,7 @@ export default function RequirementsPage() {
       {/* Tab-tab dengan garis bawah aksen (DESIGN §9 SettingsTabs). */}
       <div className="set-tabs" role="tablist" aria-label={t("tabRequirements")}>
         {/* Mode web: tab lokasi berkas dibuang — folder server bukan urusan tim. */}
-        {([["ai", t("setTabAI")], ["news", t("setTabNews")], ["programs", t("setTabPrograms")], ...(web ? [] : [["files", t("setTabFiles")]])] as [typeof tab, string][]).map(([id, label]) => (
+        {([["ai", t("setTabAI")], ["news", t("setTabNews")], ["programs", t("setTabPrograms")], ...(web ? [] : [["files", t("setTabFiles")]]), ["look", t("setTabLook")]] as [typeof tab, string][]).map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""}
             onClick={() => setTab(id)}>{label}</button>
         ))}
@@ -322,6 +335,30 @@ export default function RequirementsPage() {
                 </details>
               )}
             </>
+          )}
+
+          {/* Tema & bahasa pindah ke sini dari menu akun: orang yang mencari
+              "ganti ke terang" membuka Pengaturan (rancangan 10 November 2026). */}
+          {tab === "look" && (
+            <section className="card">
+              <Group>
+                <Row label={t("navTheme")}><ThemeToggle /></Row>
+                <Row label={t("settingsLanguage")}>
+                  <div className="lang-switch">
+                    {LANGUAGES.map((l) => (
+                      <button key={l} type="button" className={l === lang ? "active" : ""} aria-pressed={l === lang} onClick={() => setLang(l)}>
+                        {l === "en" ? "English" : "Indonesia"}
+                      </button>
+                    ))}
+                  </div>
+                </Row>
+                {/* Keluar dari akun Sarth Admin: dulu di menu akun rail, yang dibuang
+                    10 November 2026. Mati (bukan hilang) tanpa login. */}
+                <Row label={me?.email || t("accountSignOut")} off={!me}>
+                  <button type="button" className="ghost" onClick={signOut}>{t("accountSignOut")}</button>
+                </Row>
+              </Group>
+            </section>
           )}
 
           {tab === "files" && req && !web && (

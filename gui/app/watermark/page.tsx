@@ -160,7 +160,7 @@ export default function WatermarkPage() {
   const frameH = Math.round((stageW * fh) / fw);
   return (
     <div className="screen scroll clips-v2 wm-v2">
-      <PageHeader title={t("tabWatermark")} subtitle={t("subWatermark")}>
+      <PageHeader kind="watermark" title={t("tabWatermark")} subtitle={t("subWatermark")}>
         {busy ? (
           <button type="button" className="danger" onClick={cancel}>{t("cancelRun")}</button>
         ) : (

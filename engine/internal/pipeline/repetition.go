@@ -84,6 +84,6 @@ func loopErr(text string, n, total int) error {
 	return fmt.Errorf(
 		"whisper got stuck repeating %q (%d of %d segments): the transcript is "+
 			"unusable, so the job was stopped instead of producing clips from it. "+
-			"Try a smaller model (-model small) or re-run",
+			"Re-run it, or pick a smaller speech model",
 		text, n, total)
 }

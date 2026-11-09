@@ -30,21 +30,23 @@
  * mengubah satu piksel pun. Angka dari Figma nanti tinggal menimpa di sini.
  */
 @theme {
-  /* Nilai dari DESIGN.md §7.1 (versi "Video Clips", 9 Oktober 2026). Nama
-     lama (panel, panel2, muted) tetap, sebab ratusan aturan memakainya.
+  /* Palet "Putih netral" (pilihan no. 2, 10 November 2026; dulu DESIGN.md
+     §7.1). Kontras terukur: aksen di atas latar 5,8:1, putih di atas aksen
+     6,4:1, teks redup 5,7:1. Nama lama (panel, panel2, muted) tetap, sebab
+     ratusan aturan memakainya.
      Satu penyimpangan, dihitung: teks tersier #8A93A1 cuma 3,1:1 di atas
      putih, jadi TEKS redup memakai #5A6472 (6,0:1); #8A93A1 hanya untuk
      garis & ikon. */
-  --color-bg: #f3f1ec;
-  --color-panel: #fbfaf7;
-  --color-panel2: #f7f5f1;
-  --color-sunken: #ece9e3;
-  --color-border: #e1ddd4;
-  --color-border-strong: #cbc6bb;
-  --color-text: #1e2023;
-  --color-text-2: #4c5057;
-  --color-muted: #62666c;
-  --color-faint: #7c7f84;
+  --color-bg: #f3f4f6;
+  --color-panel: #ffffff;
+  --color-panel2: #eef0f3;
+  --color-sunken: #eaedf1;
+  --color-border: #dde1e7;
+  --color-border-strong: #c3c9d2;
+  --color-text: #1a1d23;
+  --color-text-2: #474d57;
+  --color-muted: #5b616b;
+  --color-faint: #737985;
   --color-accent: #2e5bb8;
   --color-accent-hover: #24499a;
   --color-accent-soft: #e4ecfa;
@@ -163,18 +165,18 @@
  * warna cerah itu justru yang terbaca — jadi -text dikembalikan ke nilai
  * cerahnya. */
 :root[data-theme="dark"] {
-  /* Palet hangat & redup (rancangan 10 November 2026, "Clipper — warna nyaman
-     & alur"): abu digeser ke hangat, aksen biru diturunkan kejenuhannya,
-     garis kartu cukup terang untuk memisahkan kartu dari latar. */
-  --color-bg: #17181b;
-  --color-panel: #1f2125;
-  --color-panel2: #26292e;
-  --color-sunken: #141518;
-  --color-border: #34373d;
-  --color-border-strong: #464a51;
-  --color-text: #e7e5e0;
-  --color-text-2: #b6b3ac;
-  --color-muted: #97948d;
+  /* Palet "Putih netral" (pilihan no. 2, rancangan 10 November 2026): abu
+     netral tanpa rona, aksen biru redup dengan teks gelap di atasnya, garis
+     kartu cukup terang untuk memisahkan kartu dari latar. */
+  --color-bg: #14161a;
+  --color-panel: #1c1f24;
+  --color-panel2: #22262c;
+  --color-sunken: #111317;
+  --color-border: #2e333b;
+  --color-border-strong: #434a55;
+  --color-text: #e6e8ec;
+  --color-text-2: #b0b6c0;
+  --color-muted: #959ca7;
   --color-accent: #7ea6e8;
   --color-accent-hover: #9ab9ee;
   --color-accent-soft: #1e2a3d;
@@ -189,7 +191,7 @@
   --color-good-text: #6cc59a;
   --color-warn-text: #e3b456;
   --color-bad-text: #e8837a;
-  --color-faint: #7a7772;
+  --color-faint: #7a808a;
   --color-accent-line: #34507f;
   --color-accent-ink: #c3d5f5;
   --color-good-line: #1f4d38;
@@ -2505,7 +2507,7 @@ button.choice {
   display: flex; flex-direction: column; gap: 6px;
 }
 button.choice:hover { border-color: var(--faint); }
-button.choice.on { border: 2px solid var(--accent); padding: 13px; box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
+button.choice.on { border: 2px solid var(--accent); padding: 13px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .choice-ico {
   width: 34px; height: 34px; border-radius: 10px; margin-bottom: 8px;
   display: flex; align-items: center; justify-content: center;
@@ -2541,7 +2543,7 @@ button.swatch-btn.on { border: 2px solid var(--text); box-shadow: 0 0 0 3px rgb(
 }
 .clips-v2 .segmented button + button { border-left: 0; }
 .clips-v2 .segmented button:hover { color: var(--text); }
-.clips-v2 .segmented button.on { background: var(--accent); color: #fff; }
+.clips-v2 .segmented button.on { background: var(--accent); color: var(--on-accent); }
 .clips-v2 .swatches { gap: 10px; align-items: center; }
 .clips-v2 button.swatch-btn { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--border-strong); }
 .clips-v2 button.swatch-btn.on { border: 2px solid var(--panel); box-shadow: 0 0 0 2px var(--text); }
@@ -2597,10 +2599,11 @@ button.mc-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   background: var(--panel); border: 1px solid var(--border); color: var(--text-2);
 }
 .mc-tab-ic .ico { width: 16px; height: 16px; stroke-width: 1.7; }
-button.mc-tab.on .mc-tab-ic { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.mc-tab.on .mc-tab-ic { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .mc-tab-lb { font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* "Cek" berlabel, warna peringatan: titik merah tanpa kata tidak menjelaskan apa-apa. */
-.mc-alert { position: absolute; top: 4px; right: 4px; padding: 0 6px; border-radius: var(--r-full); background: var(--warn-soft); color: var(--warn-text); font-size: 10.5px; font-weight: 700; line-height: 16px; }
+/* Di SEBELAH label, bukan menimpanya dari pojok (rancangan 10 November 2026). */
+.mc-alert { flex: none; padding: 0 6px; border-radius: var(--r-full); background: var(--warn-soft); color: var(--warn-text); font-size: 10.5px; font-weight: 700; line-height: 16px; }
 /* Jumlah klip di kepala halaman Clips, di sebelah tombol utama. */
 .hdr-count { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
 .hdr-count .stepper { width: 84px; height: 40px; }
@@ -2638,7 +2641,10 @@ button.mc-tab.on .mc-tab-ic { background: var(--accent); border-color: var(--acc
 .mc-split.three > .mc-split-r { grid-area: r; }
 .mc-split-m > .mc-r { grid-template-columns: 110px minmax(0, 1fr); }
 .mc-split-m .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
-@media (min-width: 1400px) {
+/* Tiga kolom bergantung pada lebar KARTU, bukan jendela: sidebar terbuka
+   memakan 144 px, dan ambang jendela 1400 px menjepit segmen jadi bertumpuk. */
+.mc { container: mc / inline-size; }
+@container mc (min-width: 1000px) {
   .mc-split.three { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 264px; grid-template-areas: "l m r"; }
   .mc-split.three > .mc-split-m { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; border-left: 1px solid var(--border); }
   .mc-split-m > .mc-r { grid-template-columns: minmax(0, 1fr); gap: 8px; min-height: 0; padding: 0; border-top: 0; }
@@ -2859,7 +2865,7 @@ button.chip-btn {
 button.chip-btn.on { background: var(--text); color: var(--panel); border-color: var(--text); font-weight: 600; }
 .nc-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
 .nc-article { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
-.nc-article.on { border: 2px solid var(--accent); box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
+.nc-article.on { border: 2px solid var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .nc-thumb { height: 120px; background: var(--sunken); }
 .nc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .nc-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
@@ -2925,7 +2931,7 @@ button.ai-btn {
   border: 1px solid #c9cfd8; background: var(--panel2); cursor: pointer;
 }
 .photo-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.photo-btn.on { border: 2px solid var(--accent); box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
+.photo-btn.on { border: 2px solid var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .photo-btn.upload { border-style: dashed; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-2); font-size: 12px; font-weight: 600; }
 /* ThemePicker (themes.tsx), News & Watermark: kisi 4x2 contoh warna tanpa nama
    yang melebar penuh + tombol Auto opsional di kanan setinggi dua baris. */
@@ -2933,7 +2939,7 @@ button.ai-btn {
 .theme-pick.with-auto { grid-template-columns: minmax(0, 1fr) auto; }
 .theme-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 button.theme-tile { padding: 4px; border-radius: 10px; background: var(--panel); min-height: 0; border: 1px solid var(--border-strong); display: flex; }
-button.theme-tile.on { border: 2px solid var(--accent); padding: 3px; box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
+button.theme-tile.on { border: 2px solid var(--accent); padding: 3px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .theme-swatch { display: block; flex: 1; height: 32px; border-radius: 7px; border: 1px solid var(--border-strong); }
 .theme-auto { height: 100%; min-height: 0; margin: 0; padding: 6px 12px; display: inline-flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 4px; max-width: 96px; white-space: normal; text-align: center; line-height: 1.2; font-size: 12.5px; }
@@ -3012,7 +3018,7 @@ p.ai-line a { margin-left: auto; font-size: 13.5px; font-weight: 600; color: var
 .hi-job.running { border-color: var(--accent-line); }
 .hi-job.failed { border-color: var(--bad-line); }
 .hi-head { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
-.hi-head .btn-ghost, .hi-head button { min-height: 38px; padding: 0 15px; font-size: 13.5px; flex: none; }
+.hi-head .btn-ghost, .hi-head .btn-primary, .hi-head button { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 15px; font-size: 13.5px; flex: none; }
 .hi-title { margin: 0; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
 .hi-head .meta { margin: 3px 0 0; }
 .hi-why { margin: 4px 0 0; font-size: 13.5px; color: var(--bad-text); }
@@ -3026,7 +3032,7 @@ p.ai-line a { margin-left: auto; font-size: 13.5px; font-weight: 600; color: var
 .hi-progress .meta { margin-top: 6px !important; }
 .hi-clips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
 .hi-clip { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
-.hi-clip.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(47 91 234 / 12%); }
+.hi-clip.on { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .hi-clip.failed { border-color: var(--bad-line); }
 .hi-thumb { position: relative; aspect-ratio: 9 / 16; background: #3a2f28; }
 .hi-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -3119,7 +3125,7 @@ button.cap-add { flex: 1; min-height: 44px; border-style: dashed; }
 
 /* ================= Watermark — DESIGN-Clipper-Lanjutan §4 ================= */
 /* Tinggi tetap, sebab ukuran huruf pratinjau dihitung dari --pvh. */
-.wm-grab { cursor: grab; outline: 1.5px dashed rgba(47, 91, 234, 0.75); outline-offset: 2px; }
+.wm-grab { cursor: grab; outline: 1.5px dashed color-mix(in srgb, var(--accent) 75%, transparent); outline-offset: 2px; }
 .wm-grab:active { cursor: grabbing; }
 .wm-check { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .wm-check input, .wm-radio > input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; flex: none; }
@@ -3147,17 +3153,17 @@ button.wm-logo-empty { width: 100%; min-height: 72px; }
 .wm-card-text > span { display: block; flex: none; }
 .wm-card-chip { white-space: nowrap; }
 .wmoverlay.on { outline-color: var(--accent); outline-style: solid; }
-button.wm-pin.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.wm-pin.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 /* Tanda di logo: gembok (terkunci ke kotak judul) / magnet (sedang menempel). */
 .wm-mark { position: absolute; transform: translate(-60%, -40%); width: 20px; height: 20px; border-radius: 50%;
-  display: grid; place-items: center; background: var(--accent); color: #fff; pointer-events: none;
+  display: grid; place-items: center; background: var(--accent); color: var(--on-accent); pointer-events: none;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
 .wm-mark .ico { width: 12px; height: 12px; }
 .wm-mark.stick { background: #16a34a; }
 /* Kotak judul yang sedang ditempeli logo: tepinya menyala. */
 .wm-newsbox.stick { outline: 2px solid #16a34a; outline-offset: 0; }
 button.wm-preview-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; min-height: 44px; }
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; min-height: 44px; }
 button.wm-preview-btn:disabled { opacity: 0.5; }
 /* Di tempat judul kartu pratinjau (Stage action): selebar isinya, setinggi judul. */
 .stage .card-head button.wm-preview-btn { margin-right: auto; width: auto; min-height: 0; height: 34px; padding: 0 14px; font-size: 14px; }
@@ -3209,7 +3215,7 @@ button.wm-preview-btn:disabled { opacity: 0.5; }
 .rail-item.active .rail-label { font-weight: 600; }
 .rail-badge {
   position: absolute; top: -7px; right: -10px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
-  background: var(--nav-accent); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center;
+  background: var(--nav-accent); color: var(--on-accent); font-size: 11px; font-weight: 700; display: grid; place-items: center;
 }
 .rail-sep { width: 32px; height: 1px; margin: 6px 0; background: var(--nav-line); flex: none; }
 .rail-foot {
@@ -3223,9 +3229,6 @@ button.wm-preview-btn:disabled { opacity: 0.5; }
 /* Titik + kata pendek: titik saja tidak terbaca artinya (10 November 2026). */
 .rail-ai { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 6px; height: 20px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-2); white-space: nowrap; text-decoration: none; }
 .rail-ai:hover { background: var(--nav-hover); }
-.rail-account-btn { display: grid; place-items: center; padding: 2px; border: 0; border-radius: 50%; background: transparent; color: var(--nav-strong); cursor: pointer; }
-.rail-account-btn:hover { background: var(--nav-hover); }
-.rail-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel2); color: var(--nav-strong); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
 /* Nama lengkap sebagai tooltip di kanan item, setelah ±400ms. */
 .rail [data-tip]:hover::after, .rail [data-tip]:focus-visible::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
@@ -3235,7 +3238,6 @@ button.wm-preview-btn:disabled { opacity: 0.5; }
 }
 .rail-brand[data-tip] { position: relative; }
 @keyframes rail-tip { from { opacity: 0; } to { opacity: 1; } }
-.rail-avatar .ico { width: 16px; height: 16px; }
 
 /* Tombol putar di atas thumbnail: menutupi seluruh gambar, ikon bulat di tengah. */
 .g-thumb, .hi-thumb, .thumb, .src-thumb { position: relative; }
@@ -3618,3 +3620,97 @@ button.mc-cswatch.cp-wand .ico { width: 16px; height: 16px; }
 .stage-shot-wait { color: #fff; font-weight: 600; font-size: 15px; }
 .stage-shot-wait.over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 8px 16px; border-radius: 999px; background: rgba(0, 0, 0, 0.6); }
 .stage-shot.paged img { max-height: calc(100vh - 120px); margin-bottom: 56px; }
+
+/* Warna penanda alat (rancangan "Clipper — warna nyaman & alur", 10 November
+   2026): SATU warna per alat, dipakai hanya untuk ikon rail, ikon kepala
+   halaman, dan lencana/chip Riwayat — supaya orang tahu sedang di alat mana
+   dan dari mana sebuah hasil berasal. Tombol utama tetap warna aksen. Semua
+   pasangan teks/latar di bawah lolos 4,5:1 di kedua tema. */
+:root {
+  --tool-clips: #a8422a; --tool-clips-soft: #fbe6df;
+  --tool-cards: #186f66; --tool-cards-soft: #ddf1ee;
+  --tool-writer: #5b4bb8; --tool-writer-soft: #ece8fb;
+  --tool-captions: #8a5f0f; --tool-captions-soft: #f6ecd8;
+  --tool-watermark: #2a7038; --tool-watermark-soft: #e3f1e6;
+}
+:root[data-theme="dark"] {
+  --tool-clips: #f08a6c; --tool-clips-soft: #3a2620;
+  --tool-cards: #5cc2b5; --tool-cards-soft: #18302d;
+  --tool-writer: #a99bf0; --tool-writer-soft: #2a2640;
+  --tool-captions: #e6b85c; --tool-captions-soft: #2e2617;
+  --tool-watermark: #7cc48a; --tool-watermark-soft: #1f3326;
+}
+.k-clips { --tool: var(--tool-clips); --tool-soft: var(--tool-clips-soft); }
+.k-cards { --tool: var(--tool-cards); --tool-soft: var(--tool-cards-soft); }
+.k-writer { --tool: var(--tool-writer); --tool-soft: var(--tool-writer-soft); }
+.k-captions { --tool: var(--tool-captions); --tool-soft: var(--tool-captions-soft); }
+.k-watermark { --tool: var(--tool-watermark); --tool-soft: var(--tool-watermark-soft); }
+.rail-item[class*=" k-"] .rail-ico { color: var(--tool); }
+.rail-item[class*=" k-"].active { background: var(--tool-soft); color: var(--tool); }
+/* Nama alat utuh (bukan singkatan) di 68 px: dua kata boleh turun baris. */
+.rail-label { font-size: 11px; line-height: 1.1; white-space: normal; text-align: center; max-width: 64px; }
+.ph-ico { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
+  background: var(--tool-soft); border: 1.5px solid var(--tool); color: var(--tool); }
+.ph-ico .ico { width: 18px; height: 18px; stroke-width: 1.8; }
+.hi-badge[class*=" k-"] { color: var(--tool); background: var(--tool-soft); }
+.k-dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 3px; background: var(--tool); vertical-align: 0; }
+/* Kartu gagal di Riwayat: merah HANYA di label "Gagal", kalimatnya bahasa
+   biasa; pesan program asli di balik "Detail teknis". */
+.hi-fail-tag { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: var(--r-full); background: var(--bad-soft); color: var(--bad-text); font-size: 12px; font-weight: 700; vertical-align: 1px; }
+.hi-fail-text { margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+button.hi-tech-btn { margin-top: 8px; min-height: 0; padding: 0; border: 0; background: none; color: var(--text-2); font-size: 13px; font-weight: 600; }
+button.hi-tech-btn:hover { color: var(--text); }
+.hi-tech { display: block; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--sunken); color: var(--text-2); font: 12.5px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* "Post to" di bilah alat pratinjau Clips. */
+.stage-bar:has(> .pv-post) { flex-wrap: wrap; }
+.pv-post { display: flex; align-items: center; gap: 8px; flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.pv-post .sel-anchor { flex: 1; min-width: 0; }
+/* Enam tab (Clips): ikon tab dilepas di bawah 1500 px supaya namanya utuh. */
+@media (max-width: 1500px) { .mc-tabs.many .mc-tab-ic { display: none; } .mc-tabs.many button.mc-tab { padding: 0 6px; gap: 6px; } }
+
+/* Sidebar buka/tutup (10 November 2026, pola "Claude Phone"). Ditulis di sini,
+   setelah aturan rail lama, dan menimpanya: TERTUTUP = kolom ikon 72 px dengan
+   tooltip; TERBUKA = 216 px, baris ikon + nama. Lebar kolom halaman ikut lewat
+   :has, jadi tidak ada JS yang perlu tahu lebar rail. Tinggi tertutup terukur
+   muat di 900x600 (505 px): item 44 px. */
+.app { grid-template-columns: 72px minmax(0, 1fr); }
+.app:has(> .rail.open) { grid-template-columns: 216px minmax(0, 1fr); }
+.rail { align-items: stretch; padding: 12px 10px 10px; gap: 2px; }
+.rail-head { display: flex; align-items: center; gap: 8px; height: 44px; margin-bottom: 10px; flex: none; }
+.rail:not(.open) .rail-head { justify-content: center; }
+button.rail-brand {
+  position: relative; width: 44px; height: 44px; min-height: 0; margin: 0; padding: 0; flex: none;
+  border: 0; border-radius: 10px; background: none; cursor: pointer; color: var(--nav-strong);
+}
+.rail.open button.rail-brand { cursor: default; }
+.rail-brand-ico { display: none; width: 20px; height: 20px; stroke-width: 1.7; }
+.rail:not(.open) button.rail-brand:hover { background: var(--nav-hover); }
+/* Tombol buka muncul begitu mouse ada di SIDEBAR, bukan hanya di logo. */
+.rail:not(.open):is(:hover, :focus-within) .rail-logo { display: none; }
+.rail:not(.open):is(:hover, :focus-within) .rail-brand-ico { display: block; }
+.rail-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: var(--nav-strong); white-space: nowrap; overflow: hidden; }
+button.rail-toggle {
+  display: grid; place-items: center; width: 32px; height: 32px; min-height: 0; padding: 0; flex: none;
+  border: 0; border-radius: 8px; background: none; color: var(--nav-text); cursor: pointer;
+}
+button.rail-toggle:hover { background: var(--nav-hover); color: var(--nav-strong); }
+button.rail-toggle .ico { width: 18px; height: 18px; }
+.rail-group { margin: 2px 12px 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.rail-item {
+  width: auto; height: 44px; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 0 12px; border-radius: 10px;
+}
+.rail-label { font-size: 14px; font-weight: 500; line-height: 1.2; white-space: nowrap; max-width: none; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.rail-sep { width: auto; margin: 8px 4px; }
+.rail-foot { align-items: stretch; }
+.rail.open .rail-ai { justify-content: flex-start; height: 32px; padding: 0 12px; gap: 12px; font-size: 13px; }
+/* Tertutup: hanya ikon, nama lewat tooltip. */
+.rail:not(.open) :is(.rail-name, .rail-toggle, .rail-group, .rail-label, .rail-ai-lb) { display: none; }
+.rail:not(.open) .rail-item { width: 44px; padding: 0; justify-content: center; align-self: center; }
+.rail:not(.open) .rail-ai { align-self: center; width: 44px; height: 24px; }
+/* Di bawah 1400 px, sidebar terbuka MELAYANG di atas halaman: kalau mendorong,
+   kolom setelan Clips terjepit dan segmennya bertumpuk (terlihat di 1240x860). */
+@media (max-width: 1399px) {
+  .app:has(> .rail.open) { grid-template-columns: 72px minmax(0, 1fr); }
+  .rail.open { width: 216px; box-shadow: var(--e-3); }
+}

@@ -120,7 +120,7 @@ func attempts(o Options) []attempt {
 	return tries
 }
 
-var errNoEngine = errors.New("no YouTube downloader is set up: install yt-dlp on the Requirements page")
+var errNoEngine = errors.New("no YouTube downloader is set up: install yt-dlp in Settings → Programs & models")
 
 // Check menanyakan ke tiap mesin, berurutan, apakah video bisa diambil — tanpa
 // mengunduh videonya. Galat dari SEMUA mesin dikembalikan bila tak satu pun bisa.

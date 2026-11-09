@@ -1,13 +1,13 @@
 "use client";
 
-// Kartu setelan klip (rancangan "Redesain Video Clips", 14 Oktober 2026): empat
+// Kartu setelan klip (rancangan "Redesain Video Clips", 14 Oktober 2026): enam
 // tab sama lebar; panel tab terpilih selalu terbuka di bawahnya, dibagi bagian.
 //
 // Sejak laci "Advanced settings" dibuang, SEMUA setelan lanjutan tinggal di
 // sini — tidak ada tempat kedua. AI engine hanya ditampilkan: mesin dipilih
 // sekali di Settings (notes/39).
 
-import { CaseSensitive, Cpu, Download, Droplet, Highlighter, ListPlus, Mic, Monitor, Move, Type } from "lucide-react";
+import { CaseSensitive, Cpu, Download, Droplet, Heading, Highlighter, ListPlus, Mic, Monitor, Scissors, Type } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -40,20 +40,25 @@ const ZOOM_BOUNDS: Record<string, { min: number; natural: number }> = {
 };
 export const zoomBounds = (mode: string) => ZOOM_BOUNDS[mode] ?? ZOOM_BOUNDS.center;
 
-type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "motion" | "type" | "color"
-  | "platform" | "zoom";
-// Semua setelan halaman: lima tab, satu panel selalu terbuka — bentuk halaman
-// Watermark (acuan): tiap tab SATU grup <Split>, kiri = left (baris), kanan =
-// side (panel rincian). row()/sw() yang sama dipakai di kedua sisi; CSS
-// memindah labelnya ke atas di panel kanan.
-export type Group = "ai" | "output" | "text" | "layout" | "watermark";
-const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; title: MessageKey; left: Key[]; mid?: Key[]; side: Key }[] = [
+type Key = "transcription" | "ai" | "clips" | "quality" | "style" | "motion" | "type" | "color" | "zoom";
+// Semua setelan halaman: enam tab, satu panel selalu terbuka — bentuk halaman
+// Watermark (acuan): tiap tab SATU grup, <Split> bila ada side (panel rincian
+// kanan). row()/sw() yang sama dipakai di kedua sisi; CSS memindah labelnya ke
+// atas di panel kanan.
+//
+// Susunan 10 November 2026 ("Clipper — warna nyaman & alur"): Clips = ISI klip
+// (panjang), Video = BERKAS (resolusi, kualitas, FPS, folder, versi bersih) +
+// bingkai, Logo dan Headline masing-masing satu tab seperti di Mark. "Post to"
+// pindah ke atas pratinjau, tempat area amannya terlihat.
+export type Group = "text" | "clips" | "video" | "logo" | "headline" | "ai";
+const GROUPS: { key: Group; icon: LucideIcon; label: MessageKey; title: MessageKey; left: Key[]; mid?: Key[]; side?: Key }[] = [
+  { key: "text", icon: Type, label: "mcTabSubtitle", title: "mcSecType", left: ["style", "motion"], mid: ["type"], side: "color" },
+  { key: "clips", icon: Scissors, label: "mcSecClips", title: "mcSecClips", left: ["clips"] },
+  { key: "video", icon: Monitor, label: "mcSecVideo", title: "mcSecVideo", left: ["quality"], side: "zoom" },
+  // Logo & Headline digambar panel Mark sendiri (lihat render di bawah).
+  { key: "logo", icon: Droplet, label: "wmLogoTitle", title: "wmLogoTitle", left: [] },
+  { key: "headline", icon: Heading, label: "wmTabHeadline", title: "wmTabHeadline", left: [] },
   { key: "ai", icon: Cpu, label: "mcGroupAI", title: "mcSecTranscript", left: ["transcription"], side: "ai" },
-  { key: "output", icon: Monitor, label: "mcGroupOutput", title: "mcSecVideo", left: ["quality"], side: "clips" },
-  { key: "text", icon: Type, label: "mcSecType", title: "mcSecType", left: ["style", "motion"], mid: ["type"], side: "color" },
-  { key: "layout", icon: Move, label: "mcGroupLayout", title: "mcFraming", left: ["zoom"], side: "platform" },
-  // Watermark digambar panel Mark sendiri (lihat render di bawah), bukan left/side.
-  { key: "watermark", icon: Droplet, label: "wmLogoTitle", title: "groupWatermark", left: [], side: "zoom" },
 ];
 // Tebal garis tepi sebagai tiga pilihan; angka lain = Custom (angka persisnya di panel Text).
 const OUTLINES = [{ v: 3, k: "mcThin" }, { v: 5, k: "mcMedium" }, { v: 8, k: "mcThick" }] as const;
@@ -89,8 +94,6 @@ export default function MoreControls(p: {
   subUpper: boolean; setSubUpper: (v: boolean) => void;
   subFx: SubFx; setSubFx: (v: SubFx) => void;
   subMode: string; setSubMode: (v: string) => void;
-  // posisi
-  platform: string; setPlatform: (v: string) => void;
   // bingkai
   reframe: string; setReframe: (v: string) => void;
   background: string; setBackground: (v: string) => void;
@@ -105,8 +108,9 @@ export default function MoreControls(p: {
   const { t } = useI18n();
   const router = useRouter();
   const { engines } = useEngines();
-  const [open, setOpen] = useSticky<Group>("clips.group", "ai");
-  const item = GROUPS.find((g) => g.key === open)!;
+  const [open, setOpen] = useSticky<Group>("clips.group", "text");
+  // Nama tab lama yang tersimpan di browser (output, layout, watermark) → tab pertama.
+  const item = GROUPS.find((g) => g.key === open) ?? GROUPS[0];
   const bounds = zoomBounds(p.reframe);
   const engineName = p.engine === "heuristic" ? t("offlineHeuristic") : (engines.find((e) => e.id === p.engine)?.name || p.engine);
 
@@ -222,7 +226,6 @@ export default function MoreControls(p: {
           ]} /></div>)}
           {row("clipMax", <Stepper value={durationMax(p.durationPreset)} onChange={(v) => p.setDurationPreset(String(v))} min={15} max={180} step={5} suffix="s" />,
             p.durationPreset === "auto" ? t("clipMaxAutoNote") : undefined)}
-          {sw(<Toggle checked={p.saveMode !== "burn"} onChange={(v) => p.setSaveMode(v ? "both" : "burn")} label={t("keepClean")} />)}
         </>;
       case "quality":
         return <>
@@ -241,6 +244,7 @@ export default function MoreControls(p: {
               <input id="out-dir" value={p.outputDir} onChange={(e) => p.setOutputDir(e.target.value)} placeholder={t("outputDirPlaceholder")} />
               <button type="button" className="ghost" onClick={p.onPickOut}>{t("pickerGo")}…</button>
             </div>)}
+          {sw(<Toggle checked={p.saveMode !== "burn"} onChange={(v) => p.setSaveMode(v ? "both" : "burn")} label={t("keepClean")} />)}
         </>;
       case "style":
         return <>
@@ -315,15 +319,6 @@ export default function MoreControls(p: {
           { key: "hl", name: t("mcColHl"), value: p.subHighlight, set: p.setSubHighlight,
             off: !(p.subMode === "karaoke" || p.subMode === "highlight" || (word && p.subFx.alternate)) },
         ]} />;
-      case "platform":
-        // Lima pilihan = daftar (Select), bukan segmen yang terpecah jadi dua baris.
-        return row("postTo", <Select value={p.platform} onChange={p.setPlatform} ariaLabel={t("mcSecPlatform")} options={[
-          { value: "tiktok", label: "TikTok" },
-          { value: "reels", label: "Instagram Reels" },
-          { value: "shorts", label: "YouTube Shorts" },
-          { value: "generic", label: t("platformGeneric") },
-          { value: "off", label: t("platformNone") },
-        ]} />);
       case "zoom":
         return <>
           {row("fitMode", <Segmented label={t("fitMode")} value={p.reframe} onChange={p.setReframe} options={[
@@ -333,7 +328,7 @@ export default function MoreControls(p: {
           {/* Latar hanya berarti bila gambar tidak memenuhi bingkai (zoom < 100): mati, tidak hilang. */}
           {row("background", <Segmented label={t("background")} value={p.background} onChange={p.setBackground} options={[
             { value: "blur", name: t("backgroundBlur") }, { value: "black", name: t("backgroundBlack") },
-          ]} />, undefined, p.zoom >= 100)}
+          ]} />, p.zoom >= 100 ? t("bgWhenNote") : undefined, p.zoom >= 100)}
         </>;
     }
     return null;
@@ -358,14 +353,17 @@ export default function MoreControls(p: {
             }} />
         </Box>
       )}
-      {item.key === "watermark" ? <>
-        <MarkLogoGroup m={p.m} web={p.web} setError={p.setError} openPicker={p.onPickLogo} />
-        <MarkHeadline m={p.m} llm timing={<MarkTiming timed={p.timed} setTimed={p.setTimed} m={p.m} />} />
-      </> : (
+      {/* Logo & Headline = panel milik Mark (mark.tsx), sama persis dengan
+          halaman Mark; judul boleh dari LLM. */}
+      {item.key === "logo" ? <MarkLogoGroup m={p.m} web={p.web} setError={p.setError} openPicker={p.onPickLogo} />
+        : item.key === "headline" ? <MarkHeadline m={p.m} llm timing={<MarkTiming timed={p.timed} setTimed={p.setTimed} m={p.m} />} />
+        : (
         <Box title={t(item.title)}>
-          <Split side={body(item.side)} mid={item.mid?.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}>
-            {item.left.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}
-          </Split>
+          {item.side ? (
+            <Split side={body(item.side)} mid={item.mid?.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}>
+              {item.left.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}
+            </Split>
+          ) : item.left.map((k) => <Fragment key={k}>{body(k)}</Fragment>)}
         </Box>
       )}
     </TabCard>

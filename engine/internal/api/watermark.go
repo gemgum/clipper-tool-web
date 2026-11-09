@@ -172,7 +172,7 @@ func (s *Server) watermarkSetup(wm config.Watermark, font, quality, fit string) 
 	// ffmpeg saja yang dibutuhkan halaman ini — tidak ada transkripsi, jadi
 	// whisper & modelnya tidak boleh ikut menghalangi.
 	if s.paths.FFmpeg == "" {
-		return config.Options{}, 424, fmt.Errorf("ffmpeg is not installed yet: open the Requirements page")
+		return config.Options{}, 424, fmt.Errorf("ffmpeg is not installed yet: open Settings → Programs & models")
 	}
 	opts := config.DefaultOptions()
 	opts.Watermark = wm

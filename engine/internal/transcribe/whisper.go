@@ -32,11 +32,11 @@ func (w *Whisper) Available() error {
 			// Pesan untuk PENGGUNA aplikasi, bukan pengembang: ./setup.sh
 			// adalah skrip repo yang tidak ikut dipasang, jadi menyebutnya sama
 			// dengan menyuruh orang berhenti di tengah jalan.
-			return fmt.Errorf("the speech recogniser (whisper) is not installed yet: open the Requirements page and press Install")
+			return fmt.Errorf("the speech recogniser (whisper) is not installed yet: open Settings → Programs & models and press Install")
 		}
 	}
 	if _, err := os.Stat(w.Model); err != nil {
-		return fmt.Errorf("the speech model %q has not been downloaded yet: open the Requirements page and press Install next to it",
+		return fmt.Errorf("the speech model %q has not been downloaded yet: open Settings → Programs & models and press Install next to it",
 			modelName(w.Model))
 	}
 	return nil

@@ -46,6 +46,7 @@ import ResultView, { downloadAllURL } from "./result-view";
 import type { JobClip } from "./result-view";
 import { baseName } from "./file-list";
 import Stepper from "./stepper";
+import Select from "./select";
 
 export default function Home() {
   const { lang, t } = useI18n();
@@ -708,7 +709,7 @@ export default function Home() {
 
   return (
     <div className="screen scroll clips-v2">
-      <PageHeader title={t("tabClips")} subtitle={headerSub}>{actions}</PageHeader>
+      <PageHeader kind="clips" title={t("tabClips")} subtitle={headerSub}>{actions}</PageHeader>
       {/* Font asli untuk pratinjau: subtitle (termasuk font manual yang lolos
           cek) + judul Mark — satu pemuat, sama dengan Mark & News. */}
       <MarkFont names={[...previewFonts, HL_FONT]} />
@@ -763,7 +764,6 @@ export default function Home() {
               subOutline={subOutline} setSubOutline={setSubOutline} subSpeed={subSpeed} setSubSpeed={setSubSpeed}
               subBox={subBox} setSubBox={setSubBox} subMode={subMode} setSubMode={setSubMode}
               subUpper={subUpper} setSubUpper={setSubUpper} subFx={subFx} setSubFx={setSubFx}
-              platform={platform} setPlatform={setPlatform}
               reframe={reframe} setReframe={changeReframe} background={background} setBackground={setBackground}
               zoom={zoom} setZoom={setZoom}
               m={m} timed={timed} setTimed={setTimed} setError={setError}
@@ -781,14 +781,23 @@ export default function Home() {
                 area aman · area tertutup UI, lalu kisi + garis bantu (tombol "tengah"
                 dibuang: kembar dengan garis bantu, subtitle tetap menempel di tengah saat digeser). */}
             <StageBar grid={{ grid, setGrid, always: alwaysGuides, setAlways: setAlwaysGuides }}
-              lead={
+              lead={<>
+                {/* "Post to" di atas pratinjau, baris sendiri: yang berubah adalah area aman di bingkai ini. */}
+                <label className="pv-post"><span>{t("postTo")}</span>
+                  <Select value={platform} onChange={setPlatform} ariaLabel={t("postTo")} options={[
+                    { value: "tiktok", label: "TikTok" },
+                    { value: "reels", label: "Instagram Reels" },
+                    { value: "shorts", label: "YouTube Shorts" },
+                    { value: "generic", label: t("platformGeneric") },
+                    { value: "off", label: t("platformNone") },
+                  ]} /></label>
                 <fieldset className="pv-tools" disabled={!path}>
                   <button type="button" className="ghost tiny" title={t("mcSafe")} disabled={!zone} onClick={placeSafe}>
                     <Smartphone className="ico" aria-hidden="true" /> {t("toolSafeShort")}</button>
                   <button type="button" className={"ghost tiny" + (showZones ? " active" : "")} aria-pressed={showZones}
                     title={t("toolAreas")} onClick={() => setShowZones(!showZones)}><Eye className="ico" aria-hidden="true" /> {t("toolAreasShort")}</button>
                 </fieldset>
-              } />
+              </>} />
             {preview}
           </Stage>
         </div>

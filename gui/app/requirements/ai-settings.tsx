@@ -8,6 +8,7 @@ import { saveAI, useAISettings } from "../ai";
 import type { AISettings, AITool } from "../ai";
 import { canChat, canTranscribe, useEngines } from "../engine-picker";
 import type { EngineInfo } from "../engine-picker";
+import { TOOL } from "../nav";
 
 // Tab "Mesin AI" (DESIGN-Clipper-Lanjutan §7): mesin yang dipakai SEMUA alat,
 // uji koneksi, dan pengecualian per alat. Kunci & alamat tiap mesin tetap
@@ -40,10 +41,9 @@ export default function AISettingsPanel() {
     } finally { setTesting(false); }
   };
 
-  const tools: { id: AITool; name: string }[] = [
-    { id: "clips", name: t("tabClips") }, { id: "news", name: t("tabNews") },
-    { id: "writer", name: t("tabWriter") }, { id: "captions", name: t("tabCaptions") },
-  ];
+  const tools: { id: AITool; name: React.ReactNode }[] = (
+    [["clips", "clips"], ["news", "cards"], ["writer", "writer"], ["captions", "captions"]] as const
+  ).map(([id, kind]) => ({ id, name: <><span className={"k-dot k-" + kind} aria-hidden="true" />{t(TOOL[kind].label)}</> }));
 
   return (
     <>
@@ -97,8 +97,9 @@ export default function AISettingsPanel() {
 const modelOf = (engines: EngineInfo[], id: string) => engines.find((e) => e.id === id)?.model || "";
 
 // Pemilih mesin + model. Model boleh kosong = model bawaan mesin itu.
-function Chooser({ engines, initial, allowHeuristic, onSave, onCancel }: {
-  engines: EngineInfo[]; initial: { engine: string; model: string }; allowHeuristic: boolean;
+// follow = pilihan "Ikut mesin utama" (engine "") di baris pengecualian alat.
+function Chooser({ engines, initial, allowHeuristic, follow, onSave, onCancel }: {
+  engines: EngineInfo[]; initial: { engine: string; model: string }; allowHeuristic: boolean; follow?: boolean;
   onSave: (c: { engine: string; model: string }) => Promise<void>; onCancel?: () => void;
 }) {
   const { t } = useI18n();
@@ -118,11 +119,12 @@ function Chooser({ engines, initial, allowHeuristic, onSave, onCancel }: {
       <Group>
         <Row label={t("setEngineLabel")}>
           <select value={engine} aria-label={t("setEngineLabel")} onChange={(e) => { setEngine(e.target.value); setModel(modelOf(engines, e.target.value)); }}>
+            {follow && <option value="">{t("setFollowMainBtn")}</option>}
             {ready.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             {allowHeuristic && <option value="heuristic">{t("offlineHeuristic")}</option>}
           </select>
         </Row>
-        {engine !== "heuristic" && (
+        {engine !== "heuristic" && engine !== "" && (
           <Row label={t("setModelLabel")}>
             <input list={listID} value={model} aria-label={t("setModelLabel")} placeholder={engines.find((e) => e.id === engine)?.model || ""} onChange={(e) => setModel(e.target.value)} />
             <datalist id={listID}>{models.map((m) => <option key={m} value={m} />)}</datalist>
@@ -130,7 +132,7 @@ function Chooser({ engines, initial, allowHeuristic, onSave, onCancel }: {
         )}
       </Group>
       <div className="ai-chooser-actions">
-        <button type="button" className="primary" disabled={saving || !engine} onClick={async () => {
+        <button type="button" className="primary" disabled={saving || (!engine && !follow)} onClick={async () => {
           setSaving(true); setError("");
           try { await onSave({ engine, model: engine === "heuristic" ? "" : model }); } catch (e: any) { setError(e.message); }
           finally { setSaving(false); }
@@ -143,7 +145,7 @@ function Chooser({ engines, initial, allowHeuristic, onSave, onCancel }: {
 }
 
 function ExceptionRow({ name, engines, current, allowHeuristic, onSave }: {
-  name: string; engines: EngineInfo[]; current: { engine: string; model: string } | null; allowHeuristic: boolean;
+  name: React.ReactNode; engines: EngineInfo[]; current: { engine: string; model: string } | null; allowHeuristic: boolean;
   onSave: (c: { engine: string; model: string } | null) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -157,15 +159,15 @@ function ExceptionRow({ name, engines, current, allowHeuristic, onSave }: {
         <p className="set-name">{name}</p>
         <p className="meta">{label}</p>
         {open && (
-          <Chooser engines={engines} initial={current || { engine: engines.find((e) => e.ready && canChat(e))?.id || "", model: "" }}
+          <Chooser engines={engines} initial={current || { engine: "", model: "" }} follow
             allowHeuristic={allowHeuristic} onCancel={() => setOpen(false)}
-            onSave={async (c) => { await onSave(c); setOpen(false); }} />
+            onSave={async (c) => { await onSave(c.engine ? c : null); setOpen(false); }} />
         )}
       </div>
       {!open && (
         <div className="set-actions">
-          <button type="button" className="ghost" onClick={() => setOpen(true)}>{current ? t("setChange") : t("setUseOther")}</button>
-          {current && <button type="button" className="ghost" onClick={() => onSave(null)}>{t("setFollowMainBtn")}</button>}
+          {/* Satu tombol per alat; kembali ke mesin utama dipilih di dalamnya. */}
+          <button type="button" className="ghost" onClick={() => setOpen(true)}>{t("setChange")}</button>
         </div>
       )}
     </div>
@@ -180,7 +182,7 @@ function ExceptionRow({ name, engines, current, allowHeuristic, onSave }: {
 // OpenAI-compatible (notes/43). Kuncinya TIDAK diisi di sini: semua kunci di
 // satu form, Engines & keys (AI Studio = mesin "Google AI Studio (Gemini)").
 function ClipsRow({ name, engines, current, transcriber, onSave }: {
-  name: string; engines: EngineInfo[]; current: { engine: string; model: string } | null;
+  name: React.ReactNode; engines: EngineInfo[]; current: { engine: string; model: string } | null;
   transcriber: AISettings["transcriber"];
   onSave: (c: { engine: string; model: string } | null, tr: { engine: string; model: string }) => Promise<void>;
 }) {

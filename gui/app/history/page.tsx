@@ -21,6 +21,21 @@ import { usePlayer } from "../video-player";
 import { useI18n } from "../i18n";
 import type { MessageKey } from "../i18n";
 import { baseName } from "../file-list";
+import { TOOL } from "../nav";
+
+// Kegagalan dalam bahasa biasa. Pesan engine yang dikenali diterjemahkan jadi
+// judul + kalimat + tombol yang sesuai jalan keluarnya; pesan aslinya tetap
+// bisa dibuka di "Detail teknis". Yang tidak dikenali ditampilkan apa adanya.
+type Fail = { title: MessageKey; text?: string; fix: "retry" | "programs" | "settings" | "tool"; tech: boolean };
+function explain(why: string, t: (k: MessageKey, v?: Record<string, string | number>) => string): Fail {
+  const stuck = why.match(/stuck repeating "(.*?)"/);
+  if (stuck) return { title: "hiFailStuck", text: t("hiFailStuckText", { line: stuck[1] }), fix: "retry", tech: true };
+  const model = why.match(/speech model "(.+?)" has not been downloaded/);
+  if (model) return { title: "hiFailModel", text: t("hiFailModelText", { model: model[1] }), fix: "programs", tech: true };
+  if (/Settings → Programs/.test(why)) return { title: "hiFailSetup", fix: "programs", tech: false };
+  if (/Settings → AI engine/.test(why)) return { title: "hiFailSetup", fix: "settings", tech: false };
+  return { title: "hiFail", fix: "retry", tech: false };
+}
 
 type Clip = { id: string; job_id: string; start: number; end: number; duration: number; score: number; title: string; status: string; error?: string };
 type Job = { id: string; status: string; stage: string; progress: number; error?: string; created_at: string; updated_at?: string; input?: string; source?: string; clips?: Clip[] };
@@ -36,9 +51,9 @@ type Entry = {
   job?: Job; card?: Card; post?: BG<PostRes>; cap?: BG<CapRes>; wm?: BG<WmRes>;
 };
 
-const KIND_LABEL: Record<Kind, MessageKey> = {
-  clips: "hiKindClips", cards: "hiKindCards", writer: "hiKindWriter", captions: "hiKindCaptions", watermark: "hiKindWatermark",
-};
+// Nama alat = nama di rail (satu nama per alat, rancangan 10 November 2026).
+const KIND_LABEL: Record<Kind, MessageKey> = Object.fromEntries(
+  Object.entries(TOOL).map(([k, v]) => [k, v.label])) as Record<Kind, MessageKey>;
 // Tahap engine → tahap yang dikenali operator (sama dengan layar proses klip).
 const STAGE_LABEL: Record<string, MessageKey> = {
   extracting: "stageTranscribe", transcribing: "stageTranscribe", correcting: "stagePick",
@@ -104,7 +119,17 @@ export default function HistoryPage() {
   const count = (f: typeof filter) => entries.filter((e) => f === "all" ? true : f === "failed" ? isFailed(e) : e.kind === f && !isFailed(e)).length;
   const shown = entries.filter((e) => filter === "all" ? true : filter === "failed" ? isFailed(e) : e.kind === filter && !isFailed(e));
   const running = shown.filter(isRunning);
-  const rest = shown.filter((e) => !isRunning(e) && e.status !== "canceled");
+  const whyOf = (e: Entry) => e.job?.error || e.post?.error || e.cap?.error || e.wm?.error || "";
+  // Kegagalan yang sama (alat + pesan) jadi SATU kartu "3 kali"; kartu itu
+  // berdiri di tempat yang terbaru.
+  const same = new Map<string, Entry[]>();
+  shown.filter(isFailed).forEach((e) => {
+    const k = e.kind + "\n" + whyOf(e);
+    same.set(k, [...(same.get(k) || []), e]);
+  });
+  const rest = shown.filter((e) => !isRunning(e) && e.status !== "canceled"
+    && (!isFailed(e) || same.get(e.kind + "\n" + whyOf(e))![0] === e));
+  const [techOpen, setTechOpen] = useState<Set<string>>(new Set());
 
   const when = (iso: string) => {
     try { return new Date(iso).toLocaleString(lang === "id" ? "id-ID" : "en-GB", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }); } catch { return iso; }
@@ -141,13 +166,16 @@ export default function HistoryPage() {
     catch { return `${t("historyDeleteFailed")} (HTTP ${res.status}${raw ? ": " + raw.trim() : ""})`; }
   };
 
-  // Hapus satu entri riwayat (yang sudah berhenti). Berkas hasilnya tidak ikut.
-  const removeEntry = async (e: Entry) => {
+  // Hapus entri riwayat yang sudah berhenti (kartu gagal: semua kembarannya
+  // sekaligus). Berkas hasilnya tidak ikut.
+  const removeEntries = async (list: Entry[]) => {
     if (!(await ask(t("hiConfirmDelete")))) return;
-    const url = e.kind === "clips" ? `/api/jobs/${e.job!.id}` : e.kind === "cards" ? `/api/cards/${e.card!.id}`
-      : e.kind === "writer" ? `/api/posts/${e.post!.id}` : e.kind === "captions" ? `/api/captions/${e.cap!.id}` : `/api/watermark/${e.wm!.id}`;
-    try { const res = await fetch(eng(url), { method: "DELETE" }); if (!res.ok) setError(await failText(res)); }
-    catch (err: any) { setError(err.message); }
+    for (const e of list) {
+      const url = e.kind === "clips" ? `/api/jobs/${e.job!.id}` : e.kind === "cards" ? `/api/cards/${e.card!.id}`
+        : e.kind === "writer" ? `/api/posts/${e.post!.id}` : e.kind === "captions" ? `/api/captions/${e.cap!.id}` : `/api/watermark/${e.wm!.id}`;
+      try { const res = await fetch(eng(url), { method: "DELETE" }); if (!res.ok) setError(await failText(res)); }
+      catch (err: any) { setError(err.message); }
+    }
     load();
   };
 
@@ -199,6 +227,7 @@ export default function HistoryPage() {
           {chips.filter((c) => c === "all" || c === filter || count(c) > 0).map((c) => (
             <button key={c} type="button" className={"chip-btn" + (filter === c ? " on" : "")} aria-pressed={filter === c}
               onClick={() => setFilter(c)}>
+              {c !== "all" && c !== "failed" && <span className={"k-dot k-" + c} aria-hidden="true" />}
               {c === "all" ? t("ncAll") : c === "failed" ? t("hiFailed") : t(KIND_LABEL[c])} {count(c)}
             </button>
           ))}
@@ -221,7 +250,7 @@ export default function HistoryPage() {
           return (
             <article key={e.key} className="card hi-job running">
               <div className="hi-head">
-                <span className={"hi-badge " + e.kind}>{t(KIND_LABEL[e.kind])}</span>
+                <span className={"hi-badge k-" + e.kind}>{t(KIND_LABEL[e.kind])}</span>
                 <div className="grow">
                   <p className="hi-title">{e.title}</p>
                   <p className="meta">{t("hiStarted", { t: when(e.created) })}{STAGE_LABEL[stage] ? ` · ${t(STAGE_LABEL[stage]).toLowerCase()}` : ""}</p>
@@ -238,20 +267,38 @@ export default function HistoryPage() {
 
         {rest.map((e) => {
           if (isFailed(e)) {
+            const why = whyOf(e);
+            const group = same.get(e.kind + "\n" + why)!;
+            const tool = t(KIND_LABEL[e.kind]);
+            const f = explain(why, t);
             const stage = e.job?.stage ? STAGE_LABEL[e.job.stage] : undefined;
-            const why = e.job?.error || e.post?.error || e.cap?.error || e.wm?.error || "";
+            const title = f.title === "hiFail" && stage ? t("hiFailAt", { tool, stage: t(stage).toLowerCase() }) : t(f.title, { tool });
+            const span = group.length > 1 ? `${when(group[group.length - 1].created)} – ${when(e.created)}` : when(e.created);
+            const open = techOpen.has(e.key);
+            const fix = f.fix === "retry" && e.kind === "clips"
+              ? <button type="button" className="primary" onClick={() => retry(e)}>{t("hiRetry")}</button>
+              : f.fix === "programs" ? <Link className="btn-primary" href="/requirements?tab=programs">{t("hiOpenPrograms")}</Link>
+              : f.fix === "settings" ? <Link className="btn-primary" href="/requirements?tab=ai">{t("hiOpenSettings")}</Link>
+              : <Link className="btn-ghost" href={TOOL[e.kind].href}>{t("hiOpenTool", { tool })}</Link>;
             return (
               <article key={e.key} className="card hi-job failed">
                 <div className="hi-head">
-                  <span className="hi-badge failed">{t("hiFailedBadge")}</span>
+                  <span className={"hi-badge k-" + e.kind}>{tool}</span>
                   <div className="grow">
-                    <p className="hi-title">{t(KIND_LABEL[e.kind])} · {when(e.created)}</p>
-                    <p className="hi-why">{stage ? t("hiStoppedAt", { stage: t(stage).toLowerCase(), why }) : why}</p>
+                    <p className="hi-title"><span className="hi-fail-tag">{t("hiFailedBadge")}</span> {title}</p>
+                    <p className="meta">{group.length > 1 ? `${t("hiTimes", { n: group.length })} · ${span}` : span}</p>
                   </div>
-                  <button type="button" className="ghost" onClick={() => removeEntry(e)} title={t("historyDelete")} aria-label={t("historyDelete")}><Trash2 className="ico" aria-hidden="true" /></button>
-                  <Link className="btn-ghost" href="/requirements">{t("hiOpenSettings")}</Link>
-                  {e.kind === "clips" && <button type="button" className="dark" onClick={() => retry(e)}>{t("hiRetry")}</button>}
+                  {fix}
+                  <button type="button" className="ghost" onClick={() => removeEntries(group)}>
+                    <Trash2 className="ico" aria-hidden="true" /> {group.length > 1 ? t("hiDeleteN", { n: group.length }) : t("historyDelete")}</button>
                 </div>
+                <p className="hi-fail-text">{f.text ?? why}</p>
+                {f.tech && <>
+                  <button type="button" className="hi-tech-btn" aria-expanded={open}
+                    onClick={() => setTechOpen((s) => { const n = new Set(s); if (n.has(e.key)) n.delete(e.key); else n.add(e.key); return n; })}>
+                    {open ? t("hiTechHide") : t("hiTech")}</button>
+                  {open && <code className="hi-tech">{why}</code>}
+                </>}
               </article>
             );
           }
@@ -263,7 +310,7 @@ export default function HistoryPage() {
             return (
               <article key={e.key} className="card hi-job">
                 <div className="hi-head">
-                  <span className="hi-badge clips">{t("hiKindClips")}</span>
+                  <span className="hi-badge k-clips">{t(KIND_LABEL.clips)}</span>
                   <div className="grow">
                     <p className="hi-title">{e.title}</p>
                     <p className="meta">{[when(e.created), took(j.created_at, j.updated_at), (clips.length === 1 ? t("nClipsOne") : t("nClipsLine", { n: clips.length }))].filter(Boolean).join(" · ")}</p>
@@ -333,7 +380,7 @@ export default function HistoryPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img className="hi-card-thumb" src={eng(c.file)} alt="" loading="lazy" />
                   </button>
-                  <span className="hi-badge cards">{t("hiKindCards")}</span>
+                  <span className="hi-badge k-cards">{t(KIND_LABEL.cards)}</span>
                   <div className="grow">
                     <p className="hi-title">{e.title}</p>
                     <p className="meta">{[when(e.created), c.source, t("hiCardMeta", { ratio: c.ratio || "9:16" })].filter(Boolean).join(" · ")}</p>
@@ -348,7 +395,7 @@ export default function HistoryPage() {
             return (
               <article key={e.key} className="card hi-job">
                 <div className="hi-head">
-                  <span className="hi-badge writer">{t("hiKindWriter")}</span>
+                  <span className="hi-badge k-writer">{t(KIND_LABEL.writer)}</span>
                   <div className="grow">
                     <p className="hi-title">{e.title}</p>
                     <p className="meta">{[when(e.created), p.result?.draft?.words ? t("hiWords", { n: p.result.draft.words }) : ""].filter(Boolean).join(" · ")}</p>
@@ -364,7 +411,7 @@ export default function HistoryPage() {
           return (
             <article key={e.key} className="card hi-job">
               <div className="hi-head">
-                <span className={"hi-badge " + e.kind}>{t(KIND_LABEL[e.kind])}</span>
+                <span className={"hi-badge k-" + e.kind}>{t(KIND_LABEL[e.kind])}</span>
                 <div className="grow">
                   <p className="hi-title">{t("hiVideos", { n: files.length })}</p>
                   <p className="meta">{when(e.created)}</p>
