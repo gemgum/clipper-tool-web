@@ -295,8 +295,9 @@ Berlaku untuk SETIAP perubahan tampilan.
 
 Yang boleh bergulir hanya **kotak yang memang daftar** (log, daftar berita,
 daftar paragraf) dan kolom kiri halaman berkolom. Selain itu harus MUAT. Kalau
-tidak muat, yang dibuang isinya, bukan syaratnya. Kartu sumber (Klip) / Files
-(Mark) menempel di atas kolom kiri pada jendela setinggi ≥ 760 px.
+tidak muat, yang dibuang isinya, bukan syaratnya. Files (Mark)
+menempel di atas kolom kiri pada jendela setinggi ≥ 760 px; kartu sumber Klip
+TIDAK (10 November 2026: ia menutupi bilah tab setelan saat digulir).
 
 **Ukur, jangan menebak:**
 

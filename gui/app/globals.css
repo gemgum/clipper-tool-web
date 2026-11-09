@@ -35,25 +35,25 @@
      Satu penyimpangan, dihitung: teks tersier #8A93A1 cuma 3,1:1 di atas
      putih, jadi TEKS redup memakai #5A6472 (6,0:1); #8A93A1 hanya untuk
      garis & ikon. */
-  --color-bg: #f3f4f7;
-  --color-panel: #ffffff;
-  --color-panel2: #fafbfc;
-  --color-sunken: #eef0f4;
-  --color-border: #e3e6ec;
-  --color-border-strong: #d3d8e0;
-  --color-text: #15181d;
-  --color-text-2: #5a6472;
-  --color-muted: #5a6472;
-  --color-faint: #8a93a1;
-  --color-accent: #2f5bea;
-  --color-accent-hover: #1e3fb0;
-  --color-accent-soft: #f3f6ff;
-  --color-accent-line: #c7d3f7;
-  --color-accent-ink: #35406b;
+  --color-bg: #f3f1ec;
+  --color-panel: #fbfaf7;
+  --color-panel2: #f7f5f1;
+  --color-sunken: #ece9e3;
+  --color-border: #e1ddd4;
+  --color-border-strong: #cbc6bb;
+  --color-text: #1e2023;
+  --color-text-2: #4c5057;
+  --color-muted: #62666c;
+  --color-faint: #7c7f84;
+  --color-accent: #2e5bb8;
+  --color-accent-hover: #24499a;
+  --color-accent-soft: #e4ecfa;
+  --color-accent-line: #b9cbee;
+  --color-accent-ink: #1f4597;
   /* Teks DI ATAS warna aksen (tombol utama, label sumbu). Putih di sini;
      di tema gelap aksennya terlalu terang untuk teks putih. */
   --color-on-accent: #ffffff;
-  --color-focus: #2f5bea;
+  --color-focus: #2e5bb8;
 
   /* Hijau, oranye, dan merah punya DUA nilai, dan itu bukan kemewahan.
    *
@@ -68,18 +68,18 @@
    *
    * Ini jenis kesalahan yang lolos dari mata saat mendesain dan baru terasa
    * setelah dipakai lama — karena itu angkanya dihitung, bukan dikira. */
-  --color-good: #12a673;
-  --color-warn: #d97706;
-  --color-bad: #d92d20;
-  --color-good-soft: #e8f6ee;
+  --color-good: #1d7a50;
+  --color-warn: #9a5b0e;
+  --color-bad: #b53a2f;
+  --color-good-soft: #e3f1e9;
   --color-good-line: #b9e2ca;
   --color-good-ink: #11512f;
-  --color-warn-soft: #fef4e6;
-  --color-bad-soft: #fdecea;
-  --color-bad-line: #f0c4c0;
-  --color-good-text: #1c7c4a;
-  --color-warn-text: #94591f;
-  --color-bad-text: #b32318;
+  --color-warn-soft: #f6ebd8;
+  --color-bad-soft: #f7e3e0;
+  --color-bad-line: #e9c2bd;
+  --color-good-text: #1d7a50;
+  --color-warn-text: #9a5b0e;
+  --color-bad-text: #b53a2f;
 }
 
 /* Nama pendek yang dipakai seluruh CSS tulisan tangan di bawah. Dipetakan ke
@@ -163,38 +163,38 @@
  * warna cerah itu justru yang terbaca — jadi -text dikembalikan ke nilai
  * cerahnya. */
 :root[data-theme="dark"] {
-  /* Latar #121212 (permintaan pemilik 9 Oktober 2026); permukaan abu netral
-     di atasnya, bukan kebiruan, supaya panel tetap terbedakan dari latar.
-     Kontras teks diukur ulang: redup #8591a1 = 5,3:1 di atas panel. */
-  --color-bg: #121212;
-  --color-panel: #1c1c1c;
-  --color-panel2: #232323;
-  --color-sunken: #181818;
-  --color-border: #2e2e2e;
-  --color-border-strong: #3d3d3d;
-  --color-text: #e8ebf0;
-  --color-text-2: #a9b2c0;
-  --color-muted: #8591a1;
-  --color-accent: #5b9bff;
-  --color-accent-hover: #76acff;
-  --color-accent-soft: #16233a;
-  --color-on-accent: #06101f; /* 6,88:1 di atas #5b9bff; putih tidak lolos */
-  --color-focus: #76acff;
-  --color-good: #34d399;
-  --color-warn: #fbbf24;
-  --color-bad: #f87171;
-  --color-good-soft: #10281f;
-  --color-warn-soft: #2a2112;
-  --color-bad-soft: #2b1515;
-  --color-good-text: #34d399;
-  --color-warn-text: #fbbf24;
-  --color-bad-text: #f87171;
-  --color-faint: #6b7686;
-  --color-accent-line: #2a3f6b;
-  --color-accent-ink: #c9d6ff;
+  /* Palet hangat & redup (rancangan 10 November 2026, "Clipper — warna nyaman
+     & alur"): abu digeser ke hangat, aksen biru diturunkan kejenuhannya,
+     garis kartu cukup terang untuk memisahkan kartu dari latar. */
+  --color-bg: #17181b;
+  --color-panel: #1f2125;
+  --color-panel2: #26292e;
+  --color-sunken: #141518;
+  --color-border: #34373d;
+  --color-border-strong: #464a51;
+  --color-text: #e7e5e0;
+  --color-text-2: #b6b3ac;
+  --color-muted: #97948d;
+  --color-accent: #7ea6e8;
+  --color-accent-hover: #9ab9ee;
+  --color-accent-soft: #1e2a3d;
+  --color-on-accent: #0e1726; /* putih tidak lolos di atas aksen terang */
+  --color-focus: #9ab9ee;
+  --color-good: #6cc59a;
+  --color-warn: #e3b456;
+  --color-bad: #e8837a;
+  --color-good-soft: #1a3328;
+  --color-warn-soft: #33291a;
+  --color-bad-soft: #3a2220;
+  --color-good-text: #6cc59a;
+  --color-warn-text: #e3b456;
+  --color-bad-text: #e8837a;
+  --color-faint: #7a7772;
+  --color-accent-line: #34507f;
+  --color-accent-ink: #c3d5f5;
   --color-good-line: #1f4d38;
   --color-good-ink: #9fe3c0;
-  --color-bad-line: #5a2622;
+  --color-bad-line: #5a2e2a;
 }
 /* Panggung pratinjau memang sudah gelap di kedua tema — di tema gelap ia
    dinaikkan sedikit dari hitam pekat supaya tepinya masih terbaca sebagai
@@ -620,8 +620,8 @@ input:disabled, select:disabled { background: var(--sunken); color: var(--muted)
   flex: 1; min-height: 0; height: auto; padding: 0; margin: 0;
   display: grid; place-items: center; border: none; border-radius: 4px;
 }
-.step-btn.plus { background: var(--good-soft); color: var(--good-text); }
-.step-btn.minus { background: var(--bad-soft); color: var(--bad-text); }
+.step-btn { background: var(--sunken); color: var(--text); }
+/* Netral: merah terbaca sebagai hapus, padahal "−" cuma mengurangi angka. */
 .step-btn:hover:not(:disabled) { filter: brightness(1.15); }
 .step-btn:disabled { opacity: .4; }
 .step-btn .ico { width: 12px; height: 12px; }
@@ -1698,7 +1698,11 @@ select:disabled { opacity: 0.45; cursor: not-allowed; }
   font-weight: 600;
   letter-spacing: 0.04em;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
+.lang-switch button .ico { width: 14px; height: 14px; }
 .lang-switch button:hover { color: var(--text); border-color: var(--muted); }
 .lang-switch button.active {
   color: var(--accent);
@@ -2595,7 +2599,12 @@ button.mc-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .mc-tab-ic .ico { width: 16px; height: 16px; stroke-width: 1.7; }
 button.mc-tab.on .mc-tab-ic { background: var(--accent); border-color: var(--accent); color: #fff; }
 .mc-tab-lb { font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mc-alert { position: absolute; top: 6px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--bad); border: 2px solid var(--panel2); }
+/* "Cek" berlabel, warna peringatan: titik merah tanpa kata tidak menjelaskan apa-apa. */
+.mc-alert { position: absolute; top: 4px; right: 4px; padding: 0 6px; border-radius: var(--r-full); background: var(--warn-soft); color: var(--warn-text); font-size: 10.5px; font-weight: 700; line-height: 16px; }
+/* Jumlah klip di kepala halaman Clips, di sebelah tombol utama. */
+.hdr-count { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.hdr-count .stepper { width: 84px; height: 40px; }
+.clips-v2 .ph-actions .hdr-count button { min-height: 0; padding: 0; font-size: inherit; border-radius: 4px; }
 .mc-panel { margin-top: 18px; }
 /* Bagian = judul kecil + kotak berisi baris label/kendali. */
 .mc-group + .mc-group { margin-top: 18px; }
@@ -2803,9 +2812,11 @@ details.tech .log-panel { margin-top: 14px; border: 0; padding: 0; background: n
 .g-no, .g-score, .g-dur { position: absolute; font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
 .g-no { top: 10px; left: 10px; background: #fff; color: #15181d; }
 .g-score { top: 10px; right: 10px; }
-.g-score.strong { background: #c53a3a; color: #fff; }
-.g-score.medium { background: #e8a33d; color: #15181d; }
-.g-score.plain { background: #fff; color: #5a6472; }
+.g-score { border-radius: var(--r-full); }
+/* Skor tinggi = aksen, bukan merah: merah hanya untuk gagal & hapus. */
+.g-score.strong { background: var(--accent-soft); color: var(--accent-ink); }
+.g-score.medium { background: var(--sunken); color: var(--text); }
+.g-score.plain { background: var(--panel); color: var(--muted); }
 .g-dur { bottom: 10px; right: 10px; background: rgb(0 0 0 / 65%); color: #fff; }
 .g-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
 .g-quote { margin: 0; font-size: 13.5px; line-height: 1.45; flex: 1; }
@@ -3210,8 +3221,6 @@ button.wm-preview-btn:disabled { opacity: 0.5; }
 .rail-account-btn { display: grid; place-items: center; padding: 2px; border: 0; border-radius: 50%; background: transparent; color: var(--nav-strong); cursor: pointer; }
 .rail-account-btn:hover { background: var(--nav-hover); }
 .rail-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--panel2); color: var(--nav-strong); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
-.pop-theme { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
-.pop-theme .rail-tool { width: 32px; height: 32px; }
 /* Nama lengkap sebagai tooltip di kanan item, setelah ±400ms. */
 .rail [data-tip]:hover::after, .rail [data-tip]:focus-visible::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
@@ -3571,17 +3580,18 @@ button.mc-cswatch.cp-wand .ico { width: 16px; height: 16px; }
 .stage-bar > .pv-tools { margin: 0; flex: none; flex-wrap: nowrap; gap: 6px; }
 .stage-bar > .field-inline { align-items: stretch; }
 .stage-bar > .pv-tools > button, .stage-bar > .field-inline > button { height: auto; min-height: 0; margin: 0; padding: 0 10px; border-radius: var(--r-sm); }
-/* Kartu sumber (Clips) & Files (Mark) KELUAR dari gulir: menempel di atas kolom
-   kiri, kartu setelan bergulir di bawahnya. Bayangan selebar gap kolom (20 px)
-   berwarna latar menutup isi yang lewat di antara kartu dan setelan. */
-.setup-main > .src-card, .setup-main > .cap-drop { position: sticky; top: 0; z-index: 4; box-shadow: 0 20px 0 var(--bg); }
+/* Files (Mark) KELUAR dari gulir: menempel di atas kolom kiri, kartu setelan
+   bergulir di bawahnya. Bayangan selebar gap kolom (20 px) berwarna latar
+   menutup isi yang lewat di antara kartu dan setelan. Kartu sumber Clips TIDAK
+   menempel (10 November 2026): ia menutupi bilah tab setelan saat digulir. */
+.setup-main > .cap-drop { position: sticky; top: 0; z-index: 4; box-shadow: 0 20px 0 var(--bg); }
 /* .stage juga nama baris tahap di log (margin-top 8px) — kartu pratinjau tidak
    ikut, supaya tepi atasnya sejajar dengan kartu pertama kolom kiri. */
 .preview-card.stage { margin-top: 0; }
 /* Jendela pendek (900x600): kartu sumber ikut bergulir lagi — menempel di
    sana memakan 210 dari 495 px kolom kiri. */
 @media (max-height: 759px) {
-  .setup-main > .src-card, .setup-main > .cap-drop { position: static; box-shadow: none; }
+  .setup-main > .cap-drop { position: static; box-shadow: none; }
 }
 /* Kolom pratinjau yang terpaksa bergulir memakai bilah tipis yang sama dengan kolom kiri. */
 .setup-side { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }

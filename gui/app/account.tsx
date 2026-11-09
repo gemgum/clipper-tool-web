@@ -53,8 +53,9 @@ export default function AccountButton() {
         <div className="pop-form">
           {/* Bahasa = preferensi pribadi, sederajat dengan akun & tema
               (DESIGN-Navigasi §4), jadi pindah ke sini dari panel gerigi. */}
+          <div className="settings-head">{t("navTheme")}</div>
+          <ThemeToggle />
           <div className="settings-head">{t("settingsLanguage")}</div>
-          <div className="pop-theme"><span>{t("navTheme")}</span><ThemeToggle /></div>
           <div className="lang-switch">
             {LANGUAGES.map((l) => (
               <button key={l} type="button" className={l === lang ? "active" : ""} aria-pressed={l === lang} onClick={() => setLang(l)}>

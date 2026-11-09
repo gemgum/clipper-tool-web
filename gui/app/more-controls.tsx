@@ -99,7 +99,6 @@ export default function MoreControls(p: {
   m: Mark; timed: boolean; setTimed: (v: boolean) => void; setError: (e: string) => void; onPickLogo: (i: number) => void;
   // gaya, ukuran, sorotan, dan jumlah/panjang klip
   subHighlight: string; setSubHighlight: (v: string) => void; pickSize: (v: number) => void;
-  maxClips: number; setMaxClips: (v: number) => void;
   durationPreset: string; setDurationPreset: (v: string) => void;
   saveMode: string; setSaveMode: (v: string) => void;
 }) {
@@ -216,13 +215,13 @@ export default function MoreControls(p: {
         </>;
       case "clips":
         return <>
-          {row("clipCountLabel", <Stepper value={p.maxClips} onChange={p.setMaxClips} min={1} max={40} />)}
           {/* Tiga pilihan cepat, lalu batas manual (detik) di baris sendiri; angka
               sendiri = tak ada pilihan yang menyala, engine memakai target_min/max. */}
           {row("clipLength", <div className="seg-fit"><Segmented label={t("clipLength")} value={p.durationPreset} onChange={p.setDurationPreset} options={[
             { value: "auto", name: t("lenAutoName") }, { value: "30", name: "15–30s" }, { value: "60", name: "30–60s" },
           ]} /></div>)}
-          {row("clipMax", <Stepper value={durationMax(p.durationPreset)} onChange={(v) => p.setDurationPreset(String(v))} min={15} max={180} step={5} suffix="s" />)}
+          {row("clipMax", <Stepper value={durationMax(p.durationPreset)} onChange={(v) => p.setDurationPreset(String(v))} min={15} max={180} step={5} suffix="s" />,
+            p.durationPreset === "auto" ? t("clipMaxAutoNote") : undefined)}
           {sw(<Toggle checked={p.saveMode !== "burn"} onChange={(v) => p.setSaveMode(v ? "both" : "burn")} label={t("keepClean")} />)}
         </>;
       case "quality":

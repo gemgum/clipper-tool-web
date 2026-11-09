@@ -196,7 +196,7 @@ export default function HistoryPage() {
 
       <div className="hi-body">
         <div className="nc-chips" role="group" aria-label={t("tabHistory")}>
-          {chips.map((c) => (
+          {chips.filter((c) => c === "all" || c === filter || count(c) > 0).map((c) => (
             <button key={c} type="button" className={"chip-btn" + (filter === c ? " on" : "")} aria-pressed={filter === c}
               onClick={() => setFilter(c)}>
               {c === "all" ? t("ncAll") : c === "failed" ? t("hiFailed") : t(KIND_LABEL[c])} {count(c)}
@@ -277,8 +277,14 @@ export default function HistoryPage() {
                 </div>
                 {clips.length > 0 && (
                   <>
+                    <div className="hi-legend">
+                      <span><b>{t("hiLegendScore")}</b> {t("hiLegendScoreText")}</span>
+                      <span><b>{t("hiLegendHook")}</b> {t("hiLegendHookText")}</span>
+                      <span><b>{t("hiLegendEmotion")}</b> {t("hiLegendEmotionText")}</span>
+                      <span><b>{t("hiLegendClear")}</b> {t("hiLegendClearText")}</span>
+                    </div>
                     <div className="hi-clips">
-                      {clips.map((c) => {
+                      {clips.map((c, i) => {
                         const k = `${j.id}/${c.id}`;
                         const file = eng(`/api/jobs/${j.id}/clips/${c.id}/file`);
                         return (
@@ -294,11 +300,11 @@ export default function HistoryPage() {
                               {c.status !== "failed" && (
                                 <input type="checkbox" className="hi-pick" checked={picked.has(k)} onChange={() => toggle(k)} aria-label={t("hiPickClip", { n: c.id })} />
                               )}
-                              <span className={"g-score " + band(c.score)}>{c.score}</span>
+                              <span className={"g-score " + band(c.score)}>{t("hiScore", { n: c.score })}</span>
                               <span className="g-dur">{Math.round(c.duration)}s</span>
                             </div>
                             <div className="hi-clip-body">
-                              <p className="hi-clip-title" title={c.title}>{c.status === "failed" ? `${t("clipFailed")}: ${c.error || ""}` : (c.title || t("noTitle"))}</p>
+                              <p className="hi-clip-title" title={c.title}>{c.status === "failed" ? `${t("clipFailed")}: ${c.error || ""}` : (c.title || t("hiClipN", { n: i + 1 }))}</p>
                               <p className="meta">{t("hiMinute", { a: fmtMin(c.start), b: fmtMin(c.end) })}</p>
                               {c.status !== "failed" && (
                                 <div className="g-actions">
@@ -310,12 +316,6 @@ export default function HistoryPage() {
                           </div>
                         );
                       })}
-                    </div>
-                    <div className="hi-legend">
-                      <span><b>{t("hiLegendScore")}</b> {t("hiLegendScoreText")}</span>
-                      <span><b>{t("hiLegendHook")}</b> {t("hiLegendHookText")}</span>
-                      <span><b>{t("hiLegendEmotion")}</b> {t("hiLegendEmotionText")}</span>
-                      <span><b>{t("hiLegendClear")}</b> {t("hiLegendClearText")}</span>
                     </div>
                   </>
                 )}

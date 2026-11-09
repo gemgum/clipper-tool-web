@@ -7,7 +7,7 @@ import { useI18n } from "./i18n";
 export type Theme = "light" | "dark";
 export const THEME_KEY = "clipper.theme";
 
-// Tombol terang/gelap di bilah atas, di sebelah gerigi setelan.
+// Pilihan terang/gelap di popup akun.
 //
 // Temanya dipasang sebagai atribut `data-theme` di <html>, dan SELURUH
 // perbedaannya cuma nilai token warna di globals.css — tidak ada satu pun
@@ -26,19 +26,21 @@ export default function ThemeToggle() {
     setTheme(now);
   }, []);
 
-  const flip = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
+  const pick = (next: Theme) => {
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem(THEME_KEY, next); } catch {}
     setTheme(next);
   };
 
-  const dark = theme === "dark";
+  // Dua tombol berlabel, bukan satu ikon: pilihan tema harus terbaca tanpa ditebak.
   return (
-    <button className="rail-tool" onClick={flip}
-      title={dark ? t("themeLight") : t("themeDark")}
-      aria-label={dark ? t("themeLight") : t("themeDark")}>
-      {dark ? <Sun className="ico" aria-hidden="true" /> : <Moon className="ico" aria-hidden="true" />}
-    </button>
+    <div className="lang-switch" role="group" aria-label={t("navTheme")}>
+      {(["light", "dark"] as Theme[]).map((v) => (
+        <button key={v} type="button" className={v === theme ? "active" : ""} aria-pressed={v === theme} onClick={() => pick(v)}>
+          {v === "dark" ? <Moon className="ico" aria-hidden="true" /> : <Sun className="ico" aria-hidden="true" />}
+          {t(v === "dark" ? "themeDark" : "themeLight")}
+        </button>
+      ))}
+    </div>
   );
 }

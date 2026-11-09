@@ -22,7 +22,7 @@ export default function TabCard<K extends string>({ tabs, open, setOpen, label, 
               <span className="mc-tab-ic" aria-hidden="true"><Icon className="ico" /></span>
               <span className="mc-tab-lb">{label}</span>
               {/* Peringatan tab lain tetap terlihat walau tabnya tidak dipilih. */}
-              {alert && open !== key && <span className="mc-alert" aria-label={alert} />}
+              {alert && open !== key && <span className="mc-alert" title={alert}>{alert}</span>}
             </button>
           ))}
         </div>

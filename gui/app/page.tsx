@@ -45,6 +45,7 @@ import RunView from "./run-view";
 import ResultView, { downloadAllURL } from "./result-view";
 import type { JobClip } from "./result-view";
 import { baseName } from "./file-list";
+import Stepper from "./stepper";
 
 export default function Home() {
   const { lang, t } = useI18n();
@@ -680,6 +681,10 @@ export default function Home() {
   // Aksi kepala halaman berganti per layar; judulnya tetap (DESIGN.md §3).
   const actions = screen === "setup" ? (
     <>
+      {/* Jumlah klip menempel di tombol yang memakainya: angka di "Make 15
+          clips" tidak lagi datang dari tab yang tertutup (10 November 2026). */}
+      <label className="hdr-count"><span>{t("clipsShort")}</span>
+        <Stepper value={maxClips} onChange={setMaxClips} min={1} max={40} /></label>
       <button type="button" className="primary big" onClick={start} disabled={!canStart}>
         <Play className="ico" aria-hidden="true" /> {t("makeClips", { n: maxClips })}
       </button>
@@ -764,7 +769,6 @@ export default function Home() {
               m={m} timed={timed} setTimed={setTimed} setError={setError}
               onPickLogo={(i) => { setLogoTarget(i); setPicker("banner"); }}
               subHighlight={subHighlight} setSubHighlight={setSubHighlight} pickSize={pickSize}
-              maxClips={maxClips} setMaxClips={setMaxClips}
               durationPreset={durationPreset} setDurationPreset={setDurationPreset}
               saveMode={saveMode} setSaveMode={setSaveMode} />
 
@@ -779,10 +783,10 @@ export default function Home() {
             <StageBar grid={{ grid, setGrid, always: alwaysGuides, setAlways: setAlwaysGuides }}
               lead={
                 <fieldset className="pv-tools" disabled={!path}>
-                  <button type="button" className="ghost tiny icon-only" title={t("mcSafe")} aria-label={t("mcSafe")} disabled={!zone} onClick={placeSafe}>
-                    <Smartphone className="ico" aria-hidden="true" /></button>
-                  <button type="button" className={"ghost tiny icon-only" + (showZones ? " active" : "")} aria-pressed={showZones}
-                    title={t("toolAreas")} aria-label={t("toolAreas")} onClick={() => setShowZones(!showZones)}><Eye className="ico" aria-hidden="true" /></button>
+                  <button type="button" className="ghost tiny" title={t("mcSafe")} disabled={!zone} onClick={placeSafe}>
+                    <Smartphone className="ico" aria-hidden="true" /> {t("toolSafeShort")}</button>
+                  <button type="button" className={"ghost tiny" + (showZones ? " active" : "")} aria-pressed={showZones}
+                    title={t("toolAreas")} onClick={() => setShowZones(!showZones)}><Eye className="ico" aria-hidden="true" /> {t("toolAreasShort")}</button>
                 </fieldset>
               } />
             {preview}
